@@ -1,36 +1,117 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BDC System - 不动产证书综合管理系统
 
-## Getting Started
+宅基地信息管理、村集体所有权管理于一体的信息化管理平台。
 
-First, run the development server:
+## 技术栈
+
+- **框架**: Next.js 16.x
+- **语言**: TypeScript
+- **UI 组件**: Ant Design
+- **状态管理**: Zustand
+- **数据请求**: TanStack Query
+- **表单**: React Hook Form + Zod
+- **ORM**: Prisma
+- **数据库**: SQLite (开发) / PostgreSQL (生产)
+- **国密算法**: sm-crypto (SM2/SM3/SM4)
+
+## 项目结构
+
+```
+src/
+├── app/              # Next.js 应用路由
+│   ├── (zjd)/        # 宅基地管理
+│   ├── (lingzheng)/  # 领证端
+│   ├── (jtsyq)/      # 村集体所有权
+│   ├── (tongji)/     # 统计报表
+│   ├── (shezhi)/     # 后台设置
+│   ├── api/          # API 路由
+│   └── login/        # 登录页
+├── components/       # React 组件
+├── lib/              # 工具库
+│   ├── gm-crypto/    # 国密算法
+│   ├── kms/          # 本地密钥管理
+│   ├── auth/         # 认证模块
+│   ├── middleware/   # 中间件
+│   └── session/      # 会话管理
+├── hooks/            # React Hooks
+└── middleware.ts     # Next.js 中间件
+```
+
+## 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 配置环境变量
+
+```bash
+# .env
+DATABASE_URL="file:./dev.db"
+```
+
+### 数据库迁移
+
+```bash
+npx prisma migrate dev
+```
+
+### 开发服务器
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 运行测试
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run test          # 监听模式
+npm run test:run      # 运行一次
+npm run test:coverage # 覆盖率报告
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 数据库表
 
-## Learn More
+### 一期核心表
 
-To learn more about Next.js, take a look at the following resources:
+| 表名                | 说明           |
+| ------------------- | -------------- |
+| sys_key_version     | 密钥版本表     |
+| sys_user            | 用户表         |
+| sys_role            | 角色表         |
+| sys_permission      | 权限表         |
+| sys_user_role       | 用户角色关联表 |
+| sys_role_permission | 角色权限关联表 |
+| sys_session         | 会话表         |
+| sys_town            | 镇街表         |
+| sys_village         | 村居表         |
+| zjd_bdc             | 宅基地单元表   |
+| zjd_receive_record  | 领证记录表     |
+| sys_operation_log   | 操作日志表     |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 国密算法
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### SM3 哈希算法
 
-## Deploy on Vercel
+- 数据完整性校验
+- 密码加密（+ 盐值）
+- 哈希索引（加密字段查询）
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### SM4 对称加密
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- 敏感数据加密（身份证、手机号）
+- CBC 模式
+
+### SM2 非对称加密
+
+- 电子签名（二期实现）
+
+## 开发计划
+
+详见 [plan-lite.md](../plan-lite.md)
+
+## 许可证
+
+MIT

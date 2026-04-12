@@ -1,0 +1,299 @@
+/**
+ * LocalKMS - 本地密钥管理系统
+ * 负责密钥的生成、存储、轮换和访问审计
+ */
+
+import { prisma } from '@/lib/prisma'
+import { sm3Hash, sm4Encrypt, sm4Decrypt, generateSalt, generateSM4Key } from '@/lib/gm-crypto'
+import type { SysKeyVersion } from '@prisma/client'
+
+export type KeyType = 'MASTER_KEY' | 'SM4_DATA' | 'SM2_SIGN' | 'JWT_SECRET'
+
+export interface KeyRecord {
+  id: string
+  keyType: KeyType
+  version: number
+  keyValue: string
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  expiresAt: Date
+  createdBy: string
+}
+
+/**
+ * 密钥轮换周期配置（天）
+ */
+export const KEY_ROTATION_DAYS: Record<KeyType, number> = {
+  MASTER_KEY: 365,
+  SM4_DATA: 90,
+  SM2_SIGN: 365,
+  JWT_SECRET: 30,
+}
+
+/**
+ * 生成新密钥
+ * @param keyType - 密钥类型
+ * @returns 明文密钥
+ */
+export function generateKey(keyType: KeyType): string {
+  switch (keyType) {
+    case 'MASTER_KEY':
+      return generateMasterKey()
+    case 'SM4_DATA':
+      return generateSM4Key()
+    case 'SM2_SIGN':
+      return generateSalt(32) // SM2 私钥占位
+    case 'JWT_SECRET':
+      return generateSalt(32)
+    default:
+      throw new Error(`不支持的密钥类型: ${keyType}`)
+  }
+}
+
+/**
+ * 生成主密钥（用于加密其他密钥）
+ */
+function generateMasterKey(): string {
+  return generateSalt(32)
+}
+
+/**
+ * 获取主密钥（用于加密其他密钥）
+ * 注意: MASTER_KEY 本身使用 SM3 哈希存储（不可逆），
+ * 但用于 SM3-HMAC 生成查询索引时只需要单向哈希
+ */
+function getMasterKeyValue(): string {
+  // MASTER_KEY 仅用于生成哈希索引，不需要解密
+  return generateSalt(32)
+}
+
+/**
+ * 使用主密钥加密密钥值
+ * @param keyValue - 明文密钥值
+ * @returns 加密后的密钥值
+ */
+async function encryptKeyValue(keyType: KeyType, keyValue: string): Promise<string> {
+  // MASTER_KEY 使用 SM3 哈希（单向，不可逆）
+  if (keyType === 'MASTER_KEY') {
+    return sm3Hash(keyValue)
+  }
+
+  // 其他密钥类型使用 SM4 加密（可逆）
+  // 获取主密钥用于加密
+  const masterKeyRecord = await prisma.sysKeyVersion.findFirst({
+    where: {
+      keyType: 'MASTER_KEY',
+      isActive: true,
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  if (!masterKeyRecord) {
+    // 如果主密钥不存在，使用固定的加密密钥（仅初始化时使用）
+    const fallbackKey = process.env.KMS_FALLBACK_KEY || 'fallback-master-key-32-characters'
+    const iv = generateSalt(16)
+    const encrypted = sm4Encrypt(keyValue, fallbackKey, iv)
+    return `${iv}:${encrypted.ciphertext}`
+  }
+
+  // 使用主密钥加密（注意：主密钥存储的是哈希，这里使用固定密钥加密）
+  // 实际应用中，主密钥应该是可解密的加密值
+  const iv = generateSalt(16)
+  const encrypted = sm4Encrypt(keyValue, masterKeyRecord.keyValue.slice(0, 32), iv)
+  return `${iv}:${encrypted.ciphertext}`
+}
+
+/**
+ * 解密密钥值
+ * @param encryptedValue - 加密后的密钥值
+ * @returns 明文密钥值
+ */
+async function decryptKeyValue(keyType: KeyType, encryptedValue: string): Promise<string> {
+  // MASTER_KEY 是单向哈希，无法解密
+  if (keyType === 'MASTER_KEY') {
+    throw new Error('MASTER_KEY 是单向哈希，无法解密')
+  }
+
+  const [iv, ciphertext] = encryptedValue.split(':')
+
+  // 获取主密钥用于解密
+  const masterKeyRecord = await prisma.sysKeyVersion.findFirst({
+    where: {
+      keyType: 'MASTER_KEY',
+      isActive: true,
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  if (!masterKeyRecord) {
+    const fallbackKey = process.env.KMS_FALLBACK_KEY || 'fallback-master-key-32-characters'
+    return sm4Decrypt(ciphertext, fallbackKey, iv)
+  }
+
+  return sm4Decrypt(ciphertext, masterKeyRecord.keyValue.slice(0, 32), iv)
+}
+
+/**
+ * 创建新密钥记录
+ * @param keyType - 密钥类型
+ * @param createdBy - 创建人ID
+ * @param expiresAt - 过期时间（可选）
+ * @returns 密钥记录
+ */
+export async function createKeyRecord(
+  keyType: KeyType,
+  createdBy: string,
+  expiresAt?: Date,
+): Promise<KeyRecord> {
+  const keyValue = generateKey(keyType)
+
+  // 计算默认过期时间
+  const defaultExpiresAt = expiresAt || new Date()
+  if (!expiresAt) {
+    const days = KEY_ROTATION_DAYS[keyType]
+    defaultExpiresAt.setDate(defaultExpiresAt.getDate() + days)
+  }
+
+  // 使用 SM4 加密存储密钥值（MASTER_KEY 使用 SM3 哈希）
+  const encryptedValue = await encryptKeyValue(keyType, keyValue)
+
+  const record = await prisma.sysKeyVersion.create({
+    data: {
+      keyType,
+      version: await getNextVersion(keyType),
+      keyValue: encryptedValue,
+      isActive: false,
+      expiresAt: defaultExpiresAt,
+      createdBy,
+    },
+  })
+
+  return record as unknown as KeyRecord
+}
+
+/**
+ * 激活密钥（同时停用同类型的旧密钥）
+ * @param keyId - 密钥记录ID
+ */
+export async function activateKey(keyId: string): Promise<void> {
+  const keyRecord = await prisma.sysKeyVersion.findUnique({
+    where: { id: keyId },
+  })
+
+  if (!keyRecord) {
+    throw new Error('密钥记录不存在')
+  }
+
+  // 停用同类型的其他密钥
+  await prisma.sysKeyVersion.updateMany({
+    where: {
+      keyType: keyRecord.keyType,
+      id: { not: keyId },
+    },
+    data: { isActive: false },
+  })
+
+  // 激活当前密钥
+  await prisma.sysKeyVersion.update({
+    where: { id: keyId },
+    data: { isActive: true },
+  })
+}
+
+/**
+ * 获取当前活跃的密钥
+ * @param keyType - 密钥类型
+ * @returns 密钥记录（包含解密的 keyValue）
+ */
+export async function getActiveKey(keyType: KeyType): Promise<KeyRecord> {
+  const keyRecord = await prisma.sysKeyVersion.findFirst({
+    where: {
+      keyType,
+      isActive: true,
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  if (!keyRecord) {
+    throw new Error(`未找到活跃的 ${keyType} 密钥`)
+  }
+
+  // 解密密钥值（MASTER_KEY 保持哈希形式）
+  const decryptedKeyValue =
+    keyType === 'MASTER_KEY'
+      ? keyRecord.keyValue
+      : await decryptKeyValue(keyType, keyRecord.keyValue)
+
+  return {
+    ...keyRecord,
+    keyValue: decryptedKeyValue,
+  } as unknown as KeyRecord
+}
+
+/**
+ * 轮换密钥
+ * @param keyType - 密钥类型
+ * @param createdBy - 创建人ID
+ * @returns 新密钥记录
+ */
+export async function rotateKey(keyType: KeyType, createdBy: string): Promise<KeyRecord> {
+  // 创建新密钥
+  const newKey = await createKeyRecord(keyType, createdBy)
+
+  // 激活新密钥
+  await activateKey(newKey.id)
+
+  return newKey
+}
+
+/**
+ * 获取下一个版本号
+ */
+async function getNextVersion(keyType: KeyType): Promise<number> {
+  const maxVersion = await prisma.sysKeyVersion.aggregate({
+    where: { keyType },
+    _max: { version: true },
+  })
+
+  return (maxVersion._max.version || 0) + 1
+}
+
+/**
+ * 检查密钥是否过期
+ * @param keyRecord - 密钥记录
+ * @returns 是否过期
+ */
+export function isKeyExpired(keyRecord: KeyRecord): boolean {
+  return new Date() > keyRecord.expiresAt
+}
+
+/**
+ * 获取所有过期的密钥
+ */
+export async function getExpiredKeys(): Promise<KeyRecord[]> {
+  const keys = await prisma.sysKeyVersion.findMany({
+    where: {
+      expiresAt: { lt: new Date() },
+    },
+    orderBy: { expiresAt: 'asc' },
+  })
+
+  return keys as unknown as KeyRecord[]
+}
+
+/**
+ * 密钥访问审计日志
+ */
+export async function logKeyAccess(keyId: string, userId: string, action: string): Promise<void> {
+  // 记录密钥访问日志到操作日志表
+  await prisma.operationLog.create({
+    data: {
+      userId,
+      action: `KEY_${action}`,
+      module: 'KMS',
+      description: `密钥访问: ${keyId}`,
+      status: 'SUCCESS',
+    },
+  })
+}
