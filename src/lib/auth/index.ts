@@ -18,3 +18,5 @@ export {
   getUserPermissions,
   getUserRoles,
 } from './user-service'
+export { getCurrentUser, getCurrentUserId, withAuth } from './middleware'
+export type { AuthenticatedUser } from './middleware'

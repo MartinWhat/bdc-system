@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { Layout, Menu, Typography, Avatar, Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
 import {
   UserOutlined,
+  TeamOutlined,
   HomeOutlined,
   BarChartOutlined,
-  SettingOutlined,
   LogoutOutlined,
   FileTextOutlined,
+  EnvironmentOutlined,
+  SafetyOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -16,9 +20,9 @@ import { useAuthStore } from '@/lib/store/auth'
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
 
-const menuItems = [
+const menuItems: MenuProps['items'] = [
   {
-    key: '/dashboard',
+    key: '/',
     icon: <HomeOutlined />,
     label: '工作台',
   },
@@ -37,20 +41,58 @@ const menuItems = [
     icon: <BarChartOutlined />,
     label: '统计报表',
   },
+  {
+    type: 'divider',
+  },
+  {
+    key: 'settings',
+    label: '系统设置',
+    type: 'group',
+    children: [
+      {
+        key: '/users',
+        icon: <TeamOutlined />,
+        label: '用户管理',
+      },
+      {
+        key: '/roles',
+        icon: <SafetyOutlined />,
+        label: '角色管理',
+      },
+      {
+        key: '/towns',
+        icon: <EnvironmentOutlined />,
+        label: '镇街管理',
+      },
+      {
+        key: '/villages',
+        icon: <EnvironmentOutlined />,
+        label: '村居管理',
+      },
+      {
+        key: '/logs',
+        icon: <HistoryOutlined />,
+        label: '操作日志',
+      },
+    ],
+  },
 ]
 
-export default function ZjdLayout({ children }: { children: React.ReactNode }) {
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { user, clearAuth } = useAuthStore()
+  const { user, clearAuth, loadFromStorage } = useAuthStore()
 
   useEffect(() => {
+    // 从 localStorage 加载认证信息
+    loadFromStorage()
+
     const token = localStorage.getItem('token')
     if (!token) {
       router.push('/login')
     }
-  }, [])
+  }, [router, loadFromStorage])
 
   const handleLogout = () => {
     clearAuth()
@@ -101,7 +143,7 @@ export default function ZjdLayout({ children }: { children: React.ReactNode }) {
           }}
         >
           <Title level={4} style={{ margin: 0 }}>
-            宅基地管理
+            不动产证书管理系统
           </Title>
           <Dropdown menu={{ items: userMenuItems }}>
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -110,7 +152,9 @@ export default function ZjdLayout({ children }: { children: React.ReactNode }) {
             </div>
           </Dropdown>
         </Header>
-        <Content style={{ margin: '24px 16px', background: '#fff', padding: 24 }}>
+        <Content
+          style={{ margin: '24px 16px', background: '#f0f2f5', padding: 24, minHeight: 280 }}
+        >
           {children}
         </Content>
       </Layout>

@@ -1,5 +1,3 @@
-// Prisma Schema - BDC System (一期)
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,227 +7,267 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ==================== 国密基础 ====================
+// 状态枚举
+enum ReceiveStatus {
+  PENDING
+  ISSUED
+  COMPLETED
+  OBJECTION
+  CANCELLED
+}
 
-// 密钥版本表
+enum ObjectionStatus {
+  PENDING
+  RESOLVED
+  REJECTED
+}
+
+enum BdcStatus {
+  PENDING
+  APPROVED
+  ISSUED
+  CANCELLED
+}
+
 model SysKeyVersion {
-  id          String   @id @default(cuid())
-  keyType     String   // MASTER_KEY, SM4_DATA, SM2_SIGN, JWT_SECRET
-  version     Int      // 版本号
-  keyValue    String   // 加密存储的密钥值
-  isActive    Boolean  @default(false) // 是否当前活跃
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  expiresAt   DateTime // 过期时间
-  createdBy   String   // 创建人
+  id        String   @id @default(cuid())
+  keyType   String
+  version   Int
+  keyValue  String
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+  createdBy String
 
   @@map("sys_key_version")
 }
 
-// ==================== 认证系统 ====================
-
-// 用户表
 model SysUser {
-  id            String   @id @default(cuid())
-  username      String   @unique // 用户名
-  passwordHash  String   // SM3 哈希密码
-  salt          String   // 盐值
-  realName      String   // 真实姓名
-  idCard        String?  // 身份证号（加密存储）
-  idCardHash    String?  // 身份证号哈希（用于查询）
-  phone         String?  // 手机号（加密存储）
-  phoneHash     String?  // 手机号哈希
-  email         String?  // 邮箱
-  avatar        String?  // 头像
-  status        String   @default("ACTIVE") // ACTIVE, DISABLED
-  twoFactorEnabled Boolean @default(false) // 双因素认证
-  lastLoginAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  createdBy     String?
-  
-  roles         UserRole[]
-  sessions      SysSession[]
-  createdRecords OperationLog[] @relation("UserCreatedRecords")
+  id               String         @id @default(cuid())
+  username         String         @unique
+  passwordHash     String
+  salt             String
+  realName         String
+  idCard           String?
+  idCardHash       String?
+  phone            String?
+  phoneHash        String?
+  email            String?
+  avatar           String?
+  status           String         @default("ACTIVE")
+  twoFactorEnabled Boolean        @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  createdBy        String?
+  createdRecords   OperationLog[] @relation("UserCreatedRecords")
+  sessions         SysSession[]
+  roles            UserRole[]
 
   @@map("sys_user")
 }
 
-// 角色表
 model SysRole {
-  id          String   @id @default(cuid())
-  name        String   @unique // 角色名称
-  code        String   @unique // 角色代码
-  description String?  // 描述
-  status      String   @default("ACTIVE")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  users       UserRole[]
+  id          String           @id @default(cuid())
+  name        String           @unique
+  code        String           @unique
+  description String?
+  status      String           @default("ACTIVE")
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   permissions RolePermission[]
+  users       UserRole[]
 
   @@map("sys_role")
 }
 
-// 权限表
 model SysPermission {
-  id          String   @id @default(cuid())
-  name        String   // 权限名称
-  code        String   @unique // 权限代码
-  type        String   // MENU, BUTTON, API
-  resource    String?  // 资源路径
+  id          String           @id @default(cuid())
+  name        String
+  code        String           @unique
+  type        String
+  resource    String?
   description String?
-  createdAt   DateTime @default(now())
-  
+  createdAt   DateTime         @default(now())
   roles       RolePermission[]
 
   @@map("sys_permission")
 }
 
-// 用户-角色关联表
 model UserRole {
   id        String   @id @default(cuid())
   userId    String
   roleId    String
   createdAt DateTime @default(now())
-  
-  user      SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
   role      SysRole  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user      SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roleId])
   @@map("sys_user_role")
 }
 
-// 角色-权限关联表
 model RolePermission {
   id           String        @id @default(cuid())
   roleId       String
   permissionId String
   createdAt    DateTime      @default(now())
-  
-  role         SysRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   SysPermission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         SysRole       @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
   @@map("sys_role_permission")
 }
 
-// 会话表
 model SysSession {
   id        String   @id @default(cuid())
   userId    String
-  token     String   @unique // JWT token
-  expiresAt DateTime // 过期时间
+  token     String   @unique
+  expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
   user      SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sys_session")
 }
 
-// ==================== 基础数据管理 ====================
-
-// 镇街表
 model SysTown {
-  id          String   @id @default(cuid())
-  code        String   @unique // 镇街代码
-  name        String   // 镇街名称
-  status      String   @default("ACTIVE")
-  sortOrder   Int      @default(0) // 排序
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  villages    SysVillage[]
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  status    String       @default("ACTIVE")
+  sortOrder Int          @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  villages  SysVillage[]
 
   @@map("sys_town")
 }
 
-// 村居表
 model SysVillage {
-  id          String   @id @default(cuid())
-  townId      String   // 所属镇街
-  code        String   @unique // 村居代码
-  name        String   // 村居名称
-  status      String   @default("ACTIVE")
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  town        SysTown  @relation(fields: [townId], references: [id])
-  bdcs        ZjdBdc[]
+  id        String   @id @default(cuid())
+  townId    String
+  code      String   @unique
+  name      String
+  status    String   @default("ACTIVE")
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  town      SysTown  @relation(fields: [townId], references: [id])
+  bdcs      ZjdBdc[]
 
   @@map("sys_village")
 }
 
-// ==================== 宅基地管理 ====================
-
-// 宅基地单元表
 model ZjdBdc {
-  id              String   @id @default(cuid())
-  villageId       String   // 所属村居
-  certNo          String   @unique // 证书编号
-  ownerName       String   // 使用权人姓名
-  idCard          String   // 身份证号（加密存储）
-  idCardHash      String   // 身份证号哈希
-  phone           String?  // 手机号（加密存储）
-  phoneHash       String?  // 手机号哈希
-  address         String   // 地址
-  area            Float    // 面积（平方米）
-  landUseType     String   // 土地用途
-  status          String   @default("PENDING") // PENDING, APPROVED, CERTIFIED, CANCELLED
-  approvedArea    Float?   // 批准面积
-  approvedDate    DateTime? // 批准日期
-  certIssuedDate  DateTime? // 发证日期
-  remark          String?  // 备注
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  createdBy       String   // 创建人ID
-  
-  village         SysVillage @relation(fields: [villageId], references: [id])
-  receiveRecords  ZjdReceiveRecord[]
-  operationLogs   OperationLog[]
+  id             String             @id @default(cuid())
+  villageId      String
+  certNo         String             @unique
+  ownerName      String
+  idCard         String
+  idCardHash     String
+  phone          String?
+  phoneHash      String?
+  address        String
+  area           Float
+  landUseType    String
+  status         String             @default("PENDING")
+  approvedArea   Float?
+  approvedDate   DateTime?
+  certIssuedDate DateTime?
+  remark         String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  createdBy      String
+  operationLogs  OperationLog[]
+  village        SysVillage         @relation(fields: [villageId], references: [id])
+  receiveRecords ZjdReceiveRecord[]
 
+  @@index([villageId])
+  @@index([status])
   @@map("zjd_bdc")
 }
 
-// 领证记录表（预留）
 model ZjdReceiveRecord {
-  id          String   @id @default(cuid())
-  bdcId       String   // 宅基地单元ID
-  applicantId String   // 申请人ID
-  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
-  applyDate   DateTime @default(now())
-  approveDate DateTime?
-  receiveDate DateTime?
-  remark      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  bdc         ZjdBdc   @relation(fields: [bdcId], references: [id])
+  id                 String        @id @default(cuid())
+  bdcId              String
+  receiverName       String?
+  receiverIdCard     String?
+  receiverIdCardHash String?
+  receiverPhone      String?
+  receiverPhoneHash  String?
+  idCardFrontPhoto   String?
+  idCardBackPhoto    String?
+  scenePhoto         String?
+  status             String        @default("PENDING")
+  applyDate          DateTime      @default(now())
+  issueDate          DateTime?
+  receiveDate        DateTime?
+  signedBy           String?
+  signedDate         DateTime?
+  remark             String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  createdBy          String
+  objections         Objection[]
+  processNodes       ProcessNode[]
+  bdc                ZjdBdc        @relation(fields: [bdcId], references: [id], onDelete: Cascade)
 
+  @@index([bdcId])
+  @@index([status])
   @@map("zjd_receive_record")
 }
 
-// ==================== 系统功能 ====================
+model ProcessNode {
+  id              String           @id @default(cuid())
+  receiveRecordId String
+  nodeType        String
+  nodeName        String
+  operatorId      String?
+  operatorName    String?
+  description     String?
+  metadata        String?
+  createdAt       DateTime         @default(now())
+  receiveRecord   ZjdReceiveRecord @relation(fields: [receiveRecordId], references: [id], onDelete: Cascade)
 
-// 操作日志表
+  @@index([receiveRecordId])
+  @@map("zjd_process_node")
+}
+
+model Objection {
+  id              String           @id @default(cuid())
+  receiveRecordId String
+  objectionType   String
+  description     String
+  status          String           @default("PENDING")
+  resolveRemark   String?
+  resolverId      String?
+  resolverName    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  receiveRecord   ZjdReceiveRecord @relation(fields: [receiveRecordId], references: [id], onDelete: Cascade)
+
+  @@index([receiveRecordId])
+  @@index([status])
+  @@map("zjd_objection")
+}
+
 model OperationLog {
-  id          String   @id @default(cuid())
-  userId      String   // 操作用户ID
-  bdcId       String?  // 关联宅基地ID（可选）
-  action      String   // 操作类型（CREATE, UPDATE, DELETE, LOGIN, etc.）
-  module      String   // 模块名称
-  description String   // 操作描述
-  ipAddress   String?  // IP地址
-  userAgent   String?  // 用户代理
-  requestData String?  // 请求数据（JSON）
-  responseData String? // 响应数据（JSON）
-  status      String   @default("SUCCESS") // SUCCESS, FAILED
-  createdAt   DateTime @default(now())
-  
-  user        SysUser  @relation("UserCreatedRecords", fields: [userId], references: [id])
-  bdc         ZjdBdc?  @relation(fields: [bdcId], references: [id], onDelete: SetNull)
+  id           String   @id @default(cuid())
+  userId       String
+  bdcId        String?
+  action       String
+  module       String
+  description  String
+  ipAddress    String?
+  userAgent    String?
+  requestData  String?
+  responseData String?
+  status       String   @default("SUCCESS")
+  createdAt    DateTime @default(now())
+  bdc          ZjdBdc?  @relation(fields: [bdcId], references: [id])
+  user         SysUser  @relation("UserCreatedRecords", fields: [userId], references: [id])
 
   @@map("sys_operation_log")
 }

@@ -7,8 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField, generateQueryHash } from '@/lib/gm-crypto'
-import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
-import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { z } from 'zod'
 
 const createBdcSchema = z.object({
@@ -18,7 +16,7 @@ const createBdcSchema = z.object({
   idCard: z.string().min(1, '身份证号不能为空'),
   phone: z.string().optional(),
   address: z.string().min(1, '地址不能为空'),
-  area: z.number().positive('面积必须大于0'),
+  area: z.number().positive('面积必须大于 0'),
   landUseType: z.string().min(1, '土地用途不能为空'),
   approvedArea: z.number().optional(),
   approvedDate: z.string().optional(),
@@ -34,7 +32,6 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword') || ''
     const status = searchParams.get('status')
     const villageId = searchParams.get('villageId')
-    const userId = request.headers.get('x-user-id')
 
     // 构建基础查询条件
     const where: Record<string, unknown> = {}
@@ -54,13 +51,6 @@ export async function GET(request: NextRequest) {
         { certNo: { contains: keyword } },
         { address: { contains: keyword } },
       ]
-    }
-
-    // 应用数据权限过滤
-    if (userId) {
-      const filter = await getDataPermissionFilter(userId)
-      const dataWhere = buildBdcWhereClause(filter)
-      Object.assign(where, dataWhere)
     }
 
     const [total, bdcs] = await Promise.all([
@@ -87,8 +77,8 @@ export async function GET(request: NextRequest) {
     // 脱敏处理
     const sanitizedBdcs = bdcs.map((bdc) => ({
       ...bdc,
-      idCard: bdc.idCard ? maskIdCard(bdc.idCard) : undefined,
-      phone: bdc.phone ? maskPhone(bdc.phone) : undefined,
+      idCard: bdc.idCard ? '***' : null,
+      phone: bdc.phone ? '***' : null,
     }))
 
     return NextResponse.json({
@@ -154,7 +144,7 @@ export async function POST(request: NextRequest) {
       area,
       landUseType,
       status: 'PENDING',
-      createdBy: request.headers.get('x-user-id') || 'system',
+      createdBy: 'system',
       idCard: '',
       idCardHash: '',
       phone: null as string | null,
@@ -191,7 +181,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: bdc,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create BDC error:', error)
     return NextResponse.json({ error: '创建宅基地档案失败', code: 'SERVER_ERROR' }, { status: 500 })
   }

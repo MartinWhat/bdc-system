@@ -55,7 +55,7 @@ export async function findUserByIdCard(idCard: string) {
 export async function buildEncryptedWhereClause(
   fieldName: string,
   plainValue: string,
-): Promise<Record<string, any>> {
+): Promise<Record<string, string>> {
   const hash = await generateQueryHash(plainValue)
   return { [fieldName]: hash }
 }
@@ -69,7 +69,7 @@ export async function buildEncryptedWhereClause(
 export async function buildEncryptedInClause(
   fieldName: string,
   plainValues: string[],
-): Promise<Record<string, any>> {
+): Promise<Record<string, { in: string[] }>> {
   const hashes = await Promise.all(plainValues.map((value) => generateQueryHash(value)))
   return { [fieldName]: { in: hashes } }
 }

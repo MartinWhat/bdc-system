@@ -85,7 +85,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // 构建更新数据
-    const updateData: any = {}
+    const updateData: Record<string, unknown> = {}
 
     if (realName !== undefined) updateData.realName = realName
     if (email !== undefined) updateData.email = email
@@ -144,7 +144,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       success: true,
       data: user,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Update user error:', error)
     return NextResponse.json({ error: '更新用户失败', code: 'SERVER_ERROR' }, { status: 500 })
   }

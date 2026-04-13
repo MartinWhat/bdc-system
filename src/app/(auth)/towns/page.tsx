@@ -1,86 +1,75 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
   Modal,
   Form,
   Input,
-  Select,
   InputNumber,
   message,
   Space,
   Tag,
   Popconfirm,
+  Typography,
 } from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import PageContainer from '@/components/PageContainer'
+
+const { Text } = Typography
 
 interface Town {
   id: string
   code: string
   name: string
-}
-
-interface Village {
-  id: string
-  code: string
-  name: string
-  townId: string
   status: string
   sortOrder: number
   createdAt: string
-  town: Town
   _count: {
-    bdcs: number
+    villages: number
   }
 }
 
-export default function VillagesPage() {
-  const [villages, setVillages] = useState<Village[]>([])
+export default function TownsPage() {
   const [towns, setTowns] = useState<Town[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
-  const [editingVillage, setEditingVillage] = useState<Village | null>(null)
+  const [editingTown, setEditingTown] = useState<Town | null>(null)
   const [form] = Form.useForm()
 
-  const loadVillages = async () => {
+  const loadTowns = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/villages')
-      const data = await res.json()
-      if (data.success) {
-        setVillages(data.data)
-      }
-    } catch (error) {
-      message.error('加载村居列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadTowns = async () => {
-    try {
-      const res = await fetch('/api/towns')
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/towns', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setTowns(data.data)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
-      console.error('加载镇街失败')
+      console.error('Load towns error:', error)
+      message.error('加载镇街列表失败')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadVillages()
     loadTowns()
   }, [])
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: { code: string; name: string; sortOrder?: number }) => {
     try {
-      const url = editingVillage ? `/api/villages/${editingVillage.id}` : '/api/villages'
-      const method = editingVillage ? 'PUT' : 'POST'
+      const url = editingTown ? `/api/towns/${editingTown.id}` : '/api/towns'
+      const method = editingTown ? 'PUT' : 'POST'
 
       const res = await fetch(url, {
         method,
@@ -91,28 +80,29 @@ export default function VillagesPage() {
       const data = await res.json()
 
       if (data.success) {
-        message.success(editingVillage ? '更新成功' : '创建成功')
+        message.success(editingTown ? '更新成功' : '创建成功')
         setModalVisible(false)
         form.resetFields()
-        setEditingVillage(null)
-        loadVillages()
+        setEditingTown(null)
+        loadTowns()
       } else {
         message.error(data.error)
       }
     } catch (error) {
+      console.error('Submit error:', error)
       message.error('操作失败')
     }
   }
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/villages/${id}`, {
+      const res = await fetch(`/api/towns/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()
       if (data.success) {
         message.success('删除成功')
-        loadVillages()
+        loadTowns()
       } else {
         message.error(data.error)
       }
@@ -121,21 +111,16 @@ export default function VillagesPage() {
     }
   }
 
-  const columns: ColumnsType<Village> = [
+  const columns: ColumnsType<Town> = [
     {
-      title: '村居代码',
+      title: '镇街代码',
       dataIndex: 'code',
       key: 'code',
     },
     {
-      title: '村居名称',
+      title: '镇街名称',
       dataIndex: 'name',
       key: 'name',
-    },
-    {
-      title: '所属镇街',
-      key: 'town',
-      render: (_, record) => record.town.name,
     },
     {
       title: '排序',
@@ -144,9 +129,9 @@ export default function VillagesPage() {
       width: 80,
     },
     {
-      title: '宅基地数',
-      key: 'bdcs',
-      render: (_, record) => `${record._count.bdcs} 个`,
+      title: '村居数',
+      key: 'villages',
+      render: (_, record) => `${record._count.villages} 个`,
     },
     {
       title: '状态',
@@ -169,11 +154,8 @@ export default function VillagesPage() {
             size="small"
             icon={<EditOutlined />}
             onClick={() => {
-              setEditingVillage(record)
-              form.setFieldsValue({
-                ...record,
-                townId: record.townId,
-              })
+              setEditingTown(record)
+              form.setFieldsValue(record)
               setModalVisible(true)
             }}
           >
@@ -181,7 +163,7 @@ export default function VillagesPage() {
           </Button>
           <Popconfirm
             title="确认删除"
-            description="删除前请确保该村居下没有宅基地档案"
+            description="删除前请确保该镇街下没有村居"
             onConfirm={() => handleDelete(record.id)}
           >
             <Button size="small" danger icon={<DeleteOutlined />}>
@@ -194,65 +176,55 @@ export default function VillagesPage() {
   ]
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h2>村居管理</h2>
+    <PageContainer
+      title="镇街管理"
+      extra={
         <Button
           type="primary"
           icon={<PlusOutlined />}
           onClick={() => {
-            setEditingVillage(null)
+            setEditingTown(null)
             form.resetFields()
             setModalVisible(true)
           }}
         >
-          创建村居
+          创建镇街
         </Button>
-      </div>
-
+      }
+      dataSource={towns}
+      loading={loading}
+      emptyDescription="暂无镇街数据"
+    >
       <Table
         columns={columns}
-        dataSource={villages}
+        dataSource={towns}
         rowKey="id"
         loading={loading}
         pagination={false}
       />
 
       <Modal
-        title={editingVillage ? '编辑村居' : '创建村居'}
+        title={editingTown ? '编辑镇街' : '创建镇街'}
         open={modalVisible}
         onCancel={() => {
           setModalVisible(false)
-          setEditingVillage(null)
+          setEditingTown(null)
           form.resetFields()
         }}
         footer={null}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
-            name="townId"
-            label="所属镇街"
-            rules={[{ required: true, message: '请选择所属镇街' }]}
-          >
-            <Select placeholder="请选择镇街">
-              {towns.map((town) => (
-                <Select.Option key={town.id} value={town.id}>
-                  {town.name}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item
             name="code"
-            label="村居代码"
-            rules={[{ required: true, message: '请输入村居代码' }]}
+            label="镇街代码"
+            rules={[{ required: true, message: '请输入镇街代码' }]}
           >
-            <Input disabled={!!editingVillage} />
+            <Input disabled={!!editingTown} />
           </Form.Item>
           <Form.Item
             name="name"
-            label="村居名称"
-            rules={[{ required: true, message: '请输入村居名称' }]}
+            label="镇街名称"
+            rules={[{ required: true, message: '请输入镇街名称' }]}
           >
             <Input />
           </Form.Item>
@@ -265,11 +237,11 @@ export default function VillagesPage() {
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" block>
-              {editingVillage ? '更新' : '创建'}
+              {editingTown ? '更新' : '创建'}
             </Button>
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   )
 }

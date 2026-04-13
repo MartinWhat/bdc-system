@@ -88,8 +88,9 @@ describe('宅基地管理核心', () => {
   it('应该验证状态流转', async () => {
     const validTransitions: Record<string, string[]> = {
       PENDING: ['APPROVED', 'CANCELLED'],
-      APPROVED: ['CERTIFIED', 'CANCELLED'],
-      CERTIFIED: ['CANCELLED'],
+      APPROVED: ['ISSUED', 'CANCELLED'],
+      ISSUED: ['COMPLETED', 'CANCELLED'],
+      COMPLETED: ['CANCELLED'],
       CANCELLED: [],
     }
 
@@ -98,19 +99,19 @@ describe('宅基地管理核心', () => {
     })
 
     expect(bdc).not.toBeNull()
-    expect(validTransitions[bdc!.status]).toContain('CERTIFIED')
+    expect(validTransitions[bdc!.status]).toContain('ISSUED')
   })
 
-  it('应该更新状态为已发证', async () => {
+  it('应该更新状态为已发放', async () => {
     const updated = await prisma.zjdBdc.update({
       where: { id: bdcId },
       data: {
-        status: 'CERTIFIED',
+        status: 'ISSUED',
         certIssuedDate: new Date(),
       },
     })
 
-    expect(updated.status).toBe('CERTIFIED')
+    expect(updated.status).toBe('ISSUED')
     expect(updated.certIssuedDate).not.toBeNull()
   })
 
@@ -130,8 +131,9 @@ describe('宅基地管理核心', () => {
 
     const validTransitions: Record<string, string[]> = {
       PENDING: ['APPROVED', 'CANCELLED'],
-      APPROVED: ['CERTIFIED', 'CANCELLED'],
-      CERTIFIED: ['CANCELLED'],
+      APPROVED: ['ISSUED', 'CANCELLED'],
+      ISSUED: ['COMPLETED', 'CANCELLED'],
+      COMPLETED: ['CANCELLED'],
       CANCELLED: [],
     }
 

@@ -5,7 +5,6 @@
 
 import { prisma } from '@/lib/prisma'
 import { sm3Hash, sm4Encrypt, sm4Decrypt, generateSalt, generateSM4Key } from '@/lib/gm-crypto'
-import type { SysKeyVersion } from '@prisma/client'
 
 export type KeyType = 'MASTER_KEY' | 'SM4_DATA' | 'SM2_SIGN' | 'JWT_SECRET'
 
@@ -47,7 +46,7 @@ export function generateKey(keyType: KeyType): string {
     case 'JWT_SECRET':
       return generateSalt(32)
     default:
-      throw new Error(`不支持的密钥类型: ${keyType}`)
+      throw new Error(`不支持的密钥类型：${keyType}`)
   }
 }
 
@@ -60,12 +59,21 @@ function generateMasterKey(): string {
 
 /**
  * 获取主密钥（用于加密其他密钥）
- * 注意: MASTER_KEY 本身使用 SM3 哈希存储（不可逆），
+ * 注意：MASTER_KEY 本身使用 SM3 哈希存储（不可逆），
  * 但用于 SM3-HMAC 生成查询索引时只需要单向哈希
  */
-function getMasterKeyValue(): string {
-  // MASTER_KEY 仅用于生成哈希索引，不需要解密
-  return generateSalt(32)
+
+/**
+ * 获取回退密钥（用于解密）
+ * 优先级：环境变量 > 数据库主密钥
+ */
+async function getFallbackKey(): Promise<string> {
+  // 优先使用环境变量配置的回退密钥（明文）
+  if (process.env.KMS_FALLBACK_KEY) {
+    return process.env.KMS_FALLBACK_KEY
+  }
+
+  throw new Error('KMS_FALLBACK_KEY 环境变量未配置')
 }
 
 /**
@@ -80,27 +88,9 @@ async function encryptKeyValue(keyType: KeyType, keyValue: string): Promise<stri
   }
 
   // 其他密钥类型使用 SM4 加密（可逆）
-  // 获取主密钥用于加密
-  const masterKeyRecord = await prisma.sysKeyVersion.findFirst({
-    where: {
-      keyType: 'MASTER_KEY',
-      isActive: true,
-    },
-    orderBy: { version: 'desc' },
-  })
-
-  if (!masterKeyRecord) {
-    // 如果主密钥不存在，使用固定的加密密钥（仅初始化时使用）
-    const fallbackKey = process.env.KMS_FALLBACK_KEY || 'fallback-master-key-32-characters'
-    const iv = generateSalt(16)
-    const encrypted = sm4Encrypt(keyValue, fallbackKey, iv)
-    return `${iv}:${encrypted.ciphertext}`
-  }
-
-  // 使用主密钥加密（注意：主密钥存储的是哈希，这里使用固定密钥加密）
-  // 实际应用中，主密钥应该是可解密的加密值
+  const fallbackKey = await getFallbackKey()
   const iv = generateSalt(16)
-  const encrypted = sm4Encrypt(keyValue, masterKeyRecord.keyValue.slice(0, 32), iv)
+  const encrypted = sm4Encrypt(keyValue, fallbackKey, iv)
   return `${iv}:${encrypted.ciphertext}`
 }
 
@@ -117,27 +107,21 @@ async function decryptKeyValue(keyType: KeyType, encryptedValue: string): Promis
 
   const [iv, ciphertext] = encryptedValue.split(':')
 
-  // 获取主密钥用于解密
-  const masterKeyRecord = await prisma.sysKeyVersion.findFirst({
-    where: {
-      keyType: 'MASTER_KEY',
-      isActive: true,
-    },
-    orderBy: { version: 'desc' },
-  })
+  // 使用回退密钥解密
+  const fallbackKey = await getFallbackKey()
 
-  if (!masterKeyRecord) {
-    const fallbackKey = process.env.KMS_FALLBACK_KEY || 'fallback-master-key-32-characters'
+  try {
     return sm4Decrypt(ciphertext, fallbackKey, iv)
+  } catch (error) {
+    console.error('Decrypt key error for', keyType, ':', error)
+    throw new Error('密钥解密失败')
   }
-
-  return sm4Decrypt(ciphertext, masterKeyRecord.keyValue.slice(0, 32), iv)
 }
 
 /**
  * 创建新密钥记录
  * @param keyType - 密钥类型
- * @param createdBy - 创建人ID
+ * @param createdBy - 创建人 ID
  * @param expiresAt - 过期时间（可选）
  * @returns 密钥记录
  */
@@ -174,7 +158,7 @@ export async function createKeyRecord(
 
 /**
  * 激活密钥（同时停用同类型的旧密钥）
- * @param keyId - 密钥记录ID
+ * @param keyId - 密钥记录 ID
  */
 export async function activateKey(keyId: string): Promise<void> {
   const keyRecord = await prisma.sysKeyVersion.findUnique({
@@ -234,7 +218,7 @@ export async function getActiveKey(keyType: KeyType): Promise<KeyRecord> {
 /**
  * 轮换密钥
  * @param keyType - 密钥类型
- * @param createdBy - 创建人ID
+ * @param createdBy - 创建人 ID
  * @returns 新密钥记录
  */
 export async function rotateKey(keyType: KeyType, createdBy: string): Promise<KeyRecord> {
@@ -292,7 +276,7 @@ export async function logKeyAccess(keyId: string, userId: string, action: string
       userId,
       action: `KEY_${action}`,
       module: 'KMS',
-      description: `密钥访问: ${keyId}`,
+      description: `密钥访问：${keyId}`,
       status: 'SUCCESS',
     },
   })

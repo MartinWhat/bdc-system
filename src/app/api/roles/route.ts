@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const keyword = searchParams.get('keyword') || ''
 
-    const where: any = {}
+    const where: Record<string, unknown> = {}
     if (keyword) {
       where.OR = [{ name: { contains: keyword } }, { code: { contains: keyword } }]
     }
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: role,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create role error:', error)
     return NextResponse.json({ error: '创建角色失败', code: 'SERVER_ERROR' }, { status: 500 })
   }

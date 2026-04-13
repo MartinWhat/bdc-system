@@ -1,9 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, Select, message, Space, Tag, Popconfirm } from 'antd'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Select,
+  message,
+  Space,
+  Tag,
+  Popconfirm,
+  Typography,
+} from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import PageContainer from '@/components/PageContainer'
+
+const { Text } = Typography
 
 interface User {
   id: string
@@ -41,34 +56,50 @@ export default function UsersPage() {
   const [pageSize, setPageSize] = useState(10)
 
   // 加载用户列表
-  const loadUsers = async (page = currentPage, size = pageSize) => {
+  const loadUsers = useCallback(async (page = 1, size = 10) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/users?page=${page}&pageSize=${size}`)
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/users?page=${page}&pageSize=${size}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setUsers(data.data.list)
         setTotal(data.data.total)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
+      console.error('Load users error:', error)
       message.error('加载用户列表失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   // 加载角色列表
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
     try {
-      const res = await fetch('/api/roles')
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/roles', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setRoles(data.data)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
-      console.error('加载角色失败')
+      console.error('Load roles error:', error)
+      message.error('加载角色失败')
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadUsers()
@@ -76,7 +107,13 @@ export default function UsersPage() {
   }, [])
 
   // 创建/编辑用户
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: {
+    username: string
+    password?: string
+    realName: string
+    email?: string
+    roleIds?: string[]
+  }) => {
     try {
       const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users'
       const method = editingUser ? 'PUT' : 'POST'
@@ -99,6 +136,7 @@ export default function UsersPage() {
         message.error(data.error)
       }
     } catch (error) {
+      console.error('Submit error:', error)
       message.error('操作失败')
     }
   }
@@ -197,9 +235,9 @@ export default function UsersPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h2>用户管理</h2>
+    <PageContainer
+      title="用户管理"
+      extra={
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -211,8 +249,11 @@ export default function UsersPage() {
         >
           创建用户
         </Button>
-      </div>
-
+      }
+      dataSource={users}
+      loading={loading}
+      emptyDescription="暂无用户数据"
+    >
       <Table
         columns={columns}
         dataSource={users}
@@ -246,7 +287,11 @@ export default function UsersPage() {
               <Form.Item
                 name="username"
                 label="用户名"
-                rules={[{ required: true, message: '请输入用户名' }]}
+                rules={[
+                  { required: true, message: '请输入用户名' },
+                  { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
+                  { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线' },
+                ]}
               >
                 <Input />
               </Form.Item>
@@ -272,7 +317,10 @@ export default function UsersPage() {
           <Form.Item
             name="email"
             label="邮箱"
-            rules={[{ type: 'email', message: '请输入有效的邮箱地址' }]}
+            rules={[
+              { type: 'email', message: '请输入有效的邮箱地址' },
+              { max: 50, message: '邮箱地址不能超过 50 个字符' },
+            ]}
           >
             <Input />
           </Form.Item>
@@ -292,6 +340,6 @@ export default function UsersPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   )
 }

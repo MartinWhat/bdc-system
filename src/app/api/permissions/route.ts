@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
 
-    const where: any = {}
+    const where: Record<string, unknown> = {}
     if (type) {
       where.type = type
     }

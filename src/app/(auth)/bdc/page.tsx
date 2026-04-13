@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Button,
@@ -14,16 +14,13 @@ import {
   Tag,
   Popconfirm,
   Descriptions,
+  DatePicker,
 } from 'antd'
-import {
-  PlusOutlined,
-  EyeOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  SearchOutlined,
-} from '@ant-design/icons'
+import { PlusOutlined, EyeOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import TownVillageCascader from '@/components/TownVillageCascader'
+import PageContainer from '@/components/PageContainer'
+import dayjs from 'dayjs'
 
 interface Village {
   id: string
@@ -54,7 +51,8 @@ interface Bdc {
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
   PENDING: { text: '待审核', color: 'orange' },
   APPROVED: { text: '已审核', color: 'blue' },
-  CERTIFIED: { text: '已发证', color: 'green' },
+  ISSUED: { text: '已发放', color: 'geekblue' },
+  COMPLETED: { text: '已完成', color: 'green' },
   CANCELLED: { text: '已注销', color: 'red' },
 }
 
@@ -73,27 +71,45 @@ export default function BdcPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  const loadBdcs = async (page = currentPage, size = pageSize, keyword = '') => {
+  const loadBdcs = useCallback(async (page = 1, size = 10, keyword = '') => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`)
+      const token = localStorage.getItem('token')
+      const res = await fetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setBdcs(data.data.list)
         setTotal(data.data.total)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
+      console.error('Load bdcs error:', error)
       message.error('加载宅基地列表失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadBdcs()
   }, [])
 
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: {
+    certNo: string
+    ownerName: string
+    idCard?: string
+    phone?: string
+    address: string
+    area: number
+    landUseType: string
+    villageId: string
+    remark?: string
+  }) => {
     try {
       const url = editingBdc ? `/api/bdc/${editingBdc.id}` : '/api/bdc'
       const method = editingBdc ? 'PUT' : 'POST'
@@ -116,6 +132,7 @@ export default function BdcPage() {
         message.error(data.error)
       }
     } catch (error) {
+      console.error('Submit error:', error)
       message.error('操作失败')
     }
   }
@@ -156,7 +173,7 @@ export default function BdcPage() {
     }
   }
 
-  const handleQuery = async (values: any) => {
+  const handleQuery = async (values: { idCard?: string; phone?: string }) => {
     try {
       const params = new URLSearchParams()
       if (values.idCard) params.append('idCard', values.idCard)
@@ -171,6 +188,7 @@ export default function BdcPage() {
         message.error(data.error)
       }
     } catch (error) {
+      console.error('Query error:', error)
       message.error('查询失败')
     }
   }
@@ -268,31 +286,25 @@ export default function BdcPage() {
   ]
 
   return (
-    <div>
-      <div
-        style={{
-          marginBottom: 16,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <h2>宅基地管理</h2>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setEditingBdc(null)
-              form.resetFields()
-              setModalVisible(true)
-            }}
-          >
-            创建档案
-          </Button>
-        </Space>
-      </div>
-
+    <PageContainer
+      title="宅基地管理"
+      extra={
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => {
+            setEditingBdc(null)
+            form.resetFields()
+            setModalVisible(true)
+          }}
+        >
+          创建档案
+        </Button>
+      }
+      dataSource={bdcs}
+      loading={loading}
+      emptyDescription="暂无宅基地档案"
+    >
       <Form form={queryForm} layout="inline" onFinish={handleQuery} style={{ marginBottom: 16 }}>
         <Form.Item name="idCard" label="身份证号">
           <Input placeholder="输入身份证号查询" />
@@ -349,7 +361,10 @@ export default function BdcPage() {
           <Form.Item
             name="certNo"
             label="证书编号"
-            rules={[{ required: true, message: '请输入证书编号' }]}
+            rules={[
+              { required: true, message: '请输入证书编号' },
+              { pattern: /^[0-9]+$/, message: '证书编号必须为数字' },
+            ]}
           >
             <Input disabled={!!editingBdc} />
           </Form.Item>
@@ -357,7 +372,10 @@ export default function BdcPage() {
           <Form.Item
             name="ownerName"
             label="使用权人姓名"
-            rules={[{ required: true, message: '请输入使用权人姓名' }]}
+            rules={[
+              { required: true, message: '请输入使用权人姓名' },
+              { max: 50, message: '姓名不能超过 50 个字符' },
+            ]}
           >
             <Input />
           </Form.Item>
@@ -365,27 +383,41 @@ export default function BdcPage() {
           <Form.Item
             name="idCard"
             label="身份证号"
-            rules={[{ required: true, message: '请输入身份证号' }]}
+            rules={[
+              { required: true, message: '请输入身份证号' },
+              { len: 18, message: '身份证号格式不正确' },
+              {
+                pattern:
+                  /^[1-9]\d{5}(18|19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]$/,
+                message: '请输入正确的身份证号',
+              },
+            ]}
           >
             <Input disabled={!!editingBdc} />
           </Form.Item>
 
           <Form.Item name="phone" label="手机号">
-            <Input />
+            <Input placeholder="请输入手机号" maxLength={11} />
           </Form.Item>
 
           <Form.Item
             name="address"
             label="地址"
-            rules={[{ required: true, message: '请输入地址' }]}
+            rules={[
+              { required: true, message: '请输入地址' },
+              { max: 200, message: '地址不能超过 200 个字符' },
+            ]}
           >
-            <Input.TextArea rows={2} />
+            <Input.TextArea rows={2} maxLength={200} />
           </Form.Item>
 
           <Form.Item
             name="area"
             label="面积（平方米）"
-            rules={[{ required: true, message: '请输入面积' }]}
+            rules={[
+              { required: true, message: '请输入面积' },
+              { type: 'number', min: 0, message: '面积必须大于 0' },
+            ]}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
@@ -409,7 +441,7 @@ export default function BdcPage() {
           </Form.Item>
 
           <Form.Item name="approvedDate" label="批准日期">
-            <Input type="date" />
+            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
           </Form.Item>
 
           <Form.Item name="remark" label="备注">
@@ -467,6 +499,6 @@ export default function BdcPage() {
           </Descriptions>
         )}
       </Modal>
-    </div>
+    </PageContainer>
   )
 }

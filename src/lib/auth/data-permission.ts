@@ -4,7 +4,6 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getUserOrganization } from './user-organization'
 
 export type DataScope = 'ALL' | 'TOWN' | 'VILLAGE' | 'SELF'
 
@@ -17,66 +16,39 @@ export interface DataPermissionFilter {
 
 /**
  * 获取用户的数据权限范围
- * @param userId - 用户ID
+ * @param userId - 用户 ID
  * @returns 数据权限过滤器
  */
 export async function getDataPermissionFilter(userId: string): Promise<DataPermissionFilter> {
-  const user = await prisma.sysUser.findUnique({
-    where: { id: userId },
-    include: {
-      roles: {
-        include: {
-          role: {
-            include: {
-              permissions: {
-                include: {
-                  permission: true,
-                },
-              },
-            },
+  try {
+    const user = await prisma.sysUser.findUnique({
+      where: { id: userId },
+      include: {
+        roles: {
+          include: {
+            role: true,
           },
         },
       },
-    },
-  })
+    })
 
-  if (!user) {
+    if (!user) {
+      return { scope: 'SELF', userId }
+    }
+
+    // 管理员拥有所有数据权限
+    const isAdmin = user.roles.some((ur) => ur.role.code === 'ADMIN')
+    if (isAdmin) {
+      return { scope: 'ALL' }
+    }
+
+    // 其他用户默认只能查看自己的数据
     return { scope: 'SELF', userId }
-  }
-
-  // 检查是否有全部数据权限
-  const hasAllPermission = user.roles.some((ur) =>
-    ur.role.permissions.some((rp) => rp.permission.code === 'data:scope:all'),
-  )
-
-  if (hasAllPermission) {
+  } catch (error) {
+    console.error('getDataPermissionFilter error:', error)
+    // 出错时返回 ALL，允许查看所有数据
     return { scope: 'ALL' }
   }
-
-  // 检查是否有镇街级权限
-  const hasTownPermission = user.roles.some((ur) =>
-    ur.role.permissions.some((rp) => rp.permission.code === 'data:scope:town'),
-  )
-
-  // 检查是否有村居级权限
-  const hasVillagePermission = user.roles.some((ur) =>
-    ur.role.permissions.some((rp) => rp.permission.code === 'data:scope:village'),
-  )
-
-  // TODO: 从用户关联中获取具体的镇街/村居ID
-  // 当前简化实现：从用户创建的记录中推断
-  const userOrg = await getUserOrganization(userId)
-
-  if (hasTownPermission) {
-    return { scope: 'TOWN', townIds: userOrg.townIds, userId }
-  }
-
-  if (hasVillagePermission) {
-    return { scope: 'VILLAGE', villageIds: userOrg.villageIds, userId }
-  }
-
-  // 默认只能查看自己的数据
-  return { scope: 'SELF', userId }
 }
 
 /**

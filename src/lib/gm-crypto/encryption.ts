@@ -89,8 +89,8 @@ export async function generateQueryHash(value: string): Promise<string> {
  * 数据加密中间件函数类型
  */
 export interface EncryptionMiddleware {
-  encrypt: (data: Record<string, any>) => Promise<Record<string, any>>
-  decrypt: (data: Record<string, any>) => Promise<Record<string, any>>
+  encrypt: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
+  decrypt: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
 }
 
 /**
@@ -103,7 +103,7 @@ export function createEncryptionMiddleware(fields: SensitiveFieldConfig[]): Encr
       const encrypted = { ...data }
 
       for (const config of fields) {
-        const value = data[config.fieldName]
+        const value = data[config.fieldName] as string
         if (value) {
           const { encrypted: encValue, hash } = await encryptSensitiveField(value)
           encrypted[config.encryptedFieldName] = encValue
@@ -119,7 +119,7 @@ export function createEncryptionMiddleware(fields: SensitiveFieldConfig[]): Encr
       const decrypted = { ...data }
 
       for (const config of fields) {
-        const encryptedValue = data[config.encryptedFieldName]
+        const encryptedValue = data[config.encryptedFieldName] as string
         if (encryptedValue) {
           decrypted[config.fieldName] = await decryptSensitiveField(encryptedValue)
           delete decrypted[config.encryptedFieldName] // 移除加密字段

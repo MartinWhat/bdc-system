@@ -45,9 +45,20 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
   // 获取 JWT 密钥
   try {
     const jwtKeyRecord = await getActiveKey('JWT_SECRET')
+
+    if (!jwtKeyRecord || !jwtKeyRecord.keyValue) {
+      console.error('[Middleware] JWT key not found or empty')
+      return NextResponse.json(
+        { error: '认证服务配置错误', code: 'AUTH_CONFIG_ERROR' },
+        { status: 500 },
+      )
+    }
+
+    // 验证 token
     const payload = verifyJWT(token, jwtKeyRecord.keyValue)
 
     if (!payload) {
+      console.log('[Middleware] Token verification failed')
       return NextResponse.json({ error: '无效的认证令牌', code: 'INVALID_TOKEN' }, { status: 401 })
     }
 
@@ -59,7 +70,8 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     response.headers.set('x-user-permissions', JSON.stringify(payload.permissions || []))
 
     return response
-  } catch {
+  } catch (error) {
+    console.error('[Middleware] Auth service error:', error)
     return NextResponse.json({ error: '认证服务错误', code: 'AUTH_ERROR' }, { status: 500 })
   }
 }

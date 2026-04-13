@@ -91,7 +91,8 @@ describe('数据脱敏', () => {
 
   it('应该正确脱敏地址', () => {
     const masked = maskAddress('北京市朝阳区建国路100号')
-    expect(masked).toBe('北京市朝阳区建国路1***')
+    // 地址脱敏：保留前3个字符，其余用 * 替换
+    expect(masked).toBe('北京市**********')
   })
 
   it('短字符串应该不脱敏', () => {

@@ -71,15 +71,15 @@ export function maskData<T extends Record<string, unknown>>(data: T, fields: str
     const value = result[field as keyof T]
     if (typeof value === 'string') {
       if (field.includes('idCard') || field.includes('IdCard')) {
-        ;(result as any)[field] = maskIdCard(value)
+        result[field as keyof T] = maskIdCard(value) as T[keyof T]
       } else if (field.includes('phone') || field.includes('Phone')) {
-        ;(result as any)[field] = maskPhone(value)
+        result[field as keyof T] = maskPhone(value) as T[keyof T]
       } else if (field.includes('name') || field.includes('Name')) {
-        ;(result as any)[field] = maskName(value)
+        result[field as keyof T] = maskName(value) as T[keyof T]
       } else if (field.includes('address') || field.includes('Address')) {
-        ;(result as any)[field] = maskAddress(value)
+        result[field as keyof T] = maskAddress(value) as T[keyof T]
       } else if (field.includes('email') || field.includes('Email')) {
-        ;(result as any)[field] = maskEmail(value)
+        result[field as keyof T] = maskEmail(value) as T[keyof T]
       }
     }
   }

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const pageSize = parseInt(searchParams.get('pageSize') || '20')
     const userId = searchParams.get('userId') || undefined
-    const module = searchParams.get('module') || undefined
+    const moduleParam = searchParams.get('module') || undefined
     const action = searchParams.get('action') || undefined
     const status = searchParams.get('status') || undefined
     const startDate = searchParams.get('startDate') || undefined
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       page,
       pageSize,
       userId,
-      module,
+      module: moduleParam,
       action,
       status,
       startDate,

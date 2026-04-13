@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const townId = searchParams.get('townId')
     const status = searchParams.get('status')
 
-    const where: any = {}
+    const where: Record<string, unknown> = {}
 
     if (keyword) {
       where.OR = [{ name: { contains: keyword } }, { code: { contains: keyword } }]
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: village,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create village error:', error)
     return NextResponse.json({ error: '创建村居失败', code: 'SERVER_ERROR' }, { status: 500 })
   }

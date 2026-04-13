@@ -57,7 +57,7 @@ export async function queryOperationLogs(params: {
 }) {
   const { page, pageSize, userId, module, action, status, startDate, endDate } = params
 
-  const where: any = {}
+  const where: Record<string, unknown> = {}
 
   if (userId) {
     where.userId = userId
@@ -76,13 +76,14 @@ export async function queryOperationLogs(params: {
   }
 
   if (startDate || endDate) {
-    where.createdAt = {}
+    const dateFilter: Record<string, Date> = {}
     if (startDate) {
-      where.createdAt.gte = new Date(startDate)
+      dateFilter.gte = new Date(startDate)
     }
     if (endDate) {
-      where.createdAt.lte = new Date(endDate)
+      dateFilter.lte = new Date(endDate)
     }
+    where.createdAt = dateFilter
   }
 
   const [total, logs] = await Promise.all([

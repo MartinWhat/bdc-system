@@ -27,11 +27,17 @@ export async function createUser(input: CreateUserInput) {
   // 密码加密
   const { passwordHash, salt } = hashUserPassword(input.password)
 
-  // 敏感字段加密
-  let idCardHash: string | undefined
-  let phoneHash: string | undefined
-
-  const createData: any = {
+  const createData: {
+    username: string
+    passwordHash: string
+    salt: string
+    realName: string
+    email?: string | null
+    createdBy: string
+    status: string
+    idCard?: string
+    phone?: string
+  } = {
     username: input.username,
     passwordHash,
     salt,
@@ -45,14 +51,12 @@ export async function createUser(input: CreateUserInput) {
   if (input.idCard) {
     const idCardResult = await encryptSensitiveField(input.idCard)
     createData.idCard = idCardResult.encrypted
-    idCardHash = idCardResult.hash
   }
 
   // 加密手机号
   if (input.phone) {
     const phoneResult = await encryptSensitiveField(input.phone)
     createData.phone = phoneResult.encrypted
-    phoneHash = phoneResult.hash
   }
 
   const user = await prisma.sysUser.create({

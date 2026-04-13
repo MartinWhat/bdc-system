@@ -74,7 +74,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: '角色不存在', code: 'ROLE_NOT_FOUND' }, { status: 404 })
     }
 
-    const updateData: any = {}
+    const updateData: Record<string, unknown> = {}
     if (name !== undefined) updateData.name = name
     if (description !== undefined) updateData.description = description
     if (status !== undefined) updateData.status = status

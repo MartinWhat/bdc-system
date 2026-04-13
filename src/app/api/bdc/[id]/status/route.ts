@@ -59,7 +59,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const updateData: any = { status }
+    const updateData: Record<string, unknown> = { status }
 
     // 如果是发证状态，记录发证日期
     if (status === 'CERTIFIED') {

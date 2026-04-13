@@ -1,9 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, Transfer, message, Space, Tag, Popconfirm } from 'antd'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  Table,
+  Button,
+  Modal,
+  Form,
+  Input,
+  Transfer,
+  message,
+  Space,
+  Tag,
+  Popconfirm,
+  Typography,
+} from 'antd'
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import PageContainer from '@/components/PageContainer'
+
+const { Text } = Typography
 
 interface Role {
   id: string
@@ -40,33 +55,49 @@ export default function RolesPage() {
   const [form] = Form.useForm()
 
   // 加载角色列表
-  const loadRoles = async () => {
+  const loadRoles = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/roles')
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/roles', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setRoles(data.data)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
+      console.error('Load roles error:', error)
       message.error('加载角色列表失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   // 加载权限列表
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
     try {
-      const res = await fetch('/api/permissions')
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/permissions', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setPermissions(data.data)
+      } else {
+        message.error(data.error || '加载失败')
       }
     } catch (error) {
-      console.error('加载权限失败')
+      console.error('Load permissions error:', error)
+      message.error('加载权限失败')
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadRoles()
@@ -74,7 +105,12 @@ export default function RolesPage() {
   }, [])
 
   // 创建/编辑角色
-  const handleSubmit = async (values: any) => {
+  const handleSubmit = async (values: {
+    name: string
+    code: string
+    description?: string
+    permissionIds: string[]
+  }) => {
     try {
       const url = editingRole ? `/api/roles/${editingRole.id}` : '/api/roles'
       const method = editingRole ? 'PUT' : 'POST'
@@ -97,6 +133,7 @@ export default function RolesPage() {
         message.error(data.error)
       }
     } catch (error) {
+      console.error('Submit error:', error)
       message.error('操作失败')
     }
   }
@@ -192,9 +229,9 @@ export default function RolesPage() {
   ]
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h2>角色管理</h2>
+    <PageContainer
+      title="角色管理"
+      extra={
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -206,8 +243,11 @@ export default function RolesPage() {
         >
           创建角色
         </Button>
-      </div>
-
+      }
+      dataSource={roles}
+      loading={loading}
+      emptyDescription="暂无角色数据"
+    >
       <Table
         columns={columns}
         dataSource={roles}
@@ -264,6 +304,6 @@ export default function RolesPage() {
           </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </PageContainer>
   )
 }

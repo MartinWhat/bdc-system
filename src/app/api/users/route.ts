@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 // 创建用户验证
@@ -184,11 +185,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 记录日志
+    await logOperation({
+      userId: user.id,
+      action: 'CREATE',
+      module: 'USER',
+      description: `创建用户 ${user.username}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({
       success: true,
       data: user,
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Create user error:', error)
     return NextResponse.json({ error: '创建用户失败', code: 'SERVER_ERROR' }, { status: 500 })
   }

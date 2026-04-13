@@ -14,6 +14,14 @@ interface Town {
   }>
 }
 
+interface CascaderOption {
+  value: string
+  label: string
+  isLeaf?: boolean
+  children?: CascaderOption[]
+  loading?: boolean
+}
+
 interface TownVillageCascaderProps {
   value?: string[]
   onChange?: (value: string[]) => void
@@ -30,7 +38,7 @@ export default function TownVillageCascader({
   placeholder = '请选择镇街/村居',
   disabled = false,
 }: TownVillageCascaderProps) {
-  const [options, setOptions] = useState<any[]>([])
+  const [options, setOptions] = useState<CascaderOption[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -52,13 +60,14 @@ export default function TownVillageCascader({
         setOptions(cascaderOptions)
       }
     } catch (error) {
+      console.error('Load towns error:', error)
       message.error('加载镇街数据失败')
     } finally {
       setLoading(false)
     }
   }
 
-  const loadData = async (selectedOptions: any[]) => {
+  const loadData = async (selectedOptions: CascaderOption[]) => {
     const targetOption = selectedOptions[selectedOptions.length - 1]
     targetOption.loading = true
 
@@ -69,7 +78,7 @@ export default function TownVillageCascader({
 
       if (data.success) {
         targetOption.loading = false
-        targetOption.children = data.data.map((village: any) => ({
+        targetOption.children = data.data.map((village: { id: string; name: string }) => ({
           value: village.id,
           label: village.name,
           isLeaf: true,
@@ -78,11 +87,12 @@ export default function TownVillageCascader({
       }
     } catch (error) {
       targetOption.loading = false
+      console.error('Load villages error:', error)
       message.error('加载村居数据失败')
     }
   }
 
-  const handleChange = (selectedValues: any) => {
+  const handleChange = (selectedValues: string[]) => {
     onChange?.(selectedValues || [])
   }
 

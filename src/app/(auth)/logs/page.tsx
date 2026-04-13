@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Table,
   Form,
@@ -13,10 +13,15 @@ import {
   Statistic,
   Row,
   Col,
+  message,
+  Typography,
 } from 'antd'
 import { SearchOutlined, ReloadOutlined, BarChartOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
+import PageContainer from '@/components/PageContainer'
+
+const { Text } = Typography
 
 const { RangePicker } = DatePicker
 
@@ -69,47 +74,72 @@ export default function LogsPage() {
   const [pageSize, setPageSize] = useState(20)
   const [form] = Form.useForm()
 
-  const loadLogs = async (page = currentPage, size = pageSize, filters = {}) => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        pageSize: String(size),
-        ...filters,
-      })
+  const loadLogs = useCallback(
+    async (page = 1, size = 20, filters: Record<string, string> = {}) => {
+      setLoading(true)
+      try {
+        const token = localStorage.getItem('token')
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(size),
+          ...filters,
+        })
 
-      const res = await fetch(`/api/logs?${params}`)
-      const data = await res.json()
-      if (data.success) {
-        setLogs(data.data.list)
-        setTotal(data.data.total)
+        const res = await fetch(`/api/logs?${params}`, {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+        })
+        const data = await res.json()
+        if (data.success) {
+          setLogs(data.data.list)
+          setTotal(data.data.total)
+        } else {
+          message.error(data.error || '加载失败')
+        }
+      } catch (error) {
+        console.error('Load logs error:', error)
+        message.error('加载日志失败')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('加载日志失败')
-    } finally {
-      setLoading(false)
-    }
-  }
+    },
+    [],
+  )
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
-      const res = await fetch('/api/logs/stats?days=7')
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/logs/stats?days=7', {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      })
       const data = await res.json()
       if (data.success) {
         setStats(data.data)
+      } else {
+        message.error(data.error || '加载统计失败')
       }
     } catch (error) {
-      console.error('加载统计失败')
+      console.error('Load stats error:', error)
+      message.error('加载统计失败')
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadLogs()
     loadStats()
   }, [])
 
-  const handleSearch = (values: any) => {
-    const filters: any = {}
+  const handleSearch = (values: {
+    userId?: string
+    module?: string
+    action?: string
+    status?: string
+    dateRange?: [dayjs.Dayjs, dayjs.Dayjs]
+  }) => {
+    const filters: Record<string, string> = {}
     if (values.userId) filters.userId = values.userId
     if (values.module) filters.module = values.module
     if (values.action) filters.action = values.action
@@ -188,9 +218,12 @@ export default function LogsPage() {
   ]
 
   return (
-    <div>
-      <h2 style={{ marginBottom: 16 }}>操作日志</h2>
-
+    <PageContainer
+      title="操作日志"
+      dataSource={logs}
+      loading={loading}
+      emptyDescription="暂无操作日志"
+    >
       {/* 统计卡片 */}
       {stats && (
         <Row gutter={16} style={{ marginBottom: 16 }}>
@@ -286,6 +319,6 @@ export default function LogsPage() {
           },
         }}
       />
-    </div>
+    </PageContainer>
   )
 }

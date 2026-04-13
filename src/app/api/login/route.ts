@@ -13,6 +13,7 @@ import {
 import { signJWT } from '@/lib/auth'
 import { createSession } from '@/lib/session'
 import { getActiveKey } from '@/lib/kms'
+import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 // 请求体验证
@@ -89,6 +90,15 @@ export async function POST(request: NextRequest) {
     // 更新最后登录时间
     await updateLastLogin(user.id)
 
+    // 记录登录日志
+    await logOperation({
+      userId: user.id,
+      action: 'LOGIN',
+      module: 'AUTH',
+      description: `用户 ${user.username} 登录成功`,
+      status: 'SUCCESS',
+    })
+
     // 返回登录成功响应
     return NextResponse.json({
       success: true,
@@ -105,10 +115,21 @@ export async function POST(request: NextRequest) {
         expiresIn: 3600,
       },
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Login error:', error)
+    const errorMessage = error instanceof Error ? error.message : '未知错误'
 
-    if (error.message === '用户已被禁用') {
+    // 记录登录失败日志
+    const body = await request.json().catch(() => ({}))
+    await logOperation({
+      userId: body.username || 'unknown',
+      action: 'LOGIN',
+      module: 'AUTH',
+      description: `用户 ${body.username || 'unknown'} 登录失败：${errorMessage}`,
+      status: 'FAILED',
+    })
+
+    if (errorMessage === '用户已被禁用') {
       return NextResponse.json(
         { error: '用户已被禁用，请联系管理员', code: 'USER_DISABLED' },
         { status: 403 },

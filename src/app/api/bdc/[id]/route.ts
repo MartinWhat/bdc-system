@@ -96,7 +96,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const updateData: any = {}
+    const updateData: Record<string, unknown> = {}
 
     if (body.villageId !== undefined) updateData.villageId = body.villageId
     if (body.certNo !== undefined) updateData.certNo = body.certNo
