@@ -442,6 +442,7 @@ export default function LingzhengPage() {
       }
       dataSource={records}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无领证记录"
     >
       <Table

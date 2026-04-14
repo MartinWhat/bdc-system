@@ -222,6 +222,7 @@ export default function LogsPage() {
       title="操作日志"
       dataSource={logs}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无操作日志"
     >
       {/* 统计卡片 */}

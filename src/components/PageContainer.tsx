@@ -1,5 +1,5 @@
 import React from 'react'
-import { Typography, Card, Spin, Empty } from 'antd'
+import { Typography, Card, Spin, Empty, Skeleton } from 'antd'
 import type { ReactNode } from 'react'
 
 const { Title } = Typography
@@ -29,6 +29,17 @@ interface PageContainerProps {
   contentStyle?: React.CSSProperties
   /** 数据源，用于自动判断空状态 */
   dataSource?: unknown[]
+  /** 骨架屏配置，为 true 时使用骨架屏替代 Spin */
+  skeleton?:
+    | boolean
+    | {
+        /** 是否显示动画 */
+        active?: boolean
+        /** 是否显示头像占位 */
+        avatar?: boolean
+        /** 段落配置 */
+        paragraph?: { rows: number }
+      }
 }
 
 /**
@@ -48,9 +59,20 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   cardStyle,
   contentStyle,
   dataSource,
+  skeleton = false,
 }) => {
   // 自动判断空状态：如果提供了 dataSource 且为空数组，则显示空状态
   const isEmpty = dataSource !== undefined ? dataSource.length === 0 : empty
+
+  // 解析骨架屏配置
+  const skeletonConfig =
+    typeof skeleton === 'boolean'
+      ? { active: true, avatar: false, paragraph: { rows: 3 } }
+      : {
+          active: skeleton.active ?? true,
+          avatar: skeleton.avatar ?? false,
+          paragraph: skeleton.paragraph ?? { rows: 3 },
+        }
 
   const content = (
     <div
@@ -89,7 +111,11 @@ export const PageContainer: React.FC<PageContainerProps> = ({
 
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-          <Spin size="large" tip="加载中..." />
+          {skeleton ? (
+            <Skeleton {...skeletonConfig} style={{ width: '100%', maxWidth: 800 }} />
+          ) : (
+            <Spin size="large" tip="加载中..." />
+          )}
         </div>
       ) : isEmpty ? (
         <Empty description={emptyDescription} style={{ padding: '60px 0' }} />

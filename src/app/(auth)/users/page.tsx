@@ -252,6 +252,7 @@ export default function UsersPage() {
       }
       dataSource={users}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无用户数据"
     >
       <Table

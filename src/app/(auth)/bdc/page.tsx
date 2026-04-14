@@ -303,6 +303,7 @@ export default function BdcPage() {
       }
       dataSource={bdcs}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无宅基地档案"
     >
       <Form form={queryForm} layout="inline" onFinish={handleQuery} style={{ marginBottom: 16 }}>

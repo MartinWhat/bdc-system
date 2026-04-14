@@ -246,6 +246,7 @@ export default function RolesPage() {
       }
       dataSource={roles}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无角色数据"
     >
       <Table

@@ -237,6 +237,7 @@ export default function VillagesPage() {
       }
       dataSource={villages}
       loading={loading}
+      skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无村居数据"
     >
       <Table
