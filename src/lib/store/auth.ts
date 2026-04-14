@@ -1,9 +1,16 @@
 /**
- * 认证状态管理（Zustand）
+ * 认证状态管理（Zustand）- 双 Token 机制
  */
 
 import { create } from 'zustand'
-import { setToken, getToken, getUser, clearToken, initTokenManager } from '@/lib/token-manager'
+import {
+  setTokens,
+  getAccessToken,
+  getRefreshToken,
+  getUser,
+  clearTokens,
+  initTokenManager,
+} from '@/lib/token-manager'
 
 export interface UserInfo {
   id: string
@@ -15,37 +22,40 @@ export interface UserInfo {
 }
 
 interface AuthState {
-  token: string | null
+  accessToken: string | null
+  refreshToken: string | null
   user: UserInfo | null
   isAuthenticated: boolean
 
   // Actions
-  setAuth: (token: string, user: UserInfo) => void
+  setAuth: (accessToken: string, refreshToken: string, user: UserInfo) => void
   clearAuth: () => void
   loadFromStorage: () => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: null,
+  accessToken: null,
+  refreshToken: null,
   user: null,
   isAuthenticated: false,
 
-  setAuth: (token, user) => {
-    setToken(token, user)
-    set({ token, user, isAuthenticated: true })
+  setAuth: (accessToken, refreshToken, user) => {
+    setTokens(accessToken, refreshToken, user)
+    set({ accessToken, refreshToken, user, isAuthenticated: true })
   },
 
   clearAuth: () => {
-    clearToken()
-    set({ token: null, user: null, isAuthenticated: false })
+    clearTokens()
+    set({ accessToken: null, refreshToken: null, user: null, isAuthenticated: false })
   },
 
   loadFromStorage: () => {
-    const token = getToken()
+    const accessToken = getAccessToken()
+    const refreshToken = getRefreshToken()
     const user = getUser() as UserInfo | null
 
-    if (token && user) {
-      set({ token, user, isAuthenticated: true })
+    if (accessToken && refreshToken && user) {
+      set({ accessToken, refreshToken, user, isAuthenticated: true })
       initTokenManager()
     }
   },

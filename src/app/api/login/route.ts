@@ -1,6 +1,6 @@
 /**
  * POST /api/login
- * 用户登录接口
+ * 用户登录接口（双 Token 机制）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -15,6 +15,7 @@ import { createSession } from '@/lib/session'
 import { getActiveKey } from '@/lib/kms'
 import { logOperation } from '@/lib/log'
 import { z } from 'zod'
+import { randomBytes } from 'crypto'
 
 // 请求体验证
 const loginSchema = z.object({
@@ -23,6 +24,17 @@ const loginSchema = z.object({
   // 双因素验证码（二期实现，一期暂不使用）
   twoFactorCode: z.string().optional(),
 })
+
+// Token 配置
+const ACCESS_TOKEN_EXPIRES_IN = 30 * 60 // 30 分钟（秒）
+const REFRESH_TOKEN_EXPIRES_IN_DAYS = 7 // 7 天
+
+/**
+ * 生成 Refresh Token（使用加密安全的随机数）
+ */
+function generateRefreshToken(): string {
+  return randomBytes(32).toString('hex')
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,9 +83,11 @@ export async function POST(request: NextRequest) {
     const roles = await getUserRoles(user.id)
     const permissions = await getUserPermissions(user.id)
 
-    // 签发 JWT
+    // 获取 JWT 密钥
     const jwtKeyRecord = await getActiveKey('JWT_SECRET')
-    const token = signJWT(
+
+    // 签发 Access Token（30 分钟）
+    const accessToken = signJWT(
       {
         sub: user.id,
         username: user.username,
@@ -81,11 +95,19 @@ export async function POST(request: NextRequest) {
         permissions,
       },
       jwtKeyRecord.keyValue,
-      3600, // 1小时过期
+      ACCESS_TOKEN_EXPIRES_IN,
     )
 
-    // 创建会话
-    await createSession(user.id, 24)
+    // 生成 Refresh Token（7 天）
+    const refreshToken = generateRefreshToken()
+
+    // 创建会话（双 Token 机制）
+    await createSession(
+      user.id,
+      refreshToken,
+      0.5, // Access Token 30 分钟
+      REFRESH_TOKEN_EXPIRES_IN_DAYS, // Refresh Token 7 天
+    )
 
     // 更新最后登录时间
     await updateLastLogin(user.id)
@@ -99,11 +121,13 @@ export async function POST(request: NextRequest) {
       status: 'SUCCESS',
     })
 
-    // 返回登录成功响应
+    // 返回登录成功响应（双 Token）
     return NextResponse.json({
       success: true,
       data: {
-        token,
+        accessToken,
+        refreshToken,
+        expiresIn: ACCESS_TOKEN_EXPIRES_IN,
         user: {
           id: user.id,
           username: user.username,
@@ -112,7 +136,6 @@ export async function POST(request: NextRequest) {
           avatar: user.avatar,
           roles,
         },
-        expiresIn: 3600,
       },
     })
   } catch (error: unknown) {

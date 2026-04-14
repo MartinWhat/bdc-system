@@ -150,6 +150,13 @@ model SysSession {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  // Refresh Token 字段（双 Token 机制）
+  refreshToken           String?   @unique
+  refreshTokenExpiresAt  DateTime?
+  lastActivityAt         DateTime?
+  deviceFingerprint      String?
+  
   user      SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sys_session")

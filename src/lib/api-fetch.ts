@@ -1,10 +1,15 @@
 /**
- * API 请求拦截器
- * 自动处理 Token 刷新和认证错误
+ * API 请求拦截器（双 Token 机制）
+ * 自动处理 Access Token 刷新和认证错误
  */
 
 import { message } from 'antd'
-import { getToken, clearToken, refreshToken } from '@/lib/token-manager'
+import {
+  getAccessToken,
+  getRefreshToken,
+  clearTokens,
+  refreshAccessToken,
+} from '@/lib/token-manager'
 
 // 正在刷新 Token 的标志
 let isRefreshing = false
@@ -30,7 +35,7 @@ function onTokenRefreshed(token: string) {
  * 格式化请求头
  */
 function buildHeaders(headers: HeadersInit = {}): HeadersInit {
-  const token = getToken()
+  const token = getAccessToken()
   return {
     ...headers,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -38,8 +43,8 @@ function buildHeaders(headers: HeadersInit = {}): HeadersInit {
 }
 
 /**
- * 增强的 fetch 函数
- * 自动处理 Token 刷新和重试
+ * 增强的 fetch 函数（双 Token 机制）
+ * 自动处理 Access Token 刷新和重试
  */
 export async function authFetch(
   url: string,
@@ -47,24 +52,31 @@ export async function authFetch(
 ): Promise<Response> {
   const { skipAuth, ...fetchOptions } = options
 
-  // 跳过认证的请求（如登录）
-  if (skipAuth || url.includes('/login')) {
+  // 跳过认证的请求（如登录、刷新 Token）
+  if (skipAuth || url.includes('/login') || url.includes('/token/refresh')) {
     return fetch(url, fetchOptions)
   }
 
-  const token = getToken()
+  const accessToken = getAccessToken()
 
-  // 如果没有 Token，尝试刷新
-  if (!token) {
-    const refreshed = await refreshToken()
-    if (!refreshed) {
-      // 刷新失败，跳转到登录页
+  // 如果没有 Access Token，尝试刷新
+  if (!accessToken) {
+    const refreshToken = getRefreshToken()
+    if (refreshToken) {
+      const refreshed = await refreshAccessToken()
+      if (!refreshed) {
+        // 刷新失败，跳转到登录页
+        window.location.href = '/login'
+        return Promise.reject(new Error('未认证'))
+      }
+    } else {
+      // 没有 Refresh Token，直接跳转登录
       window.location.href = '/login'
       return Promise.reject(new Error('未认证'))
     }
   }
 
-  // 添加 Token 到请求头
+  // 添加 Access Token 到请求头
   const authOptions = {
     ...fetchOptions,
     headers: buildHeaders(fetchOptions.headers),
@@ -77,16 +89,20 @@ export async function authFetch(
     if (response.status === 401) {
       const errorData = await response.json().catch(() => ({}))
 
-      // 如果是 Token 过期错误
-      if (errorData.code === 'INVALID_TOKEN' || errorData.code === 'UNAUTHORIZED') {
+      // 如果是 Access Token 过期错误
+      if (
+        errorData.code === 'INVALID_TOKEN' ||
+        errorData.code === 'UNAUTHORIZED' ||
+        errorData.code === 'ACCESS_TOKEN_EXPIRED'
+      ) {
         if (!isRefreshing) {
           isRefreshing = true
 
           try {
-            const refreshed = await refreshToken()
+            const refreshed = await refreshAccessToken()
 
             if (refreshed) {
-              const newToken = getToken()
+              const newToken = getAccessToken()
               if (newToken) {
                 // 执行等待队列中的请求
                 onTokenRefreshed(newToken)
@@ -100,16 +116,16 @@ export async function authFetch(
               }
             } else {
               // 刷新失败，清除 Token 并跳转登录
-              clearToken()
+              clearTokens()
               message.error('认证已过期，请重新登录')
               setTimeout(() => {
                 window.location.href = '/login'
-              }, 1000)
+              }, 500)
               return Promise.reject(new Error('Token refresh failed'))
             }
           } catch (error) {
             console.error('Token refresh error:', error)
-            clearToken()
+            clearTokens()
             window.location.href = '/login'
             return Promise.reject(error)
           } finally {

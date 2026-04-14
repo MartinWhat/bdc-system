@@ -42,8 +42,8 @@ export default function LoginPage() {
         return
       }
 
-      // 存储令牌并更新 Zustand store
-      setAuth(data.data.token, data.data.user)
+      // 存储双 Token 并更新 Zustand store
+      setAuth(data.data.accessToken, data.data.refreshToken, data.data.user)
 
       message.success('登录成功')
       router.push('/')

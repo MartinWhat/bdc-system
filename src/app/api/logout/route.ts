@@ -1,34 +1,41 @@
 /**
  * POST /api/logout
- * 用户登出接口
+ * 用户登出接口（双 Token 机制）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { destroySession, destroyAllUserSessions } from '@/lib/session'
+import { prisma } from '@/lib/prisma'
+import { destroySession } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
-    // 获取令牌
+    // 获取 Access Token
     const authHeader = request.headers.get('authorization')
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: '未提供认证令牌', code: 'UNAUTHORIZED' }, { status: 401 })
-    }
+    // 获取 Refresh Token（从请求体或 header）
+    const body = await request.json().catch(() => ({}))
+    const refreshToken = body.refreshToken
 
-    const token = authHeader.slice(7)
-
-    // 获取用户ID（由中间件注入）
+    // 获取用户 ID（由中间件注入）
     const userId = request.headers.get('x-user-id')
 
-    if (!userId) {
-      return NextResponse.json({ error: '无效的用户信息', code: 'INVALID_USER' }, { status: 401 })
+    // 销毁 Access Token 对应的会话
+    if (accessToken) {
+      await destroySession(accessToken)
     }
 
-    // 销毁当前会话
-    await destroySession(token)
-
-    // 可选：销毁所有会话（安全起见）
-    // await destroyAllUserSessions(userId)
+    // 销毁 Refresh Token 对应的会话（双 Token 机制）
+    if (refreshToken) {
+      await prisma.sysSession.deleteMany({
+        where: { refreshToken },
+      })
+    } else if (userId) {
+      // 如果没有 Refresh Token，但有用户 ID，销毁该用户的所有会话
+      await prisma.sysSession.deleteMany({
+        where: { userId },
+      })
+    }
 
     return NextResponse.json({
       success: true,

@@ -78,7 +78,7 @@ export default function LogsPage() {
     async (page = 1, size = 20, filters: Record<string, string> = {}) => {
       setLoading(true)
       try {
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('access_token')
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(size),
@@ -109,7 +109,7 @@ export default function LogsPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/logs/stats?days=7', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

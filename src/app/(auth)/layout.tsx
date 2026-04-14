@@ -87,21 +87,39 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { user, clearAuth, loadFromStorage } = useAuthStore()
+  const { user, clearAuth, loadFromStorage, refreshToken } = useAuthStore()
 
   useEffect(() => {
     // 从 localStorage 加载认证信息
     loadFromStorage()
 
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('access_token')
     if (!token) {
       router.push('/login')
     }
   }, [router, loadFromStorage])
 
-  const handleLogout = () => {
-    clearAuth()
-    router.push('/login')
+  const handleLogout = async () => {
+    try {
+      // 调用登出 API 销毁会话
+      const token = localStorage.getItem('access_token')
+      const refreshToken = localStorage.getItem('refresh_token')
+
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ refreshToken }),
+      })
+    } catch (error) {
+      console.error('Logout error:', error)
+    } finally {
+      // 清除本地认证信息
+      clearAuth()
+      router.push('/login')
+    }
   }
 
   const userMenuItems = [

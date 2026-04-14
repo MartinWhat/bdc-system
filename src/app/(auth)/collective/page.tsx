@@ -143,7 +143,7 @@ export default function CollectivePage() {
           params.append('villageId', selectedVillageId[1])
         }
 
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('access_token')
         const res = await fetch(`/api/collective?${params}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : '',
@@ -192,7 +192,7 @@ export default function CollectivePage() {
     remark?: string
   }) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/collective', {
         method: 'POST',
         headers: {
@@ -233,7 +233,7 @@ export default function CollectivePage() {
       // 解析输入的 JSON 数据
       const items = JSON.parse(values.items)
 
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/collective/batch-import', {
         method: 'POST',
         headers: {
@@ -272,7 +272,7 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${selectedCert.id}/approve`, {
         method: 'POST',
         headers: {
@@ -307,7 +307,7 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${selectedCert.id}/out`, {
         method: 'POST',
         headers: {
@@ -340,7 +340,7 @@ export default function CollectivePage() {
 
   const handleReturn = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${cert.id}/return`, {
         method: 'POST',
         headers: {
@@ -373,7 +373,7 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${selectedCert.id}/freeze`, {
         method: 'POST',
         headers: {
@@ -406,7 +406,7 @@ export default function CollectivePage() {
 
   const handleUnfreeze = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${cert.id}/freeze`, {
         method: 'DELETE',
         headers: {
@@ -435,7 +435,7 @@ export default function CollectivePage() {
 
   const handleCancel = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${cert.id}?reason=管理员注销`, {
         method: 'DELETE',
         headers: {
@@ -464,7 +464,7 @@ export default function CollectivePage() {
 
   const loadCertDetail = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/collective/${cert.id}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

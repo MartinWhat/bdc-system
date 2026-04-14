@@ -113,7 +113,7 @@ export default function LingzhengPage() {
         })
         if (status) params.append('status', status)
 
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('access_token')
         const res = await fetch(`/api/receive?${params}`, {
           headers: {
             Authorization: token ? `Bearer ${token}` : '',
@@ -150,7 +150,7 @@ export default function LingzhengPage() {
   const handleIssue = useCallback(
     async (record: ReceiveRecord) => {
       try {
-        const token = localStorage.getItem('token')
+        const token = localStorage.getItem('access_token')
         const res = await fetch(`/api/receive/${record.id}`, {
           method: 'PATCH',
           headers: {
@@ -190,7 +190,7 @@ export default function LingzhengPage() {
     if (!selectedRecord) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/receive/${selectedRecord.id}`, {
         method: 'PATCH',
         headers: {
@@ -234,7 +234,7 @@ export default function LingzhengPage() {
     if (!selectedRecord) return
 
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/objection', {
         method: 'POST',
         headers: {
@@ -278,7 +278,7 @@ export default function LingzhengPage() {
 
       const items = certNos.map((certNo: string) => ({ certNo, remark: values.remark || '' }))
 
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/receive/batch-import', {
         method: 'POST',
         headers: {

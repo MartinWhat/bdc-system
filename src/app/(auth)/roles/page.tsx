@@ -58,7 +58,7 @@ export default function RolesPage() {
   const loadRoles = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/roles', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',
@@ -81,7 +81,7 @@ export default function RolesPage() {
   // 加载权限列表
   const loadPermissions = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/permissions', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

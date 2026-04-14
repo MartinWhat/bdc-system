@@ -52,7 +52,7 @@ export default function VillagesPage() {
   const loadVillages = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/villages', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',
@@ -74,7 +74,7 @@ export default function VillagesPage() {
 
   const loadTowns = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/towns', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

@@ -59,7 +59,7 @@ export default function UsersPage() {
   const loadUsers = useCallback(async (page = 1, size = 10) => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/users?page=${page}&pageSize=${size}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',
@@ -83,7 +83,7 @@ export default function UsersPage() {
   // 加载角色列表
   const loadRoles = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/roles', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

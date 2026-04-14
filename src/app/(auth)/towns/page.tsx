@@ -42,7 +42,7 @@ export default function TownsPage() {
   const loadTowns = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch('/api/towns', {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

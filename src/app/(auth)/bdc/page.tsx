@@ -74,7 +74,7 @@ export default function BdcPage() {
   const loadBdcs = useCallback(async (page = 1, size = 10, keyword = '') => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       const res = await fetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : '',

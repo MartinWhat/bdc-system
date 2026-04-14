@@ -20,16 +20,24 @@ export interface AuthenticatedRequest extends NextRequest {
 const PROTECTED_PATHS = ['/api/']
 
 /**
+ * 不需要认证的路径（白名单）
+ */
+const PUBLIC_PATHS = ['/api/login', '/api/token/refresh']
+
+/**
  * JWT 认证中间件
  */
 export async function authMiddleware(request: NextRequest): Promise<NextResponse | null> {
   const pathname = request.nextUrl.pathname
 
-  // 检查是否需要认证
-  const isProtected = PROTECTED_PATHS.some(
-    (prefix) => pathname.startsWith(prefix) && !pathname.startsWith('/api/login'),
-  )
+  // 检查是否是公开路径（不需要认证）
+  const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path))
+  if (isPublic) {
+    return null // 公开路径，继续处理
+  }
 
+  // 检查是否需要认证
+  const isProtected = PROTECTED_PATHS.some((prefix) => pathname.startsWith(prefix))
   if (!isProtected) {
     return null // 不需要认证，继续处理
   }
@@ -39,6 +47,7 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
   const token = extractTokenFromHeader(authHeader || undefined)
 
   if (!token) {
+    console.log('[Middleware] No token provided for:', pathname)
     return NextResponse.json({ error: '未提供认证令牌', code: 'UNAUTHORIZED' }, { status: 401 })
   }
 
@@ -58,9 +67,16 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     const payload = verifyJWT(token, jwtKeyRecord.keyValue)
 
     if (!payload) {
-      console.log('[Middleware] Token verification failed')
+      console.log(
+        '[Middleware] Token verification failed for:',
+        pathname,
+        'Token prefix:',
+        token.substring(0, 20),
+      )
       return NextResponse.json({ error: '无效的认证令牌', code: 'INVALID_TOKEN' }, { status: 401 })
     }
+
+    console.log('[Middleware] Token verified successfully for user:', payload.username)
 
     // 创建响应并注入用户信息到请求头
     const response = NextResponse.next()
