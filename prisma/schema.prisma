@@ -29,6 +29,30 @@ enum BdcStatus {
   CANCELLED
 }
 
+// 村集体证书状态
+enum CollectiveCertStatus {
+  IN_STOCK      // 在库
+  OUT_STOCK     // 已出库
+  RETURNED      // 已归还
+  CANCELLED     // 已注销
+  FROZEN        // 已冻结
+  PENDING_APPROVE // 待审核入库
+}
+
+// 证书操作类型
+enum CertOperationType {
+  STOCK_APPLY     // 入库申请
+  STOCK_APPROVE   // 入库审核通过
+  STOCK_REJECT    // 入库审核驳回
+  OUT_APPLY       // 出库申请
+  OUT_APPROVE     // 出库审核通过
+  OUT_REJECT      // 出库审核驳回
+  RETURN          // 归还
+  FREEZE          // 冻结
+  UNFREEZE        // 解冻
+  CANCEL          // 注销
+}
+
 model SysKeyVersion {
   id        String   @id @default(cuid())
   keyType   String
@@ -155,6 +179,7 @@ model SysVillage {
   updatedAt DateTime @updatedAt
   town      SysTown  @relation(fields: [townId], references: [id])
   bdcs      ZjdBdc[]
+  collectiveCerts CollectiveCert[]
 
   @@map("sys_village")
 }
@@ -270,4 +295,82 @@ model OperationLog {
   user         SysUser  @relation("UserCreatedRecords", fields: [userId], references: [id])
 
   @@map("sys_operation_log")
+}
+
+// 村集体所有权证书表
+model CollectiveCert {
+  id               String           @id @default(cuid())
+  certNo           String           @unique
+  ownerName        String
+  ownerType        String           @default("VILLAGE_COLLECTIVE") // VILLAGE_COLLECTIVE, TOWN_COLLECTIVE
+  villageId        String
+  idCard           String?
+  idCardHash       String?
+  phone            String?
+  phoneHash        String?
+  address          String
+  area             Float
+  landUseType      String?
+  certIssueDate    DateTime?
+  certExpiryDate   DateTime?
+  status           CollectiveCertStatus @default(PENDING_APPROVE)
+  isFrozen         Boolean          @default(false)
+  freezeReason     String?
+  freezeBy         String?
+  freezeAt         DateTime?
+  // 入库信息
+  stockBy          String?
+  stockAt          DateTime?
+  stockRemark      String?
+  approveBy        String?
+  approveAt        DateTime?
+  approveRemark    String?
+  // 出库信息
+  outBy            String?
+  outAt            DateTime?
+  outReason        String?
+  outApproveBy     String?
+  outApproveAt     DateTime?
+  outApproveRemark String?
+  expectedReturnDate DateTime?
+  actualReturnDate DateTime?
+  // 归还信息
+  returnBy         String?
+  returnAt         DateTime?
+  returnRemark     String?
+  // 注销信息
+  cancelBy         String?
+  cancelAt         DateTime?
+  cancelReason     String?
+  // 附件
+  attachments      String?          // JSON 格式存储附件列表
+  remark           String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  createdBy        String
+  village          SysVillage       @relation(fields: [villageId], references: [id])
+  operations       CertOperation[]
+
+  @@index([villageId])
+  @@index([status])
+  @@index([ownerType])
+  @@index([certNo])
+  @@map("collective_cert")
+}
+
+// 证书操作记录表
+model CertOperation {
+  id              String          @id @default(cuid())
+  certId          String
+  operationType   CertOperationType
+  operatorId      String?
+  operatorName    String?
+  description     String?
+  metadata        String?         // JSON 格式存储额外信息
+  createdAt       DateTime        @default(now())
+  cert            CollectiveCert  @relation(fields: [certId], references: [id], onDelete: Cascade)
+
+  @@index([certId])
+  @@index([operationType])
+  @@map("cert_operation")
 }

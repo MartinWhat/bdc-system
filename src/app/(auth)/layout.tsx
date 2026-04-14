@@ -37,6 +37,11 @@ const menuItems: MenuProps['items'] = [
     label: '领证管理',
   },
   {
+    key: '/collective',
+    icon: <TeamOutlined />,
+    label: '村集体所有权',
+  },
+  {
     key: '/stats',
     icon: <BarChartOutlined />,
     label: '统计报表',
