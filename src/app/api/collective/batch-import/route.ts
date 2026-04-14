@@ -1,11 +1,12 @@
 /**
  * 批量入库 API
  * POST /api/collective/batch-import - 批量导入证书
+ * 性能优化：一次性获取密钥，批量加密
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { createEncryptionContext, encryptWithContext } from '@/lib/gm-crypto'
 import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
@@ -77,96 +78,118 @@ export async function POST(request: NextRequest) {
       select: { certNo: true },
     })
 
-    const existingCertNos = existingCerts.map((c) => c.certNo)
+    const existingCertNos = new Set(existingCerts.map((c) => c.certNo))
 
-    const successCount = 0
-    const failedCount = 0
-    const failedItems: { certNo: string; reason: string }[] = []
+    // 性能优化：一次性创建加密上下文，避免重复获取密钥
+    const encryptionContext = await createEncryptionContext()
 
-    // 批量创建证书
-    const results = await Promise.allSettled(
-      items.map(async (item) => {
-        // 检查证书编号是否已存在
-        if (existingCertNos.includes(item.certNo)) {
-          throw new Error('证书编号已存在')
-        }
+    // 预处理所有需要加密的数据
+    type ProcessedItem = {
+      certNo: string
+      ownerName: string
+      ownerType?: 'VILLAGE_COLLECTIVE' | 'TOWN_COLLECTIVE'
+      villageId: string
+      address: string
+      area: number
+      landUseType?: string
+      certIssueDate?: string
+      certExpiryDate?: string
+      remark?: string
+      encryptedIdCard?: { encrypted: string; hash: string } | null
+      encryptedPhone?: { encrypted: string; hash: string } | null
+      error?: string | null
+    }
 
-        // 加密敏感字段
-        let encryptedIdCard: string | undefined
-        let idCardHash: string | undefined
-        let encryptedPhone: string | undefined
-        let phoneHash: string | undefined
+    const processedItems: ProcessedItem[] = items.map((item) => {
+      if (existingCertNos.has(item.certNo)) {
+        return { ...item, error: '证书编号已存在' }
+      }
 
-        if (item.idCard) {
-          const encrypted = await encryptSensitiveField(item.idCard)
-          encryptedIdCard = encrypted.encrypted
-          idCardHash = encrypted.hash
-        }
+      const encryptedIdCard = item.idCard
+        ? encryptWithContext(item.idCard, encryptionContext)
+        : null
+      const encryptedPhone = item.phone ? encryptWithContext(item.phone, encryptionContext) : null
 
-        if (item.phone) {
-          const encrypted = await encryptSensitiveField(item.phone)
-          encryptedPhone = encrypted.encrypted
-          phoneHash = encrypted.hash
-        }
-
-        // 创建证书
-        const cert = await prisma.collectiveCert.create({
-          data: {
-            certNo: item.certNo,
-            ownerName: item.ownerName,
-            ownerType: item.ownerType || 'VILLAGE_COLLECTIVE',
-            villageId: item.villageId,
-            idCard: encryptedIdCard,
-            idCardHash,
-            phone: encryptedPhone,
-            phoneHash,
-            address: item.address,
-            area: item.area,
-            landUseType: item.landUseType,
-            certIssueDate: item.certIssueDate ? new Date(item.certIssueDate) : undefined,
-            certExpiryDate: item.certExpiryDate ? new Date(item.certExpiryDate) : undefined,
-            remark: item.remark,
-            status: 'PENDING_APPROVE',
-            stockBy: operatorId,
-            createdBy: operatorId,
-          },
-        })
-
-        // 创建操作记录
-        await prisma.certOperation.create({
-          data: {
-            certId: cert.id,
-            operationType: 'STOCK_APPLY',
-            operatorId,
-            operatorName: '系统',
-            description: '批量导入入库申请',
-            metadata: JSON.stringify({
-              certNo: item.certNo,
-              ownerName: item.ownerName,
-            }),
-          },
-        })
-
-        return cert
-      }),
-    )
-
-    // 统计结果
-    let sCount = 0
-    let fCount = 0
-    const fItems: { certNo: string; reason: string }[] = []
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        sCount++
-      } else {
-        fCount++
-        fItems.push({
-          certNo: items[index].certNo,
-          reason: result.reason instanceof Error ? result.reason.message : '导入失败',
-        })
+      return {
+        ...item,
+        encryptedIdCard,
+        encryptedPhone,
+        error: null,
       }
     })
+
+    // 使用事务批量创建
+    const fItems: { certNo: string; reason: string }[] = []
+
+    const results = await prisma.$transaction(async (tx) => {
+      const createdCerts = []
+
+      for (const processedItem of processedItems) {
+        if (processedItem.error) {
+          fItems.push({
+            certNo: processedItem.certNo,
+            reason: processedItem.error,
+          })
+          continue
+        }
+
+        try {
+          const cert = await tx.collectiveCert.create({
+            data: {
+              certNo: processedItem.certNo,
+              ownerName: processedItem.ownerName,
+              ownerType: processedItem.ownerType || 'VILLAGE_COLLECTIVE',
+              villageId: processedItem.villageId,
+              idCard: processedItem.encryptedIdCard?.encrypted,
+              idCardHash: processedItem.encryptedIdCard?.hash,
+              phone: processedItem.encryptedPhone?.encrypted,
+              phoneHash: processedItem.encryptedPhone?.hash,
+              address: processedItem.address,
+              area: processedItem.area,
+              landUseType: processedItem.landUseType,
+              certIssueDate: processedItem.certIssueDate
+                ? new Date(processedItem.certIssueDate)
+                : undefined,
+              certExpiryDate: processedItem.certExpiryDate
+                ? new Date(processedItem.certExpiryDate)
+                : undefined,
+              remark: processedItem.remark,
+              status: 'PENDING_APPROVE',
+              stockBy: operatorId,
+              createdBy: operatorId,
+            },
+          })
+
+          // 创建操作记录
+          await tx.certOperation.create({
+            data: {
+              certId: cert.id,
+              operationType: 'STOCK_APPLY',
+              operatorId,
+              operatorName: '系统',
+              description: '批量导入入库申请',
+              metadata: JSON.stringify({
+                certNo: processedItem.certNo,
+                ownerName: processedItem.ownerName,
+              }),
+            },
+          })
+
+          createdCerts.push(cert)
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : '创建失败'
+          fItems.push({
+            certNo: processedItem.certNo,
+            reason: errorMsg,
+          })
+        }
+      }
+
+      return createdCerts
+    })
+
+    const sCount = results.length
+    const fCount = fItems.length
 
     return NextResponse.json({
       success: true,

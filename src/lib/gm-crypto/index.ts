@@ -18,7 +18,13 @@ export {
   decryptSensitiveField,
   generateQueryHash,
   createEncryptionMiddleware,
+  createEncryptionContext,
+  encryptWithContext,
+  encryptSensitiveFields,
+  encryptRecordsFields,
+  decryptSensitiveFields,
   SENSITIVE_FIELDS,
   type SensitiveFieldConfig,
   type EncryptionMiddleware,
+  type EncryptionContext,
 } from './encryption'

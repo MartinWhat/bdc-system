@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
+import { encryptSensitiveField, sm4Decrypt } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
@@ -98,40 +99,54 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    // 解密敏感字段并脱敏
-    const sanitizedCerts = await Promise.all(
-      certs.map(async (cert) => {
-        let idCard = cert.idCard
-        let phone = cert.phone
+    // 解密敏感字段并脱敏（性能优化：批量解密）
+    // 收集所有需要解密的值
+    const idCardsToDecrypt = certs.filter((c) => c.idCard).map((c) => c.idCard as string)
+    const phonesToDecrypt = certs.filter((c) => c.phone).map((c) => c.phone as string)
 
-        // 解密并脱敏
-        if (idCard) {
-          try {
-            const decrypted = await decryptSensitiveField(idCard)
-            idCard = maskIdCard(decrypted)
-          } catch {
-            idCard = '解密失败'
-          }
-        }
+    // 一次性获取密钥并批量解密
+    let decryptedIdCards: string[] = []
+    let decryptedPhones: string[] = []
 
-        if (phone) {
-          try {
-            const decrypted = await decryptSensitiveField(phone)
-            phone = maskPhone(decrypted)
-          } catch {
-            phone = '解密失败'
-          }
-        }
+    if (idCardsToDecrypt.length > 0 || phonesToDecrypt.length > 0) {
+      const sm4KeyRecord = await getActiveKey('SM4_DATA')
+      const sm4Key = sm4KeyRecord.keyValue
 
-        return {
-          ...cert,
-          idCard,
-          phone,
-          idCardHash: undefined, // 不返回哈希索引
-          phoneHash: undefined,
+      // 批量解密身份证
+      decryptedIdCards = idCardsToDecrypt.map((encrypted) => {
+        try {
+          const [iv, ciphertext] = encrypted.split(':')
+          return sm4Decrypt(ciphertext, sm4Key, iv)
+        } catch {
+          return '解密失败'
         }
-      }),
-    )
+      })
+
+      // 批量解密手机号
+      decryptedPhones = phonesToDecrypt.map((encrypted) => {
+        try {
+          const [iv, ciphertext] = encrypted.split(':')
+          return sm4Decrypt(ciphertext, sm4Key, iv)
+        } catch {
+          return '解密失败'
+        }
+      })
+    }
+
+    // 创建解密值映射
+    const idCardMap = new Map<string, string>()
+    const phoneMap = new Map<string, string>()
+    idCardsToDecrypt.forEach((encrypted, i) => idCardMap.set(encrypted, decryptedIdCards[i]))
+    phonesToDecrypt.forEach((encrypted, i) => phoneMap.set(encrypted, decryptedPhones[i]))
+
+    // 映射回原始数据并脱敏
+    const sanitizedCerts = certs.map((cert) => ({
+      ...cert,
+      idCard: cert.idCard ? maskIdCard(idCardMap.get(cert.idCard) || '解密失败') : null,
+      phone: cert.phone ? maskPhone(phoneMap.get(cert.phone) || '解密失败') : null,
+      idCardHash: undefined,
+      phoneHash: undefined,
+    }))
 
     return NextResponse.json({
       success: true,

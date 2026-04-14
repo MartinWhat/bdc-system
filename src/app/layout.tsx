@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { AntdRegistry } from '@ant-design/nextjs-registry'
+import { ConfigProvider } from 'antd'
+import zhCN from 'antd/locale/zh_CN'
 import './globals.css'
 
 const geistSans = Geist({
@@ -26,7 +28,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <AntdRegistry>{children}</AntdRegistry>
+        <AntdRegistry>
+          <ConfigProvider locale={zhCN}>{children}</ConfigProvider>
+        </AntdRegistry>
       </body>
     </html>
   )

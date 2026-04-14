@@ -3,6 +3,7 @@
  */
 
 import { create } from 'zustand'
+import { setToken, getToken, getUser, clearToken, initTokenManager } from '@/lib/token-manager'
 
 export interface UserInfo {
   id: string
@@ -30,28 +31,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   setAuth: (token, user) => {
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(user))
+    setToken(token, user)
     set({ token, user, isAuthenticated: true })
   },
 
   clearAuth: () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    clearToken()
     set({ token: null, user: null, isAuthenticated: false })
   },
 
   loadFromStorage: () => {
-    const token = localStorage.getItem('token')
-    const userStr = localStorage.getItem('user')
+    const token = getToken()
+    const user = getUser() as UserInfo | null
 
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(userStr) as UserInfo
-        set({ token, user, isAuthenticated: true })
-      } catch {
-        set({ token: null, user: null, isAuthenticated: false })
-      }
+    if (token && user) {
+      set({ token, user, isAuthenticated: true })
+      initTokenManager()
     }
   },
 }))

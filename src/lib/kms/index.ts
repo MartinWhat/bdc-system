@@ -31,6 +31,24 @@ export const KEY_ROTATION_DAYS: Record<KeyType, number> = {
 }
 
 /**
+ * 密钥缓存配置
+ */
+const KEY_CACHE_TTL_MS = 5 * 60 * 1000 // 5 分钟缓存
+const keyCache: Map<KeyType, { key: KeyRecord; expiresAt: number }> = new Map()
+
+/**
+ * 清除密钥缓存
+ * @param keyType - 可选，指定清除某类型密钥，不指定则清除全部
+ */
+export function clearKeyCache(keyType?: KeyType): void {
+  if (keyType) {
+    keyCache.delete(keyType)
+  } else {
+    keyCache.clear()
+  }
+}
+
+/**
  * 生成新密钥
  * @param keyType - 密钥类型
  * @returns 明文密钥
@@ -183,14 +201,26 @@ export async function activateKey(keyId: string): Promise<void> {
     where: { id: keyId },
     data: { isActive: true },
   })
+
+  // 清除该类型密钥的缓存
+  clearKeyCache(keyRecord.keyType as KeyType)
 }
 
 /**
- * 获取当前活跃的密钥
+ * 获取当前活跃的密钥（带缓存）
  * @param keyType - 密钥类型
+ * @param useCache - 是否使用缓存，默认 true
  * @returns 密钥记录（包含解密的 keyValue）
  */
-export async function getActiveKey(keyType: KeyType): Promise<KeyRecord> {
+export async function getActiveKey(keyType: KeyType, useCache = true): Promise<KeyRecord> {
+  // 检查缓存
+  if (useCache) {
+    const cached = keyCache.get(keyType)
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.key
+    }
+  }
+
   const keyRecord = await prisma.sysKeyVersion.findFirst({
     where: {
       keyType,
@@ -209,10 +239,20 @@ export async function getActiveKey(keyType: KeyType): Promise<KeyRecord> {
       ? keyRecord.keyValue
       : await decryptKeyValue(keyType, keyRecord.keyValue)
 
-  return {
+  const result = {
     ...keyRecord,
     keyValue: decryptedKeyValue,
   } as unknown as KeyRecord
+
+  // 更新缓存
+  if (useCache) {
+    keyCache.set(keyType, {
+      key: result,
+      expiresAt: Date.now() + KEY_CACHE_TTL_MS,
+    })
+  }
+
+  return result
 }
 
 /**

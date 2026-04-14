@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { decryptSensitiveField } from '@/lib/gm-crypto'
+import { sm4Decrypt } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { z } from 'zod'
 
@@ -77,42 +78,57 @@ export async function GET(request: NextRequest) {
       }),
     ])
 
-    // 解密敏感字段并脱敏
-    const sanitizedRecords = await Promise.all(
-      records.map(async (record) => {
-        let receiverIdCard = record.receiverIdCard
-        let receiverPhone = record.receiverPhone
+    // 解密敏感字段并脱敏（性能优化：批量解密）
+    const idCardsToDecrypt = records
+      .filter((r) => r.receiverIdCard)
+      .map((r) => r.receiverIdCard as string)
+    const phonesToDecrypt = records
+      .filter((r) => r.receiverPhone)
+      .map((r) => r.receiverPhone as string)
 
-        // 解密并脱敏
-        if (receiverIdCard) {
-          try {
-            const decrypted = await decryptSensitiveField(receiverIdCard)
-            receiverIdCard = maskIdCard(decrypted)
-          } catch {
-            receiverIdCard = '解密失败'
-          }
-        }
+    let decryptedIdCards: string[] = []
+    let decryptedPhones: string[] = []
 
-        if (receiverPhone) {
-          try {
-            const decrypted = await decryptSensitiveField(receiverPhone)
-            receiverPhone = maskPhone(decrypted)
-          } catch {
-            receiverPhone = '解密失败'
-          }
-        }
+    if (idCardsToDecrypt.length > 0 || phonesToDecrypt.length > 0) {
+      const sm4KeyRecord = await getActiveKey('SM4_DATA')
+      const sm4Key = sm4KeyRecord.keyValue
 
-        return {
-          ...record,
-          receiverIdCard,
-          receiverPhone,
-          // 不返回加密字段
-          idCardFrontPhoto: undefined,
-          idCardBackPhoto: undefined,
-          scenePhoto: undefined,
+      decryptedIdCards = idCardsToDecrypt.map((encrypted) => {
+        try {
+          const [iv, ciphertext] = encrypted.split(':')
+          return sm4Decrypt(ciphertext, sm4Key, iv)
+        } catch {
+          return '解密失败'
         }
-      }),
-    )
+      })
+
+      decryptedPhones = phonesToDecrypt.map((encrypted) => {
+        try {
+          const [iv, ciphertext] = encrypted.split(':')
+          return sm4Decrypt(ciphertext, sm4Key, iv)
+        } catch {
+          return '解密失败'
+        }
+      })
+    }
+
+    const idCardMap = new Map<string, string>()
+    const phoneMap = new Map<string, string>()
+    idCardsToDecrypt.forEach((enc, i) => idCardMap.set(enc, decryptedIdCards[i]))
+    phonesToDecrypt.forEach((enc, i) => phoneMap.set(enc, decryptedPhones[i]))
+
+    const sanitizedRecords = records.map((record) => ({
+      ...record,
+      receiverIdCard: record.receiverIdCard
+        ? maskIdCard(idCardMap.get(record.receiverIdCard) || '解密失败')
+        : null,
+      receiverPhone: record.receiverPhone
+        ? maskPhone(phoneMap.get(record.receiverPhone) || '解密失败')
+        : null,
+      idCardFrontPhoto: undefined,
+      idCardBackPhoto: undefined,
+      scenePhoto: undefined,
+    }))
 
     return NextResponse.json({
       success: true,

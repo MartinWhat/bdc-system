@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Form, Input, Button, Card, message, Typography, Divider } from 'antd'
 import { UserOutlined, LockOutlined, HomeOutlined } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/store/auth'
 
 const { Title, Text } = Typography
 
@@ -15,6 +16,7 @@ interface LoginFields {
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const { setAuth } = useAuthStore()
 
   const onFinish = async (values: LoginFields) => {
     setLoading(true)
@@ -40,9 +42,8 @@ export default function LoginPage() {
         return
       }
 
-      // 存储令牌
-      localStorage.setItem('token', data.data.token)
-      localStorage.setItem('user', JSON.stringify(data.data.user))
+      // 存储令牌并更新 Zustand store
+      setAuth(data.data.token, data.data.user)
 
       message.success('登录成功')
       router.push('/')

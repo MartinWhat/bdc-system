@@ -32,6 +32,54 @@ export const SENSITIVE_FIELDS: Record<string, SensitiveFieldConfig> = {
 }
 
 /**
+ * 加密上下文 - 缓存密钥以避免重复获取
+ */
+export interface EncryptionContext {
+  sm4Key: string
+  masterKey: string
+}
+
+/**
+ * 创建加密上下文（一次性获取所有需要的密钥）
+ * @returns 加密上下文
+ */
+export async function createEncryptionContext(): Promise<EncryptionContext> {
+  const sm4KeyRecord = await getActiveKey('SM4_DATA')
+  const masterKeyRecord = await getActiveKey('MASTER_KEY')
+
+  return {
+    sm4Key: sm4KeyRecord.keyValue,
+    masterKey: masterKeyRecord.keyValue,
+  }
+}
+
+/**
+ * 使用上下文加密单个字段（避免重复获取密钥）
+ * @param plaintext - 明文值
+ * @param context - 加密上下文
+ * @returns { encrypted: string, hash: string }
+ */
+export function encryptWithContext(
+  plaintext: string,
+  context: EncryptionContext,
+): { encrypted: string; hash: string } {
+  // 生成随机 IV
+  const array = new Uint8Array(16)
+  crypto.getRandomValues(array)
+  const iv = Array.from(array)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+
+  // 加密数据
+  const ciphertext = sm4Encrypt(plaintext, context.sm4Key, iv).ciphertext
+
+  // 生成哈希索引（用于查询）
+  const hash = sm3Hmac(plaintext, context.masterKey)
+
+  return { encrypted: `${iv}:${ciphertext}`, hash }
+}
+
+/**
  * 加密敏感字段
  * @param plaintext - 明文值
  * @returns { encrypted: string, hash: string }
@@ -62,6 +110,50 @@ export async function encryptSensitiveField(
 }
 
 /**
+ * 批量加密敏感字段（性能优化版本）
+ * @param plaintexts - 明文值数组
+ * @returns 加密结果数组
+ */
+export async function encryptSensitiveFields(
+  plaintexts: string[],
+): Promise<Array<{ encrypted: string; hash: string }>> {
+  // 一次性获取密钥
+  const context = await createEncryptionContext()
+
+  // 批量加密
+  return plaintexts.map((plaintext) => encryptWithContext(plaintext, context))
+}
+
+/**
+ * 批量加密多条记录的敏感字段
+ * @param records - 记录数组，每条记录包含要加密的字段
+ * @param fields - 要加密的字段名数组
+ * @returns 加密后的记录数组
+ */
+export async function encryptRecordsFields<T extends Record<string, string | undefined>>(
+  records: T[],
+  fields: string[],
+): Promise<Array<T & Record<string, { encrypted: string; hash: string }>>> {
+  // 一次性获取密钥
+  const context = await createEncryptionContext()
+
+  // 批量处理每条记录
+  return records.map((record) => {
+    const encryptedFields: Record<string, { encrypted: string; hash: string }> = {}
+
+    for (const field of fields) {
+      const value = record[field]
+      if (value) {
+        encryptedFields[field] = encryptWithContext(value, context)
+      }
+    }
+
+    return { ...record, ...encryptedFields } as T &
+      Record<string, { encrypted: string; hash: string }>
+  })
+}
+
+/**
  * 解密敏感字段
  * @param encrypted - 加密值（格式: iv:ciphertext）
  * @returns 明文值
@@ -73,6 +165,23 @@ export async function decryptSensitiveField(encrypted: string): Promise<string> 
   const sm4KeyRecord = await getActiveKey('SM4_DATA')
 
   return sm4Decrypt(ciphertext, sm4KeyRecord.keyValue, iv)
+}
+
+/**
+ * 批量解密敏感字段
+ * @param encryptedValues - 加密值数组
+ * @returns 明文值数组
+ */
+export async function decryptSensitiveFields(encryptedValues: string[]): Promise<string[]> {
+  // 一次性获取密钥
+  const sm4KeyRecord = await getActiveKey('SM4_DATA')
+  const sm4Key = sm4KeyRecord.keyValue
+
+  // 批量解密
+  return encryptedValues.map((encrypted) => {
+    const [iv, ciphertext] = encrypted.split(':')
+    return sm4Decrypt(ciphertext, sm4Key, iv)
+  })
 }
 
 /**
