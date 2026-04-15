@@ -3,8 +3,19 @@
  * 用于通过哈希索引查询加密字段
  */
 
-import { generateQueryHash } from '@/lib/gm-crypto'
+import { sm3Hmac } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
+
+/**
+ * 生成查询哈希（辅助函数）
+ * @param value - 敏感值
+ * @returns 哈希值
+ */
+export async function generateQueryHash(value: string): Promise<string> {
+  const masterKeyRecord = await getActiveKey('MASTER_KEY')
+  return sm3Hmac(value, masterKeyRecord.keyValue)
+}
 
 /**
  * 通过身份证号查询宅基地记录

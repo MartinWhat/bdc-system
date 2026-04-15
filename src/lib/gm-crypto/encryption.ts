@@ -4,7 +4,7 @@
  */
 
 import { sm4Encrypt, sm4Decrypt, sm3Hmac, generateSM4Key } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
+import { getActiveKey, getDecryptKeys } from '@/lib/kms'
 
 /**
  * 敏感字段配置
@@ -154,17 +154,29 @@ export async function encryptRecordsFields<T extends Record<string, string | und
 }
 
 /**
- * 解密敏感字段
- * @param encrypted - 加密值（格式: iv:ciphertext）
+ * 解密敏感字段（支持多密钥尝试）
+ * @param encrypted - 加密值（格式：iv:ciphertext）
  * @returns 明文值
  */
 export async function decryptSensitiveField(encrypted: string): Promise<string> {
   const [iv, ciphertext] = encrypted.split(':')
 
-  // 获取 SM4 数据加密密钥
-  const sm4KeyRecord = await getActiveKey('SM4_DATA')
+  // 获取所有可用于解密的密钥（活跃 + 未过期的历史密钥）
+  const decryptKeys = await getDecryptKeys('SM4_DATA')
 
-  return sm4Decrypt(ciphertext, sm4KeyRecord.keyValue, iv)
+  // 依次尝试每个密钥
+  for (const keyRecord of decryptKeys) {
+    try {
+      const plaintext = sm4Decrypt(ciphertext, keyRecord.keyValue, iv)
+      return plaintext
+    } catch (error) {
+      // 解密失败，尝试下一个密钥
+      continue
+    }
+  }
+
+  // 所有密钥都失败，抛出错误
+  throw new Error('所有密钥解密失败，数据可能已损坏或密钥已丢失')
 }
 
 /**
@@ -173,69 +185,72 @@ export async function decryptSensitiveField(encrypted: string): Promise<string> 
  * @returns 明文值数组
  */
 export async function decryptSensitiveFields(encryptedValues: string[]): Promise<string[]> {
-  // 一次性获取密钥
-  const sm4KeyRecord = await getActiveKey('SM4_DATA')
-  const sm4Key = sm4KeyRecord.keyValue
+  // 获取所有可用于解密的密钥
+  const decryptKeys = await getDecryptKeys('SM4_DATA')
 
   // 批量解密
   return encryptedValues.map((encrypted) => {
     const [iv, ciphertext] = encrypted.split(':')
-    return sm4Decrypt(ciphertext, sm4Key, iv)
+
+    // 依次尝试每个密钥
+    for (const keyRecord of decryptKeys) {
+      try {
+        return sm4Decrypt(ciphertext, keyRecord.keyValue, iv)
+      } catch (error) {
+        continue
+      }
+    }
+
+    throw new Error('所有密钥解密失败')
   })
 }
 
 /**
- * 生成查询哈希
- * @param value - 查询值
- * @returns 哈希索引
+ * 解密记录中的敏感字段
+ * @param record - 记录对象
+ * @param fields - 要解密的字段名数组
+ * @returns 解密后的记录对象
  */
-export async function generateQueryHash(value: string): Promise<string> {
-  const masterKeyRecord = await getActiveKey('MASTER_KEY')
-  return sm3Hmac(value, masterKeyRecord.keyValue)
-}
+export async function decryptRecordsFields<T extends Record<string, string | undefined>>(
+  record: T,
+  fields: string[],
+): Promise<T> {
+  const decrypted: Record<string, string> = {}
 
-/**
- * 数据加密中间件函数类型
- */
-export interface EncryptionMiddleware {
-  encrypt: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
-  decrypt: (data: Record<string, unknown>) => Promise<Record<string, unknown>>
-}
-
-/**
- * 创建加密中间件
- * @param fields - 需要加密的字段配置
- */
-export function createEncryptionMiddleware(fields: SensitiveFieldConfig[]): EncryptionMiddleware {
-  return {
-    async encrypt(data) {
-      const encrypted = { ...data }
-
-      for (const config of fields) {
-        const value = data[config.fieldName] as string
-        if (value) {
-          const { encrypted: encValue, hash } = await encryptSensitiveField(value)
-          encrypted[config.encryptedFieldName] = encValue
-          encrypted[config.hashFieldName] = hash
-          delete encrypted[config.fieldName] // 移除明文字段
-        }
+  for (const field of fields) {
+    const encryptedValue = record[field]
+    if (encryptedValue) {
+      try {
+        decrypted[field] = await decryptSensitiveField(encryptedValue)
+      } catch (error) {
+        console.error(`Failed to decrypt field ${field}:`, error)
+        decrypted[field] = encryptedValue // 解密失败保留原值
       }
-
-      return encrypted
-    },
-
-    async decrypt(data) {
-      const decrypted = { ...data }
-
-      for (const config of fields) {
-        const encryptedValue = data[config.encryptedFieldName] as string
-        if (encryptedValue) {
-          decrypted[config.fieldName] = await decryptSensitiveField(encryptedValue)
-          delete decrypted[config.encryptedFieldName] // 移除加密字段
-        }
-      }
-
-      return decrypted
-    },
+    }
   }
+
+  return { ...record, ...decrypted } as T
+}
+
+/**
+ * 生成查询哈希（用于加密字段查询）
+ * @param value - 敏感值
+ * @param masterKey - 主密钥
+ * @returns 哈希值
+ */
+export function generateQueryHash(value: string, masterKey: string): string {
+  return sm3Hmac(value, masterKey)
+}
+
+/**
+ * 加密中间件（用于批量加密）
+ * @param records - 记录数组
+ * @param fields - 要加密的字段
+ * @returns 加密后的记录数组
+ */
+export async function createEncryptionMiddleware<T extends Record<string, any>>(
+  records: T[],
+  fields: string[],
+): Promise<T[]> {
+  return encryptRecordsFields(records, fields)
 }

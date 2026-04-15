@@ -13,10 +13,11 @@ import {
   EnvironmentOutlined,
   SafetyOutlined,
   HistoryOutlined,
+  KeyOutlined,
+  SettingOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
-import { triggerAuthExpiry, onAuthExpiry } from '@/lib/auth-event'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
@@ -76,6 +77,11 @@ const menuItems: MenuProps['items'] = [
         label: '村居管理',
       },
       {
+        key: '/kms',
+        icon: <KeyOutlined />,
+        label: '密钥管理',
+      },
+      {
         key: '/logs',
         icon: <HistoryOutlined />,
         label: '操作日志',
@@ -88,7 +94,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { user, clearAuth, loadFromStorage, refreshToken } = useAuthStore()
+  const { user, clearAuth, loadFromStorage } = useAuthStore()
 
   useEffect(() => {
     // 从 localStorage 加载认证信息
@@ -99,96 +105,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       router.push('/login')
     }
   }, [router, loadFromStorage])
-
-  // 定时检查 token 是否有效
-  useEffect(() => {
-    const checkTokenValidity = () => {
-      const token = localStorage.getItem('access_token')
-      const tokenExpiry = localStorage.getItem('token_expiry')
-
-      // 如果没有 token 或 token 已过期，跳转到登录页
-      if (!token || (tokenExpiry && Date.now() >= parseInt(tokenExpiry))) {
-        // 尝试检查 refresh token
-        const refreshToken = localStorage.getItem('refresh_token')
-        if (!refreshToken) {
-          clearAuth()
-          router.push('/login')
-        }
-      }
-    }
-
-    // 每 30 秒检查一次
-    const interval = setInterval(checkTokenValidity, 30000)
-
-    // 监听 storage 事件（其他标签页的登录/登出）
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'access_token' && !e.newValue) {
-        clearAuth()
-        router.push('/login')
-      }
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('storage', handleStorageChange)
-    }
-  }, [router, clearAuth])
-
-  // 拦截所有 fetch 请求，检测 401 错误
-  useEffect(() => {
-    const originalFetch = window.fetch
-    let isRefreshingOrRedirecting = false
-
-    window.fetch = async function (...args) {
-      const response = await originalFetch.apply(this, args)
-
-      // 如果是 401 响应且不是登录/刷新相关的请求
-      if (response.status === 401) {
-        const url = typeof args[0] === 'string' ? args[0] : ''
-        const isAuthRequest =
-          url.includes('/login') || url.includes('/token/refresh') || url.includes('/logout')
-
-        if (!isAuthRequest && !isRefreshingOrRedirecting) {
-          isRefreshingOrRedirecting = true
-
-          // 清除本地认证信息
-          clearAuth()
-
-          // 触发认证失效事件
-          triggerAuthExpiry()
-
-          // 显示提示并跳转
-          import('antd').then(({ message }) => {
-            message.error('认证已失效，请重新登录')
-          })
-
-          // 延迟跳转，让用户看到提示
-          setTimeout(() => {
-            router.push('/login')
-          }, 500)
-        }
-      }
-
-      return response
-    }
-
-    // 监听认证失效事件
-    const unsubscribe = onAuthExpiry(() => {
-      if (!isRefreshingOrRedirecting) {
-        isRefreshingOrRedirecting = true
-        clearAuth()
-        router.push('/login')
-      }
-    })
-
-    // 组件卸载时恢复原始 fetch 和取消订阅
-    return () => {
-      window.fetch = originalFetch
-      unsubscribe()
-    }
-  }, [router, clearAuth])
 
   const handleLogout = async () => {
     try {

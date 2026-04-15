@@ -3,6 +3,8 @@
  * 负责 Access Token 和 Refresh Token 的存储、刷新和过期处理
  */
 
+import { triggerAuthExpiry } from '@/lib/auth-event'
+
 const ACCESS_TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const USER_KEY = 'user'
@@ -75,6 +77,9 @@ export function clearTokens() {
     clearTimeout(refreshTimer)
     refreshTimer = null
   }
+
+  // 触发认证失效事件
+  triggerAuthExpiry()
 }
 
 /**

@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField, generateQueryHash } from '@/lib/gm-crypto'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { z } from 'zod'
 
 const createBdcSchema = z.object({

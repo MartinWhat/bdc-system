@@ -17,14 +17,21 @@ export {
   encryptSensitiveField,
   decryptSensitiveField,
   generateQueryHash,
-  createEncryptionMiddleware,
   createEncryptionContext,
   encryptWithContext,
   encryptSensitiveFields,
   encryptRecordsFields,
   decryptSensitiveFields,
+  createEncryptionMiddleware,
   SENSITIVE_FIELDS,
   type SensitiveFieldConfig,
-  type EncryptionMiddleware,
   type EncryptionContext,
 } from './encryption'
+
+export {
+  findBdcByIdCard,
+  findUserByPhone,
+  findUserByIdCard,
+  buildEncryptedWhereClause,
+  buildEncryptedInClause,
+} from './query'

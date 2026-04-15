@@ -6,7 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { generateQueryHash } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
+import { sm3Hmac } from '@/lib/gm-crypto'
 import { getUserRoles } from '@/lib/auth/user-service'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { z } from 'zod'
@@ -44,15 +45,18 @@ export async function GET(request: NextRequest) {
 
     const where: Record<string, unknown> = {}
 
+    // 获取主密钥用于生成哈希
+    const masterKeyRecord = await getActiveKey('MASTER_KEY')
+
     // 通过身份证号查询
     if (idCard) {
-      const idCardHash = await generateQueryHash(idCard)
+      const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyValue)
       where.idCardHash = idCardHash
     }
 
     // 通过手机号查询
     if (phone) {
-      const phoneHash = await generateQueryHash(phone)
+      const phoneHash = sm3Hmac(phone, masterKeyRecord.keyValue)
       where.phoneHash = phoneHash
     }
 

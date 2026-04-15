@@ -5,7 +5,9 @@
 
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField, generateQueryHash, sm3Hash, generateSM4Key } from '@/lib/gm-crypto'
+import { encryptSensitiveField, sm3Hash, generateSM4Key } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
+import { sm3Hmac } from '@/lib/gm-crypto'
 
 // 假数据配置
 const TOWNS = [
@@ -268,8 +270,11 @@ async function createBdcRecords() {
     // 加密敏感字段
     const idCardResult = await encryptSensitiveField(idCard)
     const phoneResult = await encryptSensitiveField(phone)
-    const idCardHash = await generateQueryHash(idCard)
-    const phoneHash = await generateQueryHash(phone)
+
+    // 生成哈希索引
+    const masterKeyRecord = await getActiveKey('MASTER_KEY')
+    const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyValue)
+    const phoneHash = sm3Hmac(phone, masterKeyRecord.keyValue)
 
     const statusOptions = ['PENDING', 'APPROVED', 'ISSUED'] as const
     const status = statusOptions[i % 3]
@@ -378,14 +383,19 @@ async function createReceiveRecords() {
       const idCardResult = await encryptSensitiveField(receiverIdCard)
       const phoneResult = await encryptSensitiveField(receiverPhone)
 
+      // 获取主密钥用于生成哈希
+      const masterKeyRecord = await getActiveKey('MASTER_KEY')
+      const receiverIdCardHash = sm3Hmac(receiverIdCard, masterKeyRecord.keyValue)
+      const receiverPhoneHash = sm3Hmac(receiverPhone, masterKeyRecord.keyValue)
+
       await prisma.zjdReceiveRecord.update({
         where: { id: record.id },
         data: {
           receiverName: OWNER_NAMES[i % OWNER_NAMES.length],
           receiverIdCard: idCardResult.encrypted,
-          receiverIdCardHash: await generateQueryHash(receiverIdCard),
+          receiverIdCardHash,
           receiverPhone: phoneResult.encrypted,
-          receiverPhoneHash: await generateQueryHash(receiverPhone),
+          receiverPhoneHash,
           signedBy: OWNER_NAMES[i % OWNER_NAMES.length],
           signedDate: new Date(),
         },

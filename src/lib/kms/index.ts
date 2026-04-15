@@ -18,6 +18,13 @@ export interface KeyRecord {
   updatedAt: Date
   expiresAt: Date
   createdBy: string
+
+  // 密钥元数据（密钥轮换增强）
+  encryptedDataCount?: number
+  migratedToKeyId?: string
+  isArchived?: boolean
+  archivedAt?: Date
+  deletedAt?: Date
 }
 
 /**
@@ -318,6 +325,168 @@ export async function logKeyAccess(keyId: string, userId: string, action: string
       module: 'KMS',
       description: `密钥访问：${keyId}`,
       status: 'SUCCESS',
+    },
+  })
+}
+
+/**
+ * 获取某密钥类型的所有历史密钥（按版本排序）
+ * @param keyType - 密钥类型
+ * @param includeArchived - 是否包含已归档密钥，默认 false
+ * @returns 密钥记录数组
+ */
+export async function getAllKeys(
+  keyType: KeyType,
+  includeArchived: boolean = false,
+): Promise<KeyRecord[]> {
+  const where: any = {
+    keyType,
+    deletedAt: null, // 排除已删除的密钥
+  }
+
+  if (!includeArchived) {
+    where.isArchived = false
+  }
+
+  const keys = await prisma.sysKeyVersion.findMany({
+    where,
+    orderBy: { version: 'desc' },
+  })
+
+  // 解密密钥值
+  const decryptedKeys: KeyRecord[] = []
+  for (const key of keys) {
+    try {
+      const decryptedKeyValue =
+        keyType === 'MASTER_KEY' ? key.keyValue : await decryptKeyValue(keyType, key.keyValue)
+
+      decryptedKeys.push({
+        ...key,
+        keyValue: decryptedKeyValue,
+      } as unknown as KeyRecord)
+    } catch (error) {
+      console.error(`Failed to decrypt key ${key.id}:`, error)
+      // 跳过解密失败的密钥
+    }
+  }
+
+  return decryptedKeys
+}
+
+/**
+ * 获取用于解密的密钥列表（活跃 + 未过期的历史密钥）
+ * @param keyType - 密钥类型
+ * @returns 密钥记录数组
+ */
+export async function getDecryptKeys(keyType: KeyType): Promise<KeyRecord[]> {
+  const now = new Date()
+
+  // 获取所有未删除且未过期的密钥（包括活跃的）
+  const keys = await prisma.sysKeyVersion.findMany({
+    where: {
+      keyType,
+      deletedAt: null,
+      isArchived: false,
+      expiresAt: { gte: now }, // 只获取未过期的密钥
+    },
+    orderBy: { version: 'desc' },
+  })
+
+  // 解密密钥值
+  const decryptedKeys: KeyRecord[] = []
+  for (const key of keys) {
+    try {
+      const decryptedKeyValue =
+        keyType === 'MASTER_KEY' ? key.keyValue : await decryptKeyValue(keyType, key.keyValue)
+
+      decryptedKeys.push({
+        ...key,
+        keyValue: decryptedKeyValue,
+      } as unknown as KeyRecord)
+    } catch (error) {
+      console.error(`Failed to decrypt key ${key.id}:`, error)
+      // 跳过解密失败的密钥
+    }
+  }
+
+  return decryptedKeys
+}
+
+/**
+ * 标记密钥为已归档
+ * @param keyId - 密钥记录 ID
+ */
+export async function archiveKey(keyId: string): Promise<void> {
+  await prisma.sysKeyVersion.update({
+    where: { id: keyId },
+    data: {
+      isArchived: true,
+      archivedAt: new Date(),
+    },
+  })
+
+  // 清除缓存
+  clearKeyCache()
+}
+
+/**
+ * 安全删除密钥（确认数据已迁移）
+ * @param keyId - 密钥记录 ID
+ * @param force - 是否强制删除（即使还有数据使用），默认 false
+ */
+export async function deleteKey(keyId: string, force: boolean = false): Promise<void> {
+  const keyRecord = await prisma.sysKeyVersion.findUnique({
+    where: { id: keyId },
+  })
+
+  if (!keyRecord) {
+    throw new Error('密钥记录不存在')
+  }
+
+  // 检查是否还有数据使用该密钥
+  if (!force && keyRecord.encryptedDataCount && keyRecord.encryptedDataCount > 0) {
+    throw new Error(`密钥 ${keyId} 仍有 ${keyRecord.encryptedDataCount} 条数据未迁移，无法删除`)
+  }
+
+  // 软删除（设置 deletedAt）
+  await prisma.sysKeyVersion.update({
+    where: { id: keyId },
+    data: {
+      deletedAt: new Date(),
+    },
+  })
+
+  // 清除缓存
+  clearKeyCache(keyRecord.keyType as KeyType)
+
+  // 记录审计日志
+  await logKeyAccess(keyId, 'system', 'DELETE')
+}
+
+/**
+ * 更新密钥的加密数据计数
+ * @param keyId - 密钥记录 ID
+ * @param count - 数据数量
+ */
+export async function updateKeyDataCount(keyId: string, count: number): Promise<void> {
+  await prisma.sysKeyVersion.update({
+    where: { id: keyId },
+    data: {
+      encryptedDataCount: count,
+    },
+  })
+}
+
+/**
+ * 标记密钥已迁移到目标密钥
+ * @param keyId - 源密钥 ID
+ * @param targetKeyId - 目标密钥 ID
+ */
+export async function markKeyAsMigrated(keyId: string, targetKeyId: string): Promise<void> {
+  await prisma.sysKeyVersion.update({
+    where: { id: keyId },
+    data: {
+      migratedToKeyId: targetKeyId,
     },
   })
 }

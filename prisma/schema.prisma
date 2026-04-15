@@ -62,8 +62,18 @@ model SysKeyVersion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   expiresAt DateTime
-  createdBy String
-
+  
+  // 密钥元数据（密钥轮换增强）
+  createdBy           String
+  encryptedDataCount  Int?     @default(0)  // 使用该密钥加密的数据数量
+  migratedToKeyId     String?  // 迁移目标密钥 ID（如果已迁移）
+  isArchived          Boolean  @default(false)  // 是否已归档
+  archivedAt          DateTime?
+  deletedAt           DateTime?
+  
+  @@index([keyType, isActive, isArchived])
+  @@index([keyType, expiresAt])
+  
   @@map("sys_key_version")
 }
 
