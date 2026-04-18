@@ -25,10 +25,13 @@ import {
   CloseCircleOutlined,
   UploadOutlined,
   ExclamationCircleOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { UploadFile } from 'antd/es/upload/interface'
 import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
+import { parseExcelFile, downloadExcelTemplate, validateExcelData } from '@/lib/excel-parser'
 
 const { Text } = Typography
 
@@ -101,6 +104,12 @@ export default function LingzhengPage() {
   const [idCardFront, setIdCardFront] = useState<string>('')
   const [idCardBack, setIdCardBack] = useState<string>('')
   const [scenePhoto, setScenePhoto] = useState<string>('')
+
+  // Excel 导入相关状态
+  const [excelFile, setExcelFile] = useState<UploadFile | null>(null)
+  const [parsedData, setParsedData] = useState<Record<string, unknown>[]>([])
+  const [previewVisible, setPreviewVisible] = useState(false)
+  const [uploadLoading, setUploadLoading] = useState(false)
 
   // 提取到组件外部避免每次渲染重新创建
   const loadRecords = useCallback(
@@ -308,6 +317,141 @@ export default function LingzhengPage() {
       console.error('Batch import error:', error)
       message.error('导入失败')
     }
+  }
+
+  // Excel 文件处理函数
+  const handleExcelUpload = async (file: File) => {
+    // 验证文件类型
+    const isExcel =
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'application/vnd.ms-excel' ||
+      file.name.endsWith('.xlsx') ||
+      file.name.endsWith('.xls')
+
+    if (!isExcel) {
+      message.error('只能上传 Excel 文件（.xlsx 或 .xls）')
+      return false
+    }
+
+    // 验证文件大小 (5MB)
+    const isLt5M = file.size / 1024 / 1024 < 5
+    if (!isLt5M) {
+      message.error('文件大小不能超过 5MB')
+      return false
+    }
+
+    setUploadLoading(true)
+    try {
+      // 解析 Excel 文件
+      const data = await parseExcelFile(file)
+
+      if (data.length === 0) {
+        message.warning('Excel 文件中没有有效数据')
+        return false
+      }
+
+      // 验证数据
+      const requiredFields = ['certNo']
+      const validation = validateExcelData(data, requiredFields)
+
+      if (!validation.valid) {
+        message.error('数据验证失败：' + validation.errors.slice(0, 3).join('；'))
+        return false
+      }
+
+      setParsedData(data)
+      setExcelFile({
+        uid: '-1',
+        name: file.name,
+        status: 'done',
+      })
+
+      message.success(`成功解析 ${data.length} 条数据，请点击"预览数据"查看`)
+      return false // 阻止自动上传
+    } catch (error) {
+      message.error('Excel 解析失败：' + (error instanceof Error ? error.message : ''))
+      return false
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  // 提交 Excel 数据到后端
+  const handleSubmitExcel = async () => {
+    if (parsedData.length === 0) {
+      message.error('请先上传 Excel 文件')
+      return
+    }
+
+    if (parsedData.length > 100) {
+      message.error('单次最多导入 100 条数据')
+      return
+    }
+
+    setUploadLoading(true)
+    try {
+      // 转换数据格式
+      const items = parsedData.map((row) => ({
+        certNo: String(row.certNo || ''),
+        remark: String(row.remark || ''),
+      }))
+
+      const token = localStorage.getItem('access_token')
+      const res = await fetch('/api/receive/batch-import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ items }),
+      })
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          message.error('认证已过期，请重新登录')
+          return
+        }
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+
+      const data = await res.json()
+      if (data.success) {
+        const { successCount, failedCount, failedItems } = data.data
+        message.success(`导入完成：成功 ${successCount}，失败 ${failedCount}`)
+
+        if (failedItems && failedItems.length > 0) {
+          console.warn('失败的条目:', failedItems)
+          message.warning(`${failedCount} 条数据导入失败，请检查后重新导入`)
+        }
+
+        // 重置状态
+        setImportModalVisible(false)
+        setExcelFile(null)
+        setParsedData([])
+        setPreviewVisible(false)
+        importForm.resetFields()
+        loadRecords()
+      } else {
+        message.error(data.error || '导入失败')
+      }
+    } catch (error) {
+      console.error('Batch import error:', error)
+      message.error('批量导入失败，请检查网络或数据格式')
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  // 下载导入模板
+  const handleDownloadTemplate = () => {
+    downloadExcelTemplate(
+      [
+        { key: 'certNo', title: '证书编号', example: '3301010010010001' },
+        { key: 'remark', title: '备注', example: '示例备注' },
+      ],
+      '领证管理导入模板',
+    )
+    message.success('模板下载成功')
   }
 
   const getBase64 = (file: File): Promise<string> => {
@@ -653,37 +797,109 @@ export default function LingzhengPage() {
         open={importModalVisible}
         onCancel={() => {
           setImportModalVisible(false)
+          setExcelFile(null)
+          setParsedData([])
+          setPreviewVisible(false)
           importForm.resetFields()
         }}
-        onOk={() => importForm.submit()}
-        width={600}
+        footer={
+          <Space>
+            <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>
+              下载模板
+            </Button>
+            <Button
+              onClick={() => {
+                if (parsedData.length > 0) {
+                  setPreviewVisible(!previewVisible)
+                } else {
+                  message.warning('请先上传 Excel 文件')
+                }
+              }}
+              disabled={parsedData.length === 0}
+            >
+              {previewVisible ? '隐藏预览' : '预览数据'} ({parsedData.length} 条)
+            </Button>
+            <Button
+              onClick={() => {
+                setImportModalVisible(false)
+                setExcelFile(null)
+                setParsedData([])
+                setPreviewVisible(false)
+                importForm.resetFields()
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              type="primary"
+              loading={uploadLoading}
+              onClick={handleSubmitExcel}
+              disabled={parsedData.length === 0}
+            >
+              确认导入
+            </Button>
+          </Space>
+        }
+        width={800}
       >
         <Alert
           message="导入说明"
-          description="每行输入一个证书编号，系统将根据证书编号查找宅基地并生成待领证记录。证从上级交接回来后导入，才进入待领证状态。"
+          description="请上传 Excel 文件（.xlsx 或 .xls），支持中文表头。系统将根据证书编号生成待领证记录。最多支持 100 条数据。"
           type="info"
           style={{ marginBottom: 16 }}
         />
 
-        <Form form={importForm} layout="vertical" onFinish={handleBatchImport}>
-          <Form.Item
-            name="certNos"
-            label="证书编号列表"
-            rules={[{ required: true, message: '请输入证书编号' }]}
-          >
-            <Input.TextArea
-              rows={10}
-              placeholder="每行一个证书编号，例如：
-3301010010010001
-3301010010010002
-3301010010010003"
-            />
-          </Form.Item>
+        {/* 文件上传区域 */}
+        <Upload.Dragger
+          name="file"
+          showUploadList={false}
+          beforeUpload={handleExcelUpload}
+          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          maxCount={1}
+        >
+          <p className="ant-upload-drag-icon">
+            <UploadOutlined />
+          </p>
+          <p className="ant-upload-text">点击或拖拽 Excel 文件到此区域</p>
+          <p className="ant-upload-hint">支持 .xlsx 和 .xls 格式，文件大小不超过 5MB</p>
+          {excelFile && (
+            <div style={{ marginTop: 8 }}>
+              <Tag color="green">{excelFile.name}</Tag>
+            </div>
+          )}
+        </Upload.Dragger>
 
-          <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={2} placeholder="可选备注" />
-          </Form.Item>
-        </Form>
+        {/* 数据预览表格 */}
+        {previewVisible && parsedData.length > 0 && (
+          <div style={{ marginTop: 16, maxHeight: 400, overflow: 'auto' }}>
+            <Table
+              size="small"
+              dataSource={parsedData}
+              rowKey={(record, index) => String(index)}
+              scroll={{ y: 300 }}
+              pagination={false}
+              columns={[
+                {
+                  title: '行号',
+                  width: 60,
+                  render: (_, __, index) => (index || 0) + 1,
+                },
+                {
+                  title: '证书编号',
+                  dataIndex: 'certNo',
+                  key: 'certNo',
+                  width: 200,
+                },
+                {
+                  title: '备注',
+                  dataIndex: 'remark',
+                  key: 'remark',
+                  width: 200,
+                },
+              ]}
+            />
+          </div>
+        )}
       </Modal>
     </PageContainer>
   )

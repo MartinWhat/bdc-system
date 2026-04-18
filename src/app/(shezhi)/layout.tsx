@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Layout, Menu, Typography, Avatar, Dropdown } from 'antd'
+import { Layout, Menu, Typography, Avatar, Dropdown, theme } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   UserOutlined,
@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
+import { useThemeStore } from '@/lib/store/theme'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
@@ -95,6 +96,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const router = useRouter()
   const { user, clearAuth, loadFromStorage } = useAuthStore()
+  const { isDark } = useThemeStore()
+  const { token } = theme.useToken()
 
   useEffect(() => {
     // 从 localStorage 加载认证信息
@@ -139,13 +142,22 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
+    <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        theme={isDark ? 'dark' : 'light'}
+        style={{
+          background: isDark ? token.colorBgContainer : undefined,
+          borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
+        }}
+      >
         <div
           style={{
             height: 32,
             margin: 16,
-            color: '#fff',
+            color: isDark ? token.colorText : '#fff',
             textAlign: 'center',
             fontSize: collapsed ? 12 : 16,
             fontWeight: 'bold',
@@ -154,36 +166,46 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {collapsed ? 'BDC' : '不动产管理系统'}
         </div>
         <Menu
-          theme="dark"
+          theme={isDark ? 'dark' : 'light'}
           mode="inline"
           selectedKeys={[pathname]}
           items={menuItems}
           onClick={({ key }) => router.push(key)}
+          style={{
+            background: isDark ? token.colorBgContainer : undefined,
+            borderInlineEnd: 'none',
+          }}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ background: token.colorBgLayout }}>
         <Header
           style={{
-            background: '#fff',
+            background: token.colorBgContainer,
             padding: '0 24px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <Title level={4} style={{ margin: 0 }}>
+          <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
             不动产证书管理系统
           </Title>
           <Dropdown menu={{ items: userMenuItems }}>
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar icon={<UserOutlined />} />
-              <span>{user?.realName || user?.username}</span>
+              <span style={{ color: token.colorText }}>{user?.realName || user?.username}</span>
             </div>
           </Dropdown>
         </Header>
         <Content
-          style={{ margin: '24px 16px', background: '#f0f2f5', padding: 24, minHeight: 280 }}
+          style={{
+            margin: '24px 16px',
+            background: token.colorBgContainer,
+            padding: 24,
+            minHeight: 280,
+            borderRadius: token.borderRadiusLG,
+          }}
         >
           {children}
         </Content>

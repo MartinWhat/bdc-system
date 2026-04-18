@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Layout, Menu, Typography, Avatar, Dropdown } from 'antd'
+import { useState, useEffect, useCallback } from 'react'
+import { Layout, Menu, Typography, Avatar, Dropdown, Modal, theme } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   UserOutlined,
@@ -16,7 +16,9 @@ import {
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
+import { useThemeStore } from '@/lib/store/theme'
 import { triggerAuthExpiry, onAuthExpiry } from '@/lib/auth-event'
+import ThemeToggle from '@/components/theme-toggle'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
@@ -86,9 +88,12 @@ const menuItems: MenuProps['items'] = [
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [reLoginModalVisible, setReLoginModalVisible] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { user, clearAuth, loadFromStorage, refreshToken } = useAuthStore()
+  const { isDark } = useThemeStore()
+  const { token } = theme.useToken()
 
   useEffect(() => {
     // 从 localStorage 加载认证信息
@@ -159,15 +164,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           // 触发认证失效事件
           triggerAuthExpiry()
 
-          // 显示提示并跳转
-          import('antd').then(({ message }) => {
-            message.error('认证已失效，请重新登录')
-          })
-
-          // 延迟跳转，让用户看到提示
-          setTimeout(() => {
-            router.push('/login')
-          }, 500)
+          // 显示重新登录对话框
+          setReLoginModalVisible(true)
         }
       }
 
@@ -189,6 +187,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       unsubscribe()
     }
   }, [router, clearAuth])
+
+  // 处理重新登录对话框确认
+  const handleReLoginConfirm = useCallback(() => {
+    setReLoginModalVisible(false)
+    router.push('/login')
+  }, [router])
 
   const handleLogout = async () => {
     try {
@@ -223,13 +227,22 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
+    <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        theme={isDark ? 'dark' : 'light'}
+        style={{
+          background: isDark ? token.colorBgContainer : undefined,
+          borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
+        }}
+      >
         <div
           style={{
             height: 32,
             margin: 16,
-            color: '#fff',
+            color: isDark ? token.colorText : '#fff',
             textAlign: 'center',
             fontSize: collapsed ? 12 : 16,
             fontWeight: 'bold',
@@ -238,40 +251,68 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {collapsed ? 'BDC' : '不动产管理系统'}
         </div>
         <Menu
-          theme="dark"
+          theme={isDark ? 'dark' : 'light'}
           mode="inline"
           selectedKeys={[pathname]}
           items={menuItems}
           onClick={({ key }) => router.push(key)}
+          style={{
+            background: isDark ? token.colorBgContainer : undefined,
+            borderInlineEnd: 'none',
+          }}
         />
       </Sider>
-      <Layout>
+      <Layout style={{ background: token.colorBgLayout }}>
         <Header
           style={{
-            background: '#fff',
+            background: token.colorBgContainer,
             padding: '0 24px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <Title level={4} style={{ margin: 0 }}>
-            不动产证书管理系统
-          </Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
+              不动产证书管理系统
+            </Title>
+            <ThemeToggle />
+          </div>
           <Dropdown menu={{ items: userMenuItems }}>
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar icon={<UserOutlined />} />
-              <span>{user?.realName || user?.username}</span>
+              <span style={{ color: token.colorText }}>{user?.realName || user?.username}</span>
             </div>
           </Dropdown>
         </Header>
         <Content
-          style={{ margin: '24px 16px', background: '#f0f2f5', padding: 24, minHeight: 280 }}
+          style={{
+            margin: '24px 16px',
+            background: token.colorBgContainer,
+            padding: 24,
+            minHeight: 280,
+            borderRadius: token.borderRadiusLG,
+          }}
         >
           {children}
         </Content>
       </Layout>
+
+      {/* Token 过期重新登录对话框 */}
+      <Modal
+        title="认证已失效"
+        open={reLoginModalVisible}
+        onOk={handleReLoginConfirm}
+        closable={false}
+        maskClosable={false}
+        okText="重新登录"
+        cancelText="取消"
+        cancelButtonProps={{ style: { display: 'none' } }}
+        okButtonProps={{ danger: true }}
+      >
+        <p>您的登录状态已过期，需要重新登录才能继续使用系统。</p>
+      </Modal>
     </Layout>
   )
 }

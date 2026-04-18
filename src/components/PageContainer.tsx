@@ -1,5 +1,5 @@
 import React from 'react'
-import { Typography, Card, Spin, Empty, Skeleton } from 'antd'
+import { Typography, Card, Spin, Empty, Skeleton, theme } from 'antd'
 import type { ReactNode } from 'react'
 
 const { Title } = Typography
@@ -61,6 +61,8 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   dataSource,
   skeleton = false,
 }) => {
+  const { token } = theme.useToken()
+
   // 自动判断空状态：如果提供了 dataSource 且为空数组，则显示空状态
   const isEmpty = dataSource !== undefined ? dataSource.length === 0 : empty
 
@@ -79,7 +81,7 @@ export const PageContainer: React.FC<PageContainerProps> = ({
       className={className}
       style={{
         padding: '24px',
-        background: '#fff',
+        background: token.colorBgContainer,
         minHeight: 'calc(100vh - 112px)',
         ...contentStyle,
       }}
