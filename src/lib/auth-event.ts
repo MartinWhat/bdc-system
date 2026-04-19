@@ -11,8 +11,10 @@ const listeners = new Set<AuthEventHandler>()
  * 触发认证失效事件
  */
 export function triggerAuthExpiry() {
+  console.log('[auth-event] triggerAuthExpiry called, listeners count:', listeners.size)
   listeners.forEach((handler) => {
     try {
+      console.log('[auth-event] Calling listener')
       handler()
     } catch (error) {
       console.error('Auth event handler error:', error)

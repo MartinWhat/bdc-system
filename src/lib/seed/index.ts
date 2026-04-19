@@ -24,8 +24,13 @@ async function seedRolesAndPermissions() {
     { code: 'village:manage', name: '村居管理', type: 'MENU' },
     { code: 'bdc:manage', name: '宅基地管理', type: 'MENU' },
     { code: 'bdc:certify', name: '宅基地发证', type: 'BUTTON' },
-    { code: 'log:view', name: '查看日志', type: 'MENU' },
+    { code: 'collective:manage', name: '村集体管理', type: 'MENU' },
     { code: 'stats:view', name: '查看统计', type: 'MENU' },
+    { code: 'notification:view', name: '查看通知', type: 'MENU' },
+    { code: 'notification:manage', name: '通知管理', type: 'MENU' },
+    { code: 'log:view', name: '查看日志', type: 'MENU' },
+    { code: 'kms:manage', name: '密钥管理', type: 'MENU' },
+    { code: 'contact:view', name: '查看通讯录', type: 'MENU' },
     { code: 'system:settings', name: '系统设置', type: 'MENU' },
   ]
 

@@ -14,6 +14,7 @@ import {
   SafetyOutlined,
   HistoryOutlined,
   BellOutlined,
+  ContactsOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -26,12 +27,15 @@ import {
 } from '@/lib/token-manager'
 import { triggerAuthExpiry, onAuthExpiry } from '@/lib/auth-event'
 import { authFetch } from '@/lib/api-fetch'
+import { hasMenuPermission } from '@/config/menu-permissions'
 import ThemeToggle from '@/components/theme-toggle'
+import FloatingButtons from '@/components/FloatingButtons'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
 
-const menuItems: MenuProps['items'] = [
+// 原始菜单配置（用于权限过滤）
+const ALL_MENU_ITEMS: MenuProps['items'] = [
   {
     key: '/',
     icon: <HomeOutlined />,
@@ -61,6 +65,16 @@ const menuItems: MenuProps['items'] = [
     key: '/notifications',
     icon: <BellOutlined />,
     label: '通知公告',
+  },
+  {
+    key: '/contacts',
+    icon: <ContactsOutlined />,
+    label: '通讯录',
+  },
+  {
+    key: '/profile',
+    icon: <UserOutlined />,
+    label: '个人信息',
   },
   {
     type: 'divider',
@@ -103,6 +117,39 @@ const menuItems: MenuProps['items'] = [
     ],
   },
 ]
+
+/**
+ * 根据用户权限过滤菜单项
+ */
+function filterMenuByPermission(
+  items: MenuProps['items'],
+  permissions: string[],
+): MenuProps['items'] {
+  if (!items) return []
+
+  return items.filter((item) => {
+    if (!item) return false
+
+    // 处理分组
+    if (item.type === 'group' && item.children) {
+      const filteredChildren = filterMenuByPermission(item.children, permissions)
+      // 如果分组内有可见菜单，保留分组
+      if (filteredChildren && filteredChildren.length > 0) {
+        return true
+      }
+      return false
+    }
+
+    // 检查权限
+    const key = item.key as string
+    if (key) {
+      const hasPermission = hasMenuPermission(key, permissions)
+      return hasPermission
+    }
+
+    return true
+  })
+}
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -181,10 +228,38 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     extendTokenExpiry()
   }, [pathname])
 
+  // 用户活动时重置 token 过期时间（点击、键盘等）
+  // 使用防抖避免频繁调用
+  useEffect(() => {
+    let debounceTimer: NodeJS.Timeout | null = null
+    const DEBOUNCE_DELAY = 60000 // 1 分钟内最多延长一次
+
+    const handleUserActivity = () => {
+      if (debounceTimer) return
+
+      extendTokenExpiry()
+
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null
+      }, DEBOUNCE_DELAY)
+    }
+
+    // 只监听 click 和 keydown 事件（频率较低）
+    window.addEventListener('click', handleUserActivity)
+    window.addEventListener('keydown', handleUserActivity)
+
+    return () => {
+      window.removeEventListener('click', handleUserActivity)
+      window.removeEventListener('keydown', handleUserActivity)
+      if (debounceTimer) {
+        clearTimeout(debounceTimer)
+      }
+    }
+  }, [])
+
   // 拦截所有 fetch 请求，检测 401 错误
   useEffect(() => {
     const originalFetch = window.fetch
-    let isRefreshingOrRedirecting = false
 
     window.fetch = async function (...args) {
       const response = await originalFetch.apply(this, args)
@@ -195,15 +270,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         const isAuthRequest =
           url.includes('/login') || url.includes('/token/refresh') || url.includes('/logout')
 
-        if (!isAuthRequest && !isRefreshingOrRedirecting) {
-          isRefreshingOrRedirecting = true
-
+        if (!isAuthRequest) {
+          console.log('[Layout] 401 detected for:', url, 'Showing login dialog')
           // 清除本地认证信息
           clearAuth()
-
-          // 触发认证失效事件
-          triggerAuthExpiry()
-
           // 显示重新登录对话框
           setReLoginModalVisible(true)
         }
@@ -212,13 +282,15 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       return response
     }
 
-    // 监听认证失效事件
+    // 监听认证失效事件（由 authFetch 触发）
     const unsubscribe = onAuthExpiry(() => {
-      if (!isRefreshingOrRedirecting) {
-        isRefreshingOrRedirecting = true
-        clearAuth()
-        router.push('/login')
-      }
+      console.log('[Layout] Auth expiry event received, showing login dialog')
+      console.log('[Layout] Current reLoginModalVisible:', reLoginModalVisible)
+      // 清除本地认证信息
+      clearAuth()
+      // 显示重新登录对话框
+      setReLoginModalVisible(true)
+      console.log('[Layout] Set reLoginModalVisible to true')
     })
 
     // 组件卸载时恢复原始 fetch 和取消订阅
@@ -263,6 +335,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       onClick: handleLogout,
     },
   ]
+
+  // 根据用户权限过滤菜单
+  const menuItems = filterMenuByPermission(ALL_MENU_ITEMS, user?.permissions || [])
 
   return (
     <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
@@ -351,6 +426,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       >
         <p>您的登录状态已过期，需要重新登录才能继续使用系统。</p>
       </Modal>
+
+      {/* 右下角悬浮按钮组 */}
+      <FloatingButtons />
     </Layout>
   )
 }

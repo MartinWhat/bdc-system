@@ -200,13 +200,18 @@ export function getAuthInfo() {
 
 /**
  * 延长 Token 过期时间（滑动过期）
- * 仅更新本地过期时间，不调用 API，不重置定时器
+ * 每次用户活动时调用，延长 30 分钟有效期
  */
 export function extendTokenExpiry() {
   const token = getAccessToken()
   if (!token) return
 
-  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + ACCESS_TOKEN_EXPIRY))
+  // 更新本地过期时间
+  const newExpiry = Date.now() + ACCESS_TOKEN_EXPIRY
+  localStorage.setItem(TOKEN_EXPIRY_KEY, String(newExpiry))
+
+  // 重置刷新定时器
+  scheduleRefresh()
 
   // 通知其他标签页
   window.dispatchEvent(new CustomEvent(TOKEN_REFRESH_EVENT))

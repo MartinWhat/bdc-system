@@ -72,7 +72,7 @@ export async function authFetch(
       if (!refreshed) {
         // 刷新失败，清除 Token
         clearTokens()
-        console.log('[api-fetch] Token refresh failed, returning 401')
+        console.log('[api-fetch] Token refresh failed, triggering auth expiry event')
         // 触发认证失效事件（layout 会监听并显示弹窗）
         triggerAuthExpiry()
         // 返回 401 响应，让上层处理（layout 拦截器会显示弹窗）
@@ -86,7 +86,7 @@ export async function authFetch(
       console.log('[api-fetch] Token refreshed successfully')
     } else {
       // 没有 Refresh Token，返回 401
-      console.log('[api-fetch] No refresh token, returning 401')
+      console.log('[api-fetch] No refresh token, triggering auth expiry event')
       // 触发认证失效事件
       triggerAuthExpiry()
       return new Response(JSON.stringify({ error: '未认证', code: 'UNAUTHORIZED' }), {
@@ -107,10 +107,12 @@ export async function authFetch(
 
   try {
     let response = await fetch(url, authOptions)
+    console.log('[api-fetch] Response status:', response.status, 'for URL:', url)
 
     // 如果是 401 错误，尝试刷新 Token
     if (response.status === 401) {
       const errorData = await response.json().catch(() => ({}))
+      console.log('[api-fetch] 401 error data:', errorData)
 
       // 如果是 Access Token 过期错误
       if (
@@ -143,7 +145,9 @@ export async function authFetch(
             } else {
               // 刷新失败，清除 Token
               clearTokens()
-              console.log('[api-fetch] Token refresh failed in 401 handler')
+              console.log(
+                '[api-fetch] Token refresh failed in 401 handler, triggering auth expiry event',
+              )
               // 触发认证失效事件
               triggerAuthExpiry()
               // 返回 401 响应，让上层处理
@@ -155,6 +159,7 @@ export async function authFetch(
           } catch (error) {
             console.error('Token refresh error:', error)
             clearTokens()
+            console.log('[api-fetch] Token refresh error, triggering auth expiry event')
             // 触发认证失效事件
             triggerAuthExpiry()
             // 返回 401 响应
@@ -183,9 +188,36 @@ export async function authFetch(
       }
     }
 
+    // 如果是 500 错误且错误与认证相关（如 JWT 密钥配置错误）
+    if (response.status === 500) {
+      const errorData = await response.json().catch(() => ({}))
+      console.log('[api-fetch] 500 error data:', errorData)
+
+      // 认证服务配置错误（通常是 JWT 密钥问题）
+      if (
+        errorData.code === 'AUTH_CONFIG_ERROR' ||
+        errorData.code === 'AUTH_ERROR' ||
+        errorData.code === 'SERVER_ERROR'
+      ) {
+        console.log('[api-fetch] Auth config error detected, triggering auth expiry event')
+        console.log('[api-fetch] Calling clearTokens()')
+        // 清除 Token
+        clearTokens()
+        console.log('[api-fetch] Calling triggerAuthExpiry()')
+        // 触发认证失效事件
+        triggerAuthExpiry()
+        console.log('[api-fetch] triggerAuthExpiry() called, returning 401')
+        // 返回 401 响应，让上层显示弹窗
+        return new Response(
+          JSON.stringify({ error: '认证服务异常，请重新登录', code: 'AUTH_CONFIG_ERROR' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+    }
+
     return response
   } catch (error) {
-    console.error('Request error:', error)
+    console.error('[api-fetch] Request error:', error)
     throw error
   }
 }

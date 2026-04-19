@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
           email: user.email,
           avatar: user.avatar,
           roles,
+          permissions, // 添加权限信息
         },
       },
     })

@@ -95,6 +95,8 @@ model SysUser {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   createdBy        String?
+  villageId        String?        // 所属村居 ID
+  village          SysVillage?    @relation(fields: [villageId], references: [id])
   createdRecords   OperationLog[] @relation("UserCreatedRecords")
   sessions         SysSession[]
   roles            UserRole[]
@@ -197,6 +199,7 @@ model SysVillage {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   town      SysTown  @relation(fields: [townId], references: [id])
+  users     SysUser[]
   bdcs      ZjdBdc[]
   collectiveCerts CollectiveCert[]
 

@@ -19,6 +19,7 @@ export interface UserInfo {
   email?: string
   avatar?: string
   roles: string[]
+  permissions: string[]
 }
 
 interface AuthState {

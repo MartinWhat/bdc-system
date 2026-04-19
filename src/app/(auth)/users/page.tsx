@@ -62,14 +62,16 @@ export default function UsersPage() {
     try {
       const res = await authFetch(`/api/users?page=${page}&pageSize=${size}`)
       const data = await res.json()
+      console.log('[Users] Load result:', data)
       if (data.success) {
         setUsers(data.data.list)
         setTotal(data.data.total)
       } else {
+        console.error('[Users] Load failed:', data.error)
         message.error(data.error || '加载失败')
       }
     } catch (error) {
-      console.error('Load users error:', error)
+      console.error('[Users] Load error:', error)
       message.error('加载用户列表失败')
     } finally {
       setLoading(false)
@@ -81,13 +83,15 @@ export default function UsersPage() {
     try {
       const res = await authFetch('/api/roles')
       const data = await res.json()
+      console.log('[Roles] Load result:', data)
       if (data.success) {
         setRoles(data.data)
       } else {
+        console.error('[Roles] Load failed:', data.error)
         message.error(data.error || '加载失败')
       }
     } catch (error) {
-      console.error('Load roles error:', error)
+      console.error('[Roles] Load error:', error)
       message.error('加载角色失败')
     }
   }, [])
@@ -95,7 +99,7 @@ export default function UsersPage() {
   useEffect(() => {
     loadUsers()
     loadRoles()
-  }, [])
+  }, [loadUsers, loadRoles])
 
   // 创建/编辑用户
   const handleSubmit = async (values: {
