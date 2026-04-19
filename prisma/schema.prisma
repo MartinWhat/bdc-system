@@ -98,6 +98,8 @@ model SysUser {
   createdRecords   OperationLog[] @relation("UserCreatedRecords")
   sessions         SysSession[]
   roles            UserRole[]
+  notifications    Notification[]
+  readRecords      NotificationRead[]
 
   @@map("sys_user")
 }
@@ -390,4 +392,66 @@ model CertOperation {
   @@index([certId])
   @@index([operationType])
   @@map("cert_operation")
+}
+
+// 通知类型
+enum NotificationType {
+  SYSTEM
+  POLICY
+  ANNOUNCEMENT
+}
+
+// 通知优先级
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// 通知状态
+enum NotificationStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+// 通知公告
+model Notification {
+  id            String                @id @default(cuid())
+  title         String
+  content       String                // 富文本 HTML 内容
+  type          NotificationType      @default(SYSTEM)
+  priority      NotificationPriority  @default(NORMAL)
+  status        NotificationStatus    @default(DRAFT)
+  isPopup       Boolean               @default(false)
+  popupStartAt  DateTime?
+  popupEndAt    DateTime?
+  validFrom     DateTime?
+  validUntil    DateTime?
+  isPinned      Boolean               @default(false)
+  authorId      String
+  author        SysUser               @relation(fields: [authorId], references: [id])
+  readCount     Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  publishedAt   DateTime?
+  readRecords   NotificationRead[]
+
+  @@index([type, status])
+  @@index([isPopup, popupStartAt, popupEndAt])
+  @@map("notification")
+}
+
+// 通知阅读记录
+model NotificationRead {
+  id             String        @id @default(cuid())
+  notificationId String
+  notification   Notification  @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           SysUser       @relation(fields: [userId], references: [id])
+  readAt         DateTime      @default(now())
+
+  @@unique([notificationId, userId])
+  @@map("notification_read")
 }

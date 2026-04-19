@@ -42,6 +42,7 @@ import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
 import TownVillageCascader from '@/components/TownVillageCascader'
 import { parseExcelFile, downloadExcelTemplate, validateExcelData } from '@/lib/excel-parser'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -152,12 +153,7 @@ export default function CollectivePage() {
           params.append('villageId', selectedVillageId[1])
         }
 
-        const token = localStorage.getItem('access_token')
-        const res = await fetch(`/api/collective?${params}`, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        })
+        const res = await authFetch(`/api/collective?${params}`)
         if (!res.ok) {
           if (res.status === 401) {
             message.error('认证已过期，请重新登录')
@@ -201,12 +197,10 @@ export default function CollectivePage() {
     remark?: string
   }) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/collective', {
+      const res = await authFetch('/api/collective', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...values,
@@ -242,12 +236,10 @@ export default function CollectivePage() {
       // 解析输入的 JSON 数据
       const items = JSON.parse(values.items)
 
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/collective/batch-import', {
+      const res = await authFetch('/api/collective/batch-import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ items }),
       })
@@ -348,12 +340,10 @@ export default function CollectivePage() {
 
     setUploadLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/collective/batch-import', {
+      const res = await authFetch('/api/collective/batch-import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ items: parsedData }),
       })
@@ -416,12 +406,10 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${selectedCert.id}/approve`, {
+      const res = await authFetch(`/api/collective/${selectedCert.id}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ action, remark }),
       })
@@ -451,12 +439,10 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${selectedCert.id}/out`, {
+      const res = await authFetch(`/api/collective/${selectedCert.id}/out`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(values),
       })
@@ -484,12 +470,10 @@ export default function CollectivePage() {
 
   const handleReturn = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${cert.id}/return`, {
+      const res = await authFetch(`/api/collective/${cert.id}/return`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({}),
       })
@@ -517,12 +501,10 @@ export default function CollectivePage() {
     if (!selectedCert) return
 
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${selectedCert.id}/freeze`, {
+      const res = await authFetch(`/api/collective/${selectedCert.id}/freeze`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(values),
       })
@@ -550,12 +532,8 @@ export default function CollectivePage() {
 
   const handleUnfreeze = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${cert.id}/freeze`, {
+      const res = await authFetch(`/api/collective/${cert.id}/freeze`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       })
       if (!res.ok) {
         if (res.status === 401) {
@@ -579,12 +557,8 @@ export default function CollectivePage() {
 
   const handleCancel = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${cert.id}?reason=管理员注销`, {
+      const res = await authFetch(`/api/collective/${cert.id}?reason=管理员注销`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       })
       if (!res.ok) {
         if (res.status === 401) {
@@ -608,12 +582,7 @@ export default function CollectivePage() {
 
   const loadCertDetail = async (cert: CollectiveCert) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/collective/${cert.id}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch(`/api/collective/${cert.id}`)
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`)
       }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Cascader, message } from 'antd'
+import { authFetch } from '@/lib/api-fetch'
 
 interface Town {
   id: string
@@ -48,7 +49,7 @@ export default function TownVillageCascader({
   const loadTowns = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/towns')
+      const res = await authFetch('/api/towns')
       const data = await res.json()
 
       if (data.success) {
@@ -58,6 +59,8 @@ export default function TownVillageCascader({
           isLeaf: false,
         }))
         setOptions(cascaderOptions)
+      } else {
+        message.error(data.error || '加载镇街数据失败')
       }
     } catch (error) {
       console.error('Load towns error:', error)
@@ -73,7 +76,7 @@ export default function TownVillageCascader({
 
     try {
       const townId = targetOption.value
-      const res = await fetch(`/api/villages?townId=${townId}`)
+      const res = await authFetch(`/api/villages?townId=${townId}`)
       const data = await res.json()
 
       if (data.success) {
@@ -84,6 +87,8 @@ export default function TownVillageCascader({
           isLeaf: true,
         }))
         setOptions([...options])
+      } else {
+        message.error(data.error || '加载村居数据失败')
       }
     } catch (error) {
       targetOption.loading = false

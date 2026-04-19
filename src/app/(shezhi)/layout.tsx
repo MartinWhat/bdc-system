@@ -19,6 +19,8 @@ import {
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
+import { initTokenManager, TOKEN_REFRESH_EVENT, extendTokenExpiry } from '@/lib/token-manager'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Sider, Content, Header } = Layout
 const { Title } = Typography
@@ -107,19 +109,34 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     if (!token) {
       router.push('/login')
     }
+
+    // 监听其他标签页的 token 刷新
+    const handleTokenRefresh = () => {
+      loadFromStorage()
+      initTokenManager()
+    }
+
+    window.addEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
+
+    return () => {
+      window.removeEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
+    }
   }, [router, loadFromStorage])
+
+  // 滑动过期：每次路由变化时重置 token 过期时间
+  useEffect(() => {
+    extendTokenExpiry()
+  }, [pathname])
 
   const handleLogout = async () => {
     try {
       // 调用登出 API 销毁会话
-      const token = localStorage.getItem('access_token')
       const refreshToken = localStorage.getItem('refresh_token')
 
-      await fetch('/api/logout', {
+      await authFetch('/api/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ refreshToken }),
       })
@@ -149,7 +166,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         onCollapse={setCollapsed}
         theme={isDark ? 'dark' : 'light'}
         style={{
-          background: isDark ? token.colorBgContainer : undefined,
+          background: isDark ? token.colorBgContainer : '#fff',
           borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
         }}
       >
@@ -157,7 +174,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           style={{
             height: 32,
             margin: 16,
-            color: isDark ? token.colorText : '#fff',
+            color: token.colorText,
             textAlign: 'center',
             fontSize: collapsed ? 12 : 16,
             fontWeight: 'bold',

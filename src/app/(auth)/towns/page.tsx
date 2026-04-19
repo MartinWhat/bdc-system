@@ -17,6 +17,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -42,12 +43,7 @@ export default function TownsPage() {
   const loadTowns = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/towns', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/towns')
       const data = await res.json()
       if (data.success) {
         setTowns(data.data)
@@ -71,7 +67,7 @@ export default function TownsPage() {
       const url = editingTown ? `/api/towns/${editingTown.id}` : '/api/towns'
       const method = editingTown ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -96,7 +92,7 @@ export default function TownsPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/towns/${id}`, {
+      const res = await authFetch(`/api/towns/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()

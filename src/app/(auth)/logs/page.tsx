@@ -20,6 +20,7 @@ import { SearchOutlined, ReloadOutlined, BarChartOutlined } from '@ant-design/ic
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -78,18 +79,13 @@ export default function LogsPage() {
     async (page = 1, size = 20, filters: Record<string, string> = {}) => {
       setLoading(true)
       try {
-        const token = localStorage.getItem('access_token')
         const params = new URLSearchParams({
           page: String(page),
           pageSize: String(size),
           ...filters,
         })
 
-        const res = await fetch(`/api/logs?${params}`, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        })
+        const res = await authFetch(`/api/logs?${params}`)
         const data = await res.json()
         if (data.success) {
           setLogs(data.data.list)
@@ -109,12 +105,7 @@ export default function LogsPage() {
 
   const loadStats = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/logs/stats?days=7', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/logs/stats?days=7')
       const data = await res.json()
       if (data.success) {
         setStats(data.data)

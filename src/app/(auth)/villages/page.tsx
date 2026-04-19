@@ -18,6 +18,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -52,12 +53,7 @@ export default function VillagesPage() {
   const loadVillages = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/villages', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/villages')
       const data = await res.json()
       if (data.success) {
         setVillages(data.data)
@@ -74,12 +70,7 @@ export default function VillagesPage() {
 
   const loadTowns = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/towns', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/towns')
       const data = await res.json()
       if (data.success) {
         setTowns(data.data)
@@ -107,7 +98,7 @@ export default function VillagesPage() {
       const url = editingVillage ? `/api/villages/${editingVillage.id}` : '/api/villages'
       const method = editingVillage ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -132,7 +123,7 @@ export default function VillagesPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/villages/${id}`, {
+      const res = await authFetch(`/api/villages/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()

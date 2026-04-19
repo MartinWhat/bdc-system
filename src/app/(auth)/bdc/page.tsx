@@ -21,6 +21,7 @@ import type { ColumnsType } from 'antd/es/table'
 import TownVillageCascader from '@/components/TownVillageCascader'
 import PageContainer from '@/components/PageContainer'
 import dayjs from 'dayjs'
+import { authFetch } from '@/lib/api-fetch'
 
 interface Village {
   id: string
@@ -74,12 +75,7 @@ export default function BdcPage() {
   const loadBdcs = useCallback(async (page = 1, size = 10, keyword = '') => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`)
       const data = await res.json()
       if (data.success) {
         setBdcs(data.data.list)
@@ -114,7 +110,7 @@ export default function BdcPage() {
       const url = editingBdc ? `/api/bdc/${editingBdc.id}` : '/api/bdc'
       const method = editingBdc ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -139,7 +135,7 @@ export default function BdcPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/bdc/${id}`, {
+      const res = await authFetch(`/api/bdc/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()
@@ -156,7 +152,7 @@ export default function BdcPage() {
 
   const handleStatusChange = async (id: string, status: string) => {
     try {
-      const res = await fetch(`/api/bdc/${id}/status`, {
+      const res = await authFetch(`/api/bdc/${id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -179,7 +175,7 @@ export default function BdcPage() {
       if (values.idCard) params.append('idCard', values.idCard)
       if (values.phone) params.append('phone', values.phone)
 
-      const res = await fetch(`/api/bdc/query?${params}`)
+      const res = await authFetch(`/api/bdc/query?${params}`)
       const data = await res.json()
       if (data.success) {
         setBdcs(data.data)

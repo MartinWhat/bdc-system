@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { Card, Row, Col, Statistic, Typography } from 'antd'
 import { UserOutlined, HomeOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
+import NotificationCard from '@/components/notifications/NotificationCard'
+import NotificationPopup from '@/components/notifications/NotificationPopup'
 
 const { Text } = Typography
 
@@ -41,6 +43,12 @@ export default function DashboardPage() {
           </Card>
         </Col>
       </Row>
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={12}>
+          <NotificationCard />
+        </Col>
+      </Row>
+      <NotificationPopup />
     </PageContainer>
   )
 }

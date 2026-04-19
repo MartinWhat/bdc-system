@@ -1,0 +1,36 @@
+.popup {
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .bellIcon {
+    font-size: 24px;
+    color: #1890ff;
+  }
+
+  .title {
+    margin: 0 !important;
+    flex: 1;
+  }
+
+  .content {
+    font-size: 14px;
+    line-height: 1.8;
+    color: rgba(0, 0, 0, 0.85);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .content p {
+    margin-bottom: 8px;
+  }
+
+  .content img {
+    max-width: 100%;
+    height: auto;
+  }
+}

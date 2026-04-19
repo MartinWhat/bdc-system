@@ -16,6 +16,7 @@ import {
   Col,
 } from 'antd'
 import { KeyOutlined, SyncOutlined, ArrowRightOutlined } from '@ant-design/icons'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Title } = Typography
 const { Option } = Select
@@ -45,11 +46,7 @@ export default function KmsMigratePage() {
 
   const loadKeys = async () => {
     try {
-      const res = await fetch('/api/kms/keys', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      })
+      const res = await authFetch('/api/kms/keys')
       const data = await res.json()
       if (data.success) {
         setKeys(data.data.filter((k: Key) => !k.isArchived && !k.deletedAt))
@@ -77,11 +74,10 @@ export default function KmsMigratePage() {
         })
       }, 500)
 
-      const res = await fetch('/api/kms/migrate', {
+      const res = await authFetch('/api/kms/migrate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify(values),
       })

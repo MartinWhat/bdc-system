@@ -17,6 +17,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -58,12 +59,7 @@ export default function RolesPage() {
   const loadRoles = useCallback(async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/roles', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/roles')
       const data = await res.json()
       if (data.success) {
         setRoles(data.data)
@@ -81,12 +77,7 @@ export default function RolesPage() {
   // 加载权限列表
   const loadPermissions = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/permissions', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/permissions')
       const data = await res.json()
       if (data.success) {
         setPermissions(data.data)
@@ -115,7 +106,7 @@ export default function RolesPage() {
       const url = editingRole ? `/api/roles/${editingRole.id}` : '/api/roles'
       const method = editingRole ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -141,7 +132,7 @@ export default function RolesPage() {
   // 删除角色
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/roles/${id}`, {
+      const res = await authFetch(`/api/roles/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()

@@ -16,6 +16,9 @@ const REFRESH_THRESHOLD = 5 * 60 * 1000
 // Access Token 有效期（毫秒）
 const ACCESS_TOKEN_EXPIRY = 30 * 60 * 1000 // 30 分钟
 
+// Token 刷新成功事件（用于多标签页同步）
+export const TOKEN_REFRESH_EVENT = 'bdc:token-refresh'
+
 let refreshTimer: NodeJS.Timeout | null = null
 let isRefreshing = false
 
@@ -35,6 +38,9 @@ export function setTokens(accessToken: string, refreshToken: string, user: unkno
 
   // 设置新的刷新定时器
   scheduleRefresh()
+
+  // 触发事件通知其他标签页（当前标签页监听 storage 事件同步）
+  window.dispatchEvent(new CustomEvent(TOKEN_REFRESH_EVENT, { detail: { accessToken } }))
 }
 
 /**
@@ -190,4 +196,18 @@ export function getAuthInfo() {
     user: getUser(),
     isAuthenticated: !!getAccessToken(),
   }
+}
+
+/**
+ * 延长 Token 过期时间（滑动过期）
+ * 仅更新本地过期时间，不调用 API，不重置定时器
+ */
+export function extendTokenExpiry() {
+  const token = getAccessToken()
+  if (!token) return
+
+  localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + ACCESS_TOKEN_EXPIRY))
+
+  // 通知其他标签页
+  window.dispatchEvent(new CustomEvent(TOKEN_REFRESH_EVENT))
 }

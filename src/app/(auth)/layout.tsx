@@ -13,11 +13,19 @@ import {
   EnvironmentOutlined,
   SafetyOutlined,
   HistoryOutlined,
+  BellOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
+import {
+  refreshAccessToken,
+  initTokenManager,
+  TOKEN_REFRESH_EVENT,
+  extendTokenExpiry,
+} from '@/lib/token-manager'
 import { triggerAuthExpiry, onAuthExpiry } from '@/lib/auth-event'
+import { authFetch } from '@/lib/api-fetch'
 import ThemeToggle from '@/components/theme-toggle'
 
 const { Sider, Content, Header } = Layout
@@ -50,6 +58,11 @@ const menuItems: MenuProps['items'] = [
     label: '统计报表',
   },
   {
+    key: '/notifications',
+    icon: <BellOutlined />,
+    label: '通知公告',
+  },
+  {
     type: 'divider',
   },
   {
@@ -76,6 +89,11 @@ const menuItems: MenuProps['items'] = [
         key: '/villages',
         icon: <EnvironmentOutlined />,
         label: '村居管理',
+      },
+      {
+        key: '/notifications/manage',
+        icon: <BellOutlined />,
+        label: '通知管理',
       },
       {
         key: '/logs',
@@ -107,15 +125,21 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   // 定时检查 token 是否有效
   useEffect(() => {
-    const checkTokenValidity = () => {
+    const checkTokenValidity = async () => {
       const token = localStorage.getItem('access_token')
       const tokenExpiry = localStorage.getItem('token_expiry')
 
-      // 如果没有 token 或 token 已过期，跳转到登录页
+      // 如果没有 token 或 token 已过期，尝试刷新
       if (!token || (tokenExpiry && Date.now() >= parseInt(tokenExpiry))) {
-        // 尝试检查 refresh token
         const refreshToken = localStorage.getItem('refresh_token')
-        if (!refreshToken) {
+        if (refreshToken) {
+          // 尝试刷新 token
+          const success = await refreshAccessToken()
+          if (!success) {
+            clearAuth()
+            router.push('/login')
+          }
+        } else {
           clearAuth()
           router.push('/login')
         }
@@ -130,16 +154,32 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       if (e.key === 'access_token' && !e.newValue) {
         clearAuth()
         router.push('/login')
+      } else if (e.key === 'access_token' && e.newValue) {
+        // 其他标签页刷新了 token，同步本地状态
+        loadFromStorage()
       }
     }
 
+    // 监听 token 刷新事件（其他标签页刷新 token）
+    const handleTokenRefresh = () => {
+      loadFromStorage()
+      initTokenManager()
+    }
+
     window.addEventListener('storage', handleStorageChange)
+    window.addEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
     }
-  }, [router, clearAuth])
+  }, [router, clearAuth, refreshAccessToken, loadFromStorage])
+
+  // 滑动过期：每次路由变化时重置 token 过期时间
+  useEffect(() => {
+    extendTokenExpiry()
+  }, [pathname])
 
   // 拦截所有 fetch 请求，检测 401 错误
   useEffect(() => {
@@ -197,14 +237,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const handleLogout = async () => {
     try {
       // 调用登出 API 销毁会话
-      const token = localStorage.getItem('access_token')
       const refreshToken = localStorage.getItem('refresh_token')
 
-      await fetch('/api/logout', {
+      await authFetch('/api/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ refreshToken }),
       })
@@ -234,7 +272,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         onCollapse={setCollapsed}
         theme={isDark ? 'dark' : 'light'}
         style={{
-          background: isDark ? token.colorBgContainer : undefined,
+          background: isDark ? token.colorBgContainer : '#fff',
           borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
         }}
       >
@@ -242,7 +280,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           style={{
             height: 32,
             margin: 16,
-            color: isDark ? token.colorText : '#fff',
+            color: token.colorText,
             textAlign: 'center',
             fontSize: collapsed ? 12 : 16,
             fontWeight: 'bold',

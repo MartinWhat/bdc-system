@@ -17,6 +17,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -59,12 +60,7 @@ export default function UsersPage() {
   const loadUsers = useCallback(async (page = 1, size = 10) => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/users?page=${page}&pageSize=${size}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch(`/api/users?page=${page}&pageSize=${size}`)
       const data = await res.json()
       if (data.success) {
         setUsers(data.data.list)
@@ -83,12 +79,7 @@ export default function UsersPage() {
   // 加载角色列表
   const loadRoles = useCallback(async () => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/roles', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch('/api/roles')
       const data = await res.json()
       if (data.success) {
         setRoles(data.data)
@@ -118,7 +109,7 @@ export default function UsersPage() {
       const url = editingUser ? `/api/users/${editingUser.id}` : '/api/users'
       const method = editingUser ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
@@ -144,7 +135,7 @@ export default function UsersPage() {
   // 删除用户
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/users/${id}`, {
+      const res = await authFetch(`/api/users/${id}`, {
         method: 'DELETE',
       })
       const data = await res.json()

@@ -3,13 +3,13 @@
  * 自动处理 Access Token 刷新和认证错误
  */
 
-import { message } from 'antd'
 import {
   getAccessToken,
   getRefreshToken,
   clearTokens,
   refreshAccessToken,
 } from '@/lib/token-manager'
+import { triggerAuthExpiry } from '@/lib/auth-event'
 
 // 正在刷新 Token 的标志
 let isRefreshing = false
@@ -36,9 +36,13 @@ function onTokenRefreshed(token: string) {
  */
 function buildHeaders(headers: HeadersInit = {}): HeadersInit {
   const token = getAccessToken()
+  if (!token) {
+    console.warn('[api-fetch] No access token available')
+    return headers
+  }
   return {
     ...headers,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: `Bearer ${token}`,
   }
 }
 
@@ -57,29 +61,48 @@ export async function authFetch(
     return fetch(url, fetchOptions)
   }
 
-  const accessToken = getAccessToken()
+  let accessToken = getAccessToken()
 
   // 如果没有 Access Token，尝试刷新
   if (!accessToken) {
     const refreshToken = getRefreshToken()
     if (refreshToken) {
+      console.log('[api-fetch] No access token, attempting refresh...')
       const refreshed = await refreshAccessToken()
       if (!refreshed) {
-        // 刷新失败，跳转到登录页
-        window.location.href = '/login'
-        return Promise.reject(new Error('未认证'))
+        // 刷新失败，清除 Token
+        clearTokens()
+        console.log('[api-fetch] Token refresh failed, returning 401')
+        // 触发认证失效事件（layout 会监听并显示弹窗）
+        triggerAuthExpiry()
+        // 返回 401 响应，让上层处理（layout 拦截器会显示弹窗）
+        return new Response(JSON.stringify({ error: '认证已过期', code: 'ACCESS_TOKEN_EXPIRED' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
       }
+      // 刷新成功，获取新 token
+      accessToken = getAccessToken()
+      console.log('[api-fetch] Token refreshed successfully')
     } else {
-      // 没有 Refresh Token，直接跳转登录
-      window.location.href = '/login'
-      return Promise.reject(new Error('未认证'))
+      // 没有 Refresh Token，返回 401
+      console.log('[api-fetch] No refresh token, returning 401')
+      // 触发认证失效事件
+      triggerAuthExpiry()
+      return new Response(JSON.stringify({ error: '未认证', code: 'UNAUTHORIZED' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
   }
 
   // 添加 Access Token 到请求头
   const authOptions = {
     ...fetchOptions,
-    headers: buildHeaders(fetchOptions.headers),
+    headers: {
+      ...fetchOptions.headers,
+      Authorization: `Bearer ${accessToken}`,
+    },
   }
 
   try {
@@ -110,24 +133,35 @@ export async function authFetch(
                 // 重试原请求
                 const retryOptions = {
                   ...authOptions,
-                  headers: buildHeaders(authOptions.headers),
+                  headers: {
+                    ...authOptions.headers,
+                    Authorization: `Bearer ${newToken}`,
+                  },
                 }
                 response = await fetch(url, retryOptions)
               }
             } else {
-              // 刷新失败，清除 Token 并跳转登录
+              // 刷新失败，清除 Token
               clearTokens()
-              message.error('认证已过期，请重新登录')
-              setTimeout(() => {
-                window.location.href = '/login'
-              }, 500)
-              return Promise.reject(new Error('Token refresh failed'))
+              console.log('[api-fetch] Token refresh failed in 401 handler')
+              // 触发认证失效事件
+              triggerAuthExpiry()
+              // 返回 401 响应，让上层处理
+              return new Response(
+                JSON.stringify({ error: '认证已过期', code: 'ACCESS_TOKEN_EXPIRED' }),
+                { status: 401, headers: { 'Content-Type': 'application/json' } },
+              )
             }
           } catch (error) {
             console.error('Token refresh error:', error)
             clearTokens()
-            window.location.href = '/login'
-            return Promise.reject(error)
+            // 触发认证失效事件
+            triggerAuthExpiry()
+            // 返回 401 响应
+            return new Response(JSON.stringify({ error: '认证失败', code: 'UNAUTHORIZED' }), {
+              status: 401,
+              headers: { 'Content-Type': 'application/json' },
+            })
           } finally {
             isRefreshing = false
           }

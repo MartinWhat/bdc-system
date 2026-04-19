@@ -29,6 +29,7 @@ import {
   WarningOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Title } = Typography
 const { Option } = Select
@@ -86,11 +87,7 @@ export default function KmsPage() {
   const loadKeys = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/kms/keys?includeArchived=true', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      })
+      const res = await authFetch('/api/kms/keys?includeArchived=true')
       const data = await res.json()
       if (data.success) {
         setKeys(data.data)
@@ -105,22 +102,14 @@ export default function KmsPage() {
   // 加载统计信息
   const loadStats = async () => {
     try {
-      const res = await fetch('/api/kms/stats', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      })
+      const res = await authFetch('/api/kms/stats')
       const data = await res.json()
       if (data.success) {
         setStats(data.data)
       }
 
       // 加载告警
-      const alertRes = await fetch('/api/kms/stats?type=alerts', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
-      })
+      const alertRes = await authFetch('/api/kms/stats?type=alerts')
       const alertData = await alertRes.json()
       if (alertData.success) {
         setAlerts(alertData.data.alerts)
@@ -138,11 +127,10 @@ export default function KmsPage() {
   // 创建密钥
   const handleCreate = async (values: any) => {
     try {
-      const res = await fetch('/api/kms/keys', {
+      const res = await authFetch('/api/kms/keys', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({
           ...values,
@@ -168,11 +156,10 @@ export default function KmsPage() {
   // 激活密钥
   const handleActivate = async (id: string) => {
     try {
-      const res = await fetch(`/api/kms/keys/${id}`, {
+      const res = await authFetch(`/api/kms/keys/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({ action: 'activate' }),
       })
@@ -192,11 +179,10 @@ export default function KmsPage() {
   // 归档密钥
   const handleArchive = async (id: string) => {
     try {
-      const res = await fetch(`/api/kms/keys/${id}`, {
+      const res = await authFetch(`/api/kms/keys/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
         body: JSON.stringify({ action: 'archive' }),
       })
@@ -216,11 +202,8 @@ export default function KmsPage() {
   // 删除密钥
   const handleDelete = async (id: string) => {
     try {
-      const res = await fetch(`/api/kms/keys/${id}`, {
+      const res = await authFetch(`/api/kms/keys/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-        },
       })
       const data = await res.json()
       if (data.success) {

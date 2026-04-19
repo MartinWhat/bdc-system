@@ -32,6 +32,7 @@ import type { UploadFile } from 'antd/es/upload/interface'
 import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
 import { parseExcelFile, downloadExcelTemplate, validateExcelData } from '@/lib/excel-parser'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Text } = Typography
 
@@ -122,12 +123,7 @@ export default function LingzhengPage() {
         })
         if (status) params.append('status', status)
 
-        const token = localStorage.getItem('access_token')
-        const res = await fetch(`/api/receive?${params}`, {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-        })
+        const res = await authFetch(`/api/receive?${params}`)
         if (!res.ok) {
           if (res.status === 401) {
             message.error('认证已过期，请重新登录')
@@ -159,12 +155,10 @@ export default function LingzhengPage() {
   const handleIssue = useCallback(
     async (record: ReceiveRecord) => {
       try {
-        const token = localStorage.getItem('access_token')
-        const res = await fetch(`/api/receive/${record.id}`, {
+        const res = await authFetch(`/api/receive/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({ action: 'issue' }),
         })
@@ -199,12 +193,10 @@ export default function LingzhengPage() {
     if (!selectedRecord) return
 
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/receive/${selectedRecord.id}`, {
+      const res = await authFetch(`/api/receive/${selectedRecord.id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           ...values,
@@ -243,12 +235,10 @@ export default function LingzhengPage() {
     if (!selectedRecord) return
 
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/objection', {
+      const res = await authFetch('/api/objection', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           receiveRecordId: selectedRecord.id,
@@ -287,12 +277,10 @@ export default function LingzhengPage() {
 
       const items = certNos.map((certNo: string) => ({ certNo, remark: values.remark || '' }))
 
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/receive/batch-import', {
+      const res = await authFetch('/api/receive/batch-import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ items }),
       })
@@ -396,12 +384,10 @@ export default function LingzhengPage() {
         remark: String(row.remark || ''),
       }))
 
-      const token = localStorage.getItem('access_token')
-      const res = await fetch('/api/receive/batch-import', {
+      const res = await authFetch('/api/receive/batch-import', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ items }),
       })
