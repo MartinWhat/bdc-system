@@ -12,12 +12,12 @@ export interface KeyRecord {
   id: string
   keyType: KeyType
   version: number
-  keyValue: string
+  keyData: string
   isActive: boolean
   createdAt: Date
   updatedAt: Date
   expiresAt: Date
-  createdBy: string
+  createdBy?: string
 
   // 密钥元数据（密钥轮换增强）
   encryptedDataCount?: number
@@ -171,7 +171,7 @@ export async function createKeyRecord(
     data: {
       keyType,
       version: await getNextVersion(keyType),
-      keyValue: encryptedValue,
+      keyData: encryptedValue,
       isActive: false,
       expiresAt: defaultExpiresAt,
       createdBy,
@@ -242,13 +242,11 @@ export async function getActiveKey(keyType: KeyType, useCache = true): Promise<K
 
   // 解密密钥值（MASTER_KEY 保持哈希形式）
   const decryptedKeyValue =
-    keyType === 'MASTER_KEY'
-      ? keyRecord.keyValue
-      : await decryptKeyValue(keyType, keyRecord.keyValue)
+    keyType === 'MASTER_KEY' ? keyRecord.keyData : await decryptKeyValue(keyType, keyRecord.keyData)
 
   const result = {
     ...keyRecord,
-    keyValue: decryptedKeyValue,
+    keyData: decryptedKeyValue,
   } as unknown as KeyRecord
 
   // 更新缓存
@@ -358,11 +356,11 @@ export async function getAllKeys(
   for (const key of keys) {
     try {
       const decryptedKeyValue =
-        keyType === 'MASTER_KEY' ? key.keyValue : await decryptKeyValue(keyType, key.keyValue)
+        keyType === 'MASTER_KEY' ? key.keyData : await decryptKeyValue(keyType, key.keyData)
 
       decryptedKeys.push({
         ...key,
-        keyValue: decryptedKeyValue,
+        keyData: decryptedKeyValue,
       } as unknown as KeyRecord)
     } catch (error) {
       console.error(`Failed to decrypt key ${key.id}:`, error)
@@ -397,11 +395,11 @@ export async function getDecryptKeys(keyType: KeyType): Promise<KeyRecord[]> {
   for (const key of keys) {
     try {
       const decryptedKeyValue =
-        keyType === 'MASTER_KEY' ? key.keyValue : await decryptKeyValue(keyType, key.keyValue)
+        keyType === 'MASTER_KEY' ? key.keyData : await decryptKeyValue(keyType, key.keyData)
 
       decryptedKeys.push({
         ...key,
-        keyValue: decryptedKeyValue,
+        keyData: decryptedKeyValue,
       } as unknown as KeyRecord)
     } catch (error) {
       console.error(`Failed to decrypt key ${key.id}:`, error)

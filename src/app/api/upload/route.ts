@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       .join('')
 
     // 加密文件数据
-    const encryptedData = sm4Encrypt(base64Data, sm4KeyRecord.keyValue, iv)
+    const encryptedData = sm4Encrypt(base64Data, sm4KeyRecord.keyData, iv)
 
     // 存储格式：iv:encryptedBase64
     const storedData = `${iv}:${encryptedData.ciphertext}`

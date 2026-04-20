@@ -8,6 +8,8 @@ import { signJWT } from '@/lib/auth'
 import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
 import { validateRefreshToken, rotateRefreshToken } from '@/lib/session'
+import { setAuthCookies } from '@/lib/auth/cookies'
+import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 import { randomBytes } from 'crypto'
 
 // Token 配置
@@ -29,6 +31,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: '未提供 Refresh Token', code: 'MISSING_REFRESH_TOKEN' },
         { status: 400 },
+      )
+    }
+
+    // 速率限制检查（基于 IP）
+    const clientIp = getClientIdentifier(request)
+    const rateLimit = checkRateLimit(clientIp, 'TOKEN_REFRESH')
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: '请求过于频繁，请稍后再试',
+          code: 'RATE_LIMIT_EXCEEDED',
+          retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000),
+        },
+        { status: 429 },
       )
     }
 
@@ -77,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     // 获取 JWT 密钥
     const jwtKeyRecord = await getActiveKey('JWT_SECRET')
-    if (!jwtKeyRecord || !jwtKeyRecord.keyValue) {
+    if (!jwtKeyRecord || !jwtKeyRecord.keyData) {
       return NextResponse.json(
         { error: '认证服务配置错误', code: 'AUTH_CONFIG_ERROR' },
         { status: 500 },
@@ -92,15 +108,23 @@ export async function POST(request: NextRequest) {
         roles,
         permissions,
       },
-      jwtKeyRecord.keyValue,
+      jwtKeyRecord.keyData,
       ACCESS_TOKEN_EXPIRES_IN,
     )
 
     // 轮换 Refresh Token（安全增强：每次刷新后更换新 Token）
     const newRefreshToken = generateRefreshToken()
-    await rotateRefreshToken(session.id, newRefreshToken)
+    const updatedSession = await rotateRefreshToken(refreshToken, newRefreshToken)
 
-    return NextResponse.json({
+    if (!updatedSession) {
+      // 轮换失败，可能是并发请求或 token 已使用
+      return NextResponse.json(
+        { error: 'Refresh Token 已失效，请重新登录', code: 'TOKEN_ROTATION_FAILED' },
+        { status: 401 },
+      )
+    }
+
+    const response = NextResponse.json({
       success: true,
       data: {
         accessToken: newAccessToken,
@@ -108,6 +132,19 @@ export async function POST(request: NextRequest) {
         expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       },
     })
+
+    // 设置新的 Cookie
+    setAuthCookies(response, newAccessToken, newRefreshToken, {
+      id: user.id,
+      username: user.username,
+      realName: user.realName,
+      email: user.email,
+      avatar: user.avatar,
+      roles,
+      permissions,
+    })
+
+    return response
   } catch (error) {
     console.error('Token refresh error:', error)
     return NextResponse.json(

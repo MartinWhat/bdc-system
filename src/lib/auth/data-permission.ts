@@ -26,7 +26,19 @@ export async function getDataPermissionFilter(userId: string): Promise<DataPermi
       include: {
         roles: {
           include: {
-            role: true,
+            role: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+              },
+            },
+          },
+        },
+        village: {
+          select: {
+            id: true,
+            townId: true,
           },
         },
       },
@@ -42,12 +54,38 @@ export async function getDataPermissionFilter(userId: string): Promise<DataPermi
       return { scope: 'ALL' }
     }
 
+    // 检查是否有镇街级管理角色
+    const isTownLevel = user.roles.some((ur) =>
+      ['TOWN_ADMIN', 'TOWN_MANAGER'].includes(ur.role.code),
+    )
+    if (isTownLevel && user.village) {
+      // 镇街级管理员可以查看本镇街所有村居的数据
+      return {
+        scope: 'TOWN',
+        townIds: [user.village.townId],
+        userId,
+      }
+    }
+
+    // 检查是否有村居级管理角色
+    const isVillageLevel = user.roles.some((ur) =>
+      ['VILLAGE_ADMIN', 'VILLAGE_MANAGER'].includes(ur.role.code),
+    )
+    if (isVillageLevel && user.village) {
+      // 村居级管理员只能查看本村居的数据
+      return {
+        scope: 'VILLAGE',
+        villageIds: [user.village.id],
+        userId,
+      }
+    }
+
     // 其他用户默认只能查看自己的数据
     return { scope: 'SELF', userId }
   } catch (error) {
     console.error('getDataPermissionFilter error:', error)
-    // 出错时返回 ALL，允许查看所有数据
-    return { scope: 'ALL' }
+    // 出错时降级为 SELF 范围，避免数据泄露
+    return { scope: 'SELF', userId }
   }
 }
 

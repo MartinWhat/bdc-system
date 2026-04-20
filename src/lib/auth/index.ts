@@ -10,6 +10,7 @@ export {
   hasPermission,
   hasRole,
 } from './utils'
+export { passwordNeedsRehash } from './utils'
 export {
   createUser,
   findUserByUsername,
@@ -20,3 +21,5 @@ export {
 } from './user-service'
 export { getCurrentUser, getCurrentUserId, withAuth } from './middleware'
 export type { AuthenticatedUser } from './middleware'
+export { getDataPermissionFilter, buildBdcWhereClause } from './data-permission'
+export type { DataScope, DataPermissionFilter } from './data-permission'

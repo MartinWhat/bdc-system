@@ -24,8 +24,8 @@ export interface CreateUserInput {
  * @returns 创建的用户对象（不含密码哈希和盐）
  */
 export async function createUser(input: CreateUserInput) {
-  // 密码加密
-  const { passwordHash, salt } = hashUserPassword(input.password)
+  // 密码加密（bcrypt）
+  const { passwordHash, salt } = await hashUserPassword(input.password)
 
   const createData: {
     username: string
@@ -121,8 +121,8 @@ export async function validateUserCredentials(username: string, password: string
     throw new Error('用户已被禁用')
   }
 
-  // 验证密码
-  const isValid = validateUserPassword(password, user.passwordHash, user.salt)
+  // 验证密码（bcrypt）
+  const isValid = await validateUserPassword(password, user.passwordHash, user.salt)
 
   if (!isValid) {
     return null

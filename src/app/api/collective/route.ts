@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     if (idCardsToDecrypt.length > 0 || phonesToDecrypt.length > 0) {
       const sm4KeyRecord = await getActiveKey('SM4_DATA')
-      const sm4Key = sm4KeyRecord.keyValue
+      const sm4Key = sm4KeyRecord.keyData
 
       // 批量解密身份证
       decryptedIdCards = idCardsToDecrypt.map((encrypted) => {

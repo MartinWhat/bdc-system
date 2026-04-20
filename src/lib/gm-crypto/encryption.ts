@@ -48,8 +48,8 @@ export async function createEncryptionContext(): Promise<EncryptionContext> {
   const masterKeyRecord = await getActiveKey('MASTER_KEY')
 
   return {
-    sm4Key: sm4KeyRecord.keyValue,
-    masterKey: masterKeyRecord.keyValue,
+    sm4Key: sm4KeyRecord.keyData,
+    masterKey: masterKeyRecord.keyData,
   }
 }
 
@@ -98,13 +98,13 @@ export async function encryptSensitiveField(
     .join('')
 
   // 加密数据
-  const ciphertext = sm4Encrypt(plaintext, sm4KeyRecord.keyValue, iv).ciphertext
+  const ciphertext = sm4Encrypt(plaintext, sm4KeyRecord.keyData, iv).ciphertext
 
   // 获取主密钥用于生成哈希索引
   const masterKeyRecord = await getActiveKey('MASTER_KEY')
 
   // 生成哈希索引（用于查询）
-  const hash = sm3Hmac(plaintext, masterKeyRecord.keyValue)
+  const hash = sm3Hmac(plaintext, masterKeyRecord.keyData)
 
   return { encrypted: `${iv}:${ciphertext}`, hash }
 }
@@ -167,7 +167,7 @@ export async function decryptSensitiveField(encrypted: string): Promise<string> 
   // 依次尝试每个密钥
   for (const keyRecord of decryptKeys) {
     try {
-      const plaintext = sm4Decrypt(ciphertext, keyRecord.keyValue, iv)
+      const plaintext = sm4Decrypt(ciphertext, keyRecord.keyData, iv)
       return plaintext
     } catch (error) {
       // 解密失败，尝试下一个密钥
@@ -195,7 +195,7 @@ export async function decryptSensitiveFields(encryptedValues: string[]): Promise
     // 依次尝试每个密钥
     for (const keyRecord of decryptKeys) {
       try {
-        return sm4Decrypt(ciphertext, keyRecord.keyValue, iv)
+        return sm4Decrypt(ciphertext, keyRecord.keyData, iv)
       } catch (error) {
         continue
       }

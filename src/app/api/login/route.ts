@@ -14,6 +14,8 @@ import { signJWT } from '@/lib/auth'
 import { createSession } from '@/lib/session'
 import { getActiveKey } from '@/lib/kms'
 import { logOperation } from '@/lib/log'
+import { setAuthCookies } from '@/lib/auth/cookies'
+import { checkRateLimit, getClientIdentifier, resetRateLimit } from '@/lib/rate-limit'
 import { z } from 'zod'
 import { randomBytes } from 'crypto'
 
@@ -53,6 +55,22 @@ export async function POST(request: NextRequest) {
     }
 
     const { username, password } = validationResult.data
+
+    // 速率限制检查（基于用户名）
+    const loginRateLimit = checkRateLimit(username, 'LOGIN')
+    if (!loginRateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error:
+            loginRateLimit.resetTime > Date.now()
+              ? '登录尝试次数过多，请稍后再试'
+              : '登录尝试次数过多，请稍后再试',
+          code: 'RATE_LIMIT_EXCEEDED',
+          retryAfter: Math.ceil((loginRateLimit.resetTime - Date.now()) / 1000),
+        },
+        { status: 429 },
+      )
+    }
 
     // 验证用户凭据
     const user = await validateUserCredentials(username, password)
@@ -94,7 +112,7 @@ export async function POST(request: NextRequest) {
         roles,
         permissions,
       },
-      jwtKeyRecord.keyValue,
+      jwtKeyRecord.keyData,
       ACCESS_TOKEN_EXPIRES_IN,
     )
 
@@ -121,8 +139,11 @@ export async function POST(request: NextRequest) {
       status: 'SUCCESS',
     })
 
-    // 返回登录成功响应（双 Token）
-    return NextResponse.json({
+    // 登录成功后重置速率限制
+    resetRateLimit(username, 'LOGIN')
+
+    // 返回登录成功响应
+    const response = NextResponse.json({
       success: true,
       data: {
         accessToken,
@@ -135,10 +156,23 @@ export async function POST(request: NextRequest) {
           email: user.email,
           avatar: user.avatar,
           roles,
-          permissions, // 添加权限信息
+          permissions,
         },
       },
     })
+
+    // 设置 httpOnly Cookie（安全增强：Token 不暴露在响应体中）
+    setAuthCookies(response, accessToken, refreshToken, {
+      id: user.id,
+      username: user.username,
+      realName: user.realName,
+      email: user.email,
+      avatar: user.avatar,
+      roles,
+      permissions,
+    })
+
+    return response
   } catch (error: unknown) {
     console.error('Login error:', error)
     const errorMessage = error instanceof Error ? error.message : '未知错误'

@@ -33,7 +33,7 @@ export async function getCurrentUser(request: NextRequest): Promise<Authenticate
     const jwtKeyRecord = await getActiveKey('JWT_SECRET')
 
     // 验证 token
-    const payload = verifyJWT(token, jwtKeyRecord.keyValue)
+    const payload = verifyJWT(token, jwtKeyRecord.keyData)
     if (!payload) {
       return null
     }

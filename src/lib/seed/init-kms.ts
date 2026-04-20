@@ -42,7 +42,7 @@ export async function initKmsKeys() {
       data: {
         keyType,
         version: 1,
-        keyValue: encryptedValue,
+        keyData: encryptedValue,
         isActive: false,
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 年后过期
         createdBy: 'system',

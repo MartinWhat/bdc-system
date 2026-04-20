@@ -1,16 +1,10 @@
 /**
- * 认证状态管理（Zustand）- 双 Token 机制
+ * 认证状态管理（Zustand）- Cookie 安全版
+ * Token 存储在 httpOnly Cookie 中，前端仅管理用户信息
  */
 
 import { create } from 'zustand'
-import {
-  setTokens,
-  getAccessToken,
-  getRefreshToken,
-  getUser,
-  clearTokens,
-  initTokenManager,
-} from '@/lib/token-manager'
+import { initTokenManager, getTokenExpiry, isAccessTokenExpired } from '@/lib/token-manager'
 
 export interface UserInfo {
   id: string
@@ -23,41 +17,37 @@ export interface UserInfo {
 }
 
 interface AuthState {
-  accessToken: string | null
-  refreshToken: string | null
   user: UserInfo | null
   isAuthenticated: boolean
+  tokenExpiry: number | null
 
   // Actions
-  setAuth: (accessToken: string, refreshToken: string, user: UserInfo) => void
+  setAuth: (user: UserInfo, expiresIn?: number) => void
   clearAuth: () => void
   loadFromStorage: () => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: null,
-  refreshToken: null,
   user: null,
   isAuthenticated: false,
+  tokenExpiry: null,
 
-  setAuth: (accessToken, refreshToken, user) => {
-    setTokens(accessToken, refreshToken, user)
-    set({ accessToken, refreshToken, user, isAuthenticated: true })
+  setAuth: (user, expiresIn) => {
+    if (expiresIn) {
+      // Token 过期时间由 token-manager 管理
+    }
+    set({ user, isAuthenticated: true, tokenExpiry: getTokenExpiry() })
+    initTokenManager()
   },
 
   clearAuth: () => {
-    clearTokens()
-    set({ accessToken: null, refreshToken: null, user: null, isAuthenticated: false })
+    set({ user: null, isAuthenticated: false, tokenExpiry: null })
   },
 
   loadFromStorage: () => {
-    const accessToken = getAccessToken()
-    const refreshToken = getRefreshToken()
-    const user = getUser() as UserInfo | null
-
-    if (accessToken && refreshToken && user) {
-      set({ accessToken, refreshToken, user, isAuthenticated: true })
-      initTokenManager()
-    }
+    // Cookie 模式下，Token 自动发送
+    // 需要调用 /api/auth/me 获取用户信息
+    // 这一步在 layout.tsx 中完成
+    initTokenManager()
   },
 }))

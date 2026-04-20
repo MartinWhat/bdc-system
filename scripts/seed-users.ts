@@ -24,7 +24,7 @@ async function createTestUsers() {
       continue
     }
 
-    const { passwordHash, salt } = hashUserPassword(password)
+    const { passwordHash, salt } = await hashUserPassword(password)
 
     await prisma.sysUser.create({
       data: {

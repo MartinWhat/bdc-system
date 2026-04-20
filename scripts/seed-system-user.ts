@@ -17,7 +17,7 @@ async function createSystemUser() {
     return
   }
 
-  const { passwordHash, salt } = hashUserPassword('system-password-not-for-login')
+  const { passwordHash, salt } = await hashUserPassword('system-password-not-for-login')
 
   await prisma.sysUser.create({
     data: {

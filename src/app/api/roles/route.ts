@@ -1,12 +1,14 @@
 /**
  * 角色管理 API
  * GET    /api/roles - 获取角色列表
- * POST   /api/roles - 创建角色
+ * POST   /api/roles - 创建角色（需要 ADMIN 权限）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { isAdmin, getUserFromRequest } from '@/lib/middleware/auth'
+import { logOperation } from '@/lib/log'
 
 const createRoleSchema = z.object({
   name: z.string().min(1, '角色名称不能为空'),
@@ -51,9 +53,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - 创建角色
+// POST - 创建角色（需要 ADMIN 权限）
 export async function POST(request: NextRequest) {
   try {
+    // 授权校验：只有管理员可以创建角色
+    if (!isAdmin(request)) {
+      return NextResponse.json({ error: '需要管理员权限', code: 'FORBIDDEN' }, { status: 403 })
+    }
+
     const body = await request.json()
     const validationResult = createRoleSchema.safeParse(body)
 
@@ -104,6 +111,16 @@ export async function POST(request: NextRequest) {
         ),
       )
     }
+
+    // 记录操作日志
+    const { userId } = getUserFromRequest(request)
+    await logOperation({
+      userId: userId || 'unknown',
+      action: 'CREATE',
+      module: 'ROLE',
+      description: `创建角色：${role.name} (${role.code})`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,

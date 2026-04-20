@@ -49,8 +49,6 @@ const OWNER_NAMES = [
   '秦二',
 ]
 
-const LAND_USE_TYPES = ['宅基地', '农用地', '建设用地', '未利用地']
-
 // 生成假身份证号（仅用于测试）
 function generateFakeIdCard(index: number): string {
   const areaCode = '330101'
@@ -120,7 +118,7 @@ async function initKmsKeys() {
       data: {
         keyType,
         version: 1,
-        keyValue: encryptedValue,
+        keyData: encryptedValue,
         isActive: true,
         expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         createdBy: 'system',
@@ -154,7 +152,7 @@ async function createTestUsers() {
       continue
     }
 
-    const { passwordHash, salt } = hashUserPassword('password123')
+    const { passwordHash, salt } = await hashUserPassword('password123')
     const created = await prisma.sysUser.create({
       data: {
         username: user.username,
@@ -162,7 +160,6 @@ async function createTestUsers() {
         salt,
         realName: user.realName,
         status: 'ACTIVE',
-        createdBy: 'system',
       },
     })
 
@@ -273,8 +270,8 @@ async function createBdcRecords() {
 
     // 生成哈希索引
     const masterKeyRecord = await getActiveKey('MASTER_KEY')
-    const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyValue)
-    const phoneHash = sm3Hmac(phone, masterKeyRecord.keyValue)
+    const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyData)
+    const phoneHash = sm3Hmac(phone, masterKeyRecord.keyData)
 
     const statusOptions = ['PENDING', 'APPROVED', 'ISSUED'] as const
     const status = statusOptions[i % 3]
@@ -290,7 +287,7 @@ async function createBdcRecords() {
         phoneHash,
         address: `${village.town.name}${village.name}${i + 1}号`,
         area: 80 + (i % 50) * 2,
-        landUseType: LAND_USE_TYPES[i % LAND_USE_TYPES.length],
+        landUseType: '宅基地',
         status,
         approvedArea: status !== 'PENDING' ? 80 + (i % 50) * 2 : undefined,
         approvedDate: status !== 'PENDING' ? new Date() : undefined,
@@ -341,77 +338,13 @@ async function createReceiveRecords() {
       data: {
         bdcId: bdc.id,
         status,
-        applyDate: new Date(Date.now() - i * 86400000), // 递减日期
-        issueDate: status !== 'PENDING' ? new Date() : undefined,
-        receiveDate: status === 'COMPLETED' ? new Date() : undefined,
+        receiveDate: new Date(Date.now() - i * 86400000), // 递减日期
         createdBy: 'system',
       },
       include: {
         bdc: true,
       },
     })
-
-    // 创建流程节点
-    await prisma.processNode.create({
-      data: {
-        receiveRecordId: record.id,
-        nodeType: 'IMPORT',
-        nodeName: '批量导入',
-        operatorId: 'system',
-        operatorName: '系统',
-        description: `批量导入证书编号：${bdc.certNo}`,
-      },
-    })
-
-    if (status !== 'PENDING') {
-      await prisma.processNode.create({
-        data: {
-          receiveRecordId: record.id,
-          nodeType: 'ISSUE',
-          nodeName: '证书发放',
-          operatorId: 'system',
-          operatorName: '系统',
-          description: '证书已发放给领取人',
-        },
-      })
-    }
-
-    if (status === 'COMPLETED') {
-      // 更新领取人信息
-      const receiverIdCard = generateFakeIdCard(100 + i)
-      const receiverPhone = generateFakePhone(100 + i)
-      const idCardResult = await encryptSensitiveField(receiverIdCard)
-      const phoneResult = await encryptSensitiveField(receiverPhone)
-
-      // 获取主密钥用于生成哈希
-      const masterKeyRecord = await getActiveKey('MASTER_KEY')
-      const receiverIdCardHash = sm3Hmac(receiverIdCard, masterKeyRecord.keyValue)
-      const receiverPhoneHash = sm3Hmac(receiverPhone, masterKeyRecord.keyValue)
-
-      await prisma.zjdReceiveRecord.update({
-        where: { id: record.id },
-        data: {
-          receiverName: OWNER_NAMES[i % OWNER_NAMES.length],
-          receiverIdCard: idCardResult.encrypted,
-          receiverIdCardHash,
-          receiverPhone: phoneResult.encrypted,
-          receiverPhoneHash,
-          signedBy: OWNER_NAMES[i % OWNER_NAMES.length],
-          signedDate: new Date(),
-        },
-      })
-
-      await prisma.processNode.create({
-        data: {
-          receiveRecordId: record.id,
-          nodeType: 'COMPLETE',
-          nodeName: '领取完成',
-          operatorId: 'system',
-          operatorName: '系统',
-          description: `领取人：${OWNER_NAMES[i % OWNER_NAMES.length]}`,
-        },
-      })
-    }
 
     createdCount++
   }
@@ -428,14 +361,13 @@ async function createObjectionRecords() {
   const issuedRecords = await prisma.zjdReceiveRecord.findMany({
     where: { status: 'ISSUED' },
     take: 3,
+    include: { bdc: true },
   })
 
-  const objectionTypes = ['NAME_ERROR', 'ID_CARD_ERROR', 'AREA_ERROR', 'OTHER'] as const
   const descriptions = [
     '权利人姓名与身份证不符',
     '身份证号码录入错误',
     '面积数据有误，实际面积与登记不符',
-    '其他异议事项',
   ]
 
   let createdCount = 0
@@ -443,19 +375,10 @@ async function createObjectionRecords() {
   for (let i = 0; i < issuedRecords.length; i++) {
     const record = issuedRecords[i]
 
-    // 检查是否已有异议
-    const existing = await prisma.objection.findFirst({
-      where: { receiveRecordId: record.id },
-    })
-
-    if (existing) {
-      continue
-    }
-
     const objection = await prisma.objection.create({
       data: {
         receiveRecordId: record.id,
-        objectionType: objectionTypes[i % objectionTypes.length],
+        objectionType: 'OTHER',
         description: descriptions[i % descriptions.length],
         status: 'PENDING',
       },
@@ -465,17 +388,6 @@ async function createObjectionRecords() {
     await prisma.zjdReceiveRecord.update({
       where: { id: record.id },
       data: { status: 'OBJECTION' },
-    })
-
-    await prisma.processNode.create({
-      data: {
-        receiveRecordId: record.id,
-        nodeType: 'OBJECTION',
-        nodeName: '登记异议',
-        operatorId: 'system',
-        operatorName: '系统',
-        description: `异议类型：${objectionTypes[i % objectionTypes.length]}, 描述：${descriptions[i % descriptions.length]}`,
-      },
     })
 
     createdCount++

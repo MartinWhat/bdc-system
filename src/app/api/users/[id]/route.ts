@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { updateUserSchema } from '../schema'
+import { getUserFromRequest, isAdmin } from '@/lib/middleware/auth'
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -157,6 +158,11 @@ export async function DELETE(
   try {
     const { id } = await params
 
+    // 授权校验：只有管理员可以删除用户
+    if (!isAdmin(request)) {
+      return NextResponse.json({ error: '需要管理员权限', code: 'FORBIDDEN' }, { status: 403 })
+    }
+
     // 检查用户是否存在
     const existingUser = await prisma.sysUser.findUnique({
       where: { id },
@@ -166,8 +172,8 @@ export async function DELETE(
       return NextResponse.json({ error: '用户不存在', code: 'USER_NOT_FOUND' }, { status: 404 })
     }
 
-    // 不能删除自己
-    const currentUserId = request.headers.get('x-user-id')
+    // 不能删除自己（从中间件注入的请求头获取当前用户 ID）
+    const { userId: currentUserId } = getUserFromRequest(request)
     if (id === currentUserId) {
       return NextResponse.json(
         { error: '不能删除自己的账号', code: 'CANNOT_DELETE_SELF' },

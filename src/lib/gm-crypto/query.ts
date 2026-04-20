@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma'
  */
 export async function generateQueryHash(value: string): Promise<string> {
   const masterKeyRecord = await getActiveKey('MASTER_KEY')
-  return sm3Hmac(value, masterKeyRecord.keyValue)
+  return sm3Hmac(value, masterKeyRecord.keyData)
 }
 
 /**

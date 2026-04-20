@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { destroySession } from '@/lib/session'
+import { sm3Hash } from '@/lib/gm-crypto'
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,8 +28,9 @@ export async function POST(request: NextRequest) {
 
     // 销毁 Refresh Token 对应的会话（双 Token 机制）
     if (refreshToken) {
+      const refreshTokenHash = sm3Hash(refreshToken)
       await prisma.sysSession.deleteMany({
-        where: { refreshToken },
+        where: { refreshTokenHash },
       })
     } else if (userId) {
       // 如果没有 Refresh Token，但有用户 ID，销毁该用户的所有会话

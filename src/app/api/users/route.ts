@@ -128,8 +128,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户名已存在', code: 'USERNAME_EXISTS' }, { status: 409 })
     }
 
-    // 密码加密
-    const { passwordHash, salt } = hashUserPassword(password)
+    // 密码加密（bcrypt 异步）
+    const { passwordHash, salt } = await hashUserPassword(password)
 
     // 构建创建数据
     const createData = {

@@ -24,7 +24,7 @@ async function resetPasswords() {
       continue
     }
 
-    const hashResult = hashUserPassword(password)
+    const hashResult = await hashUserPassword(password)
 
     await prisma.sysUser.update({
       where: { id: user.id },

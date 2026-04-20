@@ -50,13 +50,13 @@ export async function GET(request: NextRequest) {
 
     // 通过身份证号查询
     if (idCard) {
-      const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyValue)
+      const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyData)
       where.idCardHash = idCardHash
     }
 
     // 通过手机号查询
     if (phone) {
-      const phoneHash = sm3Hmac(phone, masterKeyRecord.keyValue)
+      const phoneHash = sm3Hmac(phone, masterKeyRecord.keyData)
       where.phoneHash = phoneHash
     }
 

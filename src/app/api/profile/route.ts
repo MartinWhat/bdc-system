@@ -189,8 +189,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: '原密码错误', code: 'INVALID_PASSWORD' }, { status: 400 })
     }
 
-    // 加密新密码
-    const { passwordHash: newHash, salt: newSalt } = hashUserPassword(newPassword)
+    // 加密新密码（bcrypt 异步）
+    const { passwordHash: newHash, salt: newSalt } = await hashUserPassword(newPassword)
 
     // 更新密码
     await prisma.sysUser.update({

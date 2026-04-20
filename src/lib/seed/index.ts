@@ -43,7 +43,7 @@ async function seedRolesAndPermissions() {
       await prisma.sysPermission.create({
         data: perm,
       })
-      console.log(`  ✓ 创建权限: ${perm.name}`)
+      console.log(`  ✓ 创建权限：${perm.name}`)
     }
   }
 
@@ -75,7 +75,7 @@ async function seedRolesAndPermissions() {
       await prisma.sysRole.create({
         data: role,
       })
-      console.log(`  ✓ 创建角色: ${role.name}`)
+      console.log(`  ✓ 创建角色：${role.name}`)
     }
   }
 
@@ -115,8 +115,8 @@ async function seedDefaultAdmin() {
     return
   }
 
-  // 密码加密
-  const { passwordHash, salt } = hashUserPassword('admin123')
+  // 密码加密（bcrypt 异步）
+  const { passwordHash, salt } = await hashUserPassword('admin123')
 
   // 创建用户
   const adminUser = await prisma.sysUser.create({
@@ -126,7 +126,6 @@ async function seedDefaultAdmin() {
       salt,
       realName: '系统管理员',
       status: 'ACTIVE',
-      createdBy: 'system',
     },
   })
 
@@ -146,8 +145,8 @@ async function seedDefaultAdmin() {
     console.log('  ✓ 创建管理员用户并分配角色')
   }
 
-  console.log(`  用户名: admin`)
-  console.log(`  密码: admin123`)
+  console.log(`  用户名：admin`)
+  console.log(`  密码：admin123`)
 }
 
 /**

@@ -1,12 +1,15 @@
 /**
  * 村居管理 API
  * GET    /api/villages - 获取村居列表
- * POST   /api/villages - 创建村居
+ * POST   /api/villages - 创建村居（需要镇街级管理员权限）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { hasAnyRole, getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter } from '@/lib/auth'
+import { logOperation } from '@/lib/log'
 
 const createVillageSchema = z.object({
   townId: z.string().min(1, '所属镇街不能为空'),
@@ -64,9 +67,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - 创建村居
+// POST - 创建村居（需要镇街级管理员权限）
 export async function POST(request: NextRequest) {
   try {
+    // 授权校验：需要管理员或镇街级管理员权限
+    if (!hasAnyRole(request, ['ADMIN', 'TOWN_ADMIN', 'TOWN_MANAGER'])) {
+      return NextResponse.json(
+        { error: '需要管理员或镇街级权限', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+
     const body = await request.json()
     const validationResult = createVillageSchema.safeParse(body)
 
@@ -114,6 +125,16 @@ export async function POST(request: NextRequest) {
       include: {
         town: true,
       },
+    })
+
+    // 记录操作日志
+    const { userId } = getUserFromRequest(request)
+    await logOperation({
+      userId: userId || 'unknown',
+      action: 'CREATE',
+      module: 'VILLAGE',
+      description: `创建村居：${village.name} (${village.code})`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

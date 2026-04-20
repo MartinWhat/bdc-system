@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -31,55 +31,54 @@ enum BdcStatus {
 
 // 村集体证书状态
 enum CollectiveCertStatus {
-  IN_STOCK      // 在库
-  OUT_STOCK     // 已出库
-  RETURNED      // 已归还
-  CANCELLED     // 已注销
-  FROZEN        // 已冻结
+  IN_STOCK // 在库
+  OUT_STOCK // 已出库
+  RETURNED // 已归还
+  CANCELLED // 已注销
+  FROZEN // 已冻结
   PENDING_APPROVE // 待审核入库
 }
 
 // 证书操作类型
 enum CertOperationType {
-  STOCK_APPLY     // 入库申请
-  STOCK_APPROVE   // 入库审核通过
-  STOCK_REJECT    // 入库审核驳回
-  OUT_APPLY       // 出库申请
-  OUT_APPROVE     // 出库审核通过
-  OUT_REJECT      // 出库审核驳回
-  RETURN          // 归还
-  FREEZE          // 冻结
-  UNFREEZE        // 解冻
-  CANCEL          // 注销
+  STOCK_APPLY // 入库申请
+  STOCK_APPROVE // 入库审核通过
+  STOCK_REJECT // 入库审核驳回
+  OUT_APPLY // 出库申请
+  OUT_APPROVE // 出库审核通过
+  OUT_REJECT // 出库审核驳回
+  RETURN // 归还
+  FREEZE // 冻结
+  UNFREEZE // 解冻
+  CANCEL // 注销
 }
 
 model SysKeyVersion {
   id        String   @id @default(cuid())
   keyType   String
   version   Int
-  keyValue  String
+  keyData   String
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   expiresAt DateTime
-  
+
   // 密钥元数据（密钥轮换增强）
-  createdBy           String
-  encryptedDataCount  Int?     @default(0)  // 使用该密钥加密的数据数量
-  migratedToKeyId     String?  // 迁移目标密钥 ID（如果已迁移）
-  isArchived          Boolean  @default(false)  // 是否已归档
-  archivedAt          DateTime?
-  deletedAt           DateTime?
-  
+  createdBy          String
+  encryptedDataCount Int?      @default(0) // 使用该密钥加密的数据数量
+  migratedToKeyId    String? // 迁移目标密钥 ID（如果已迁移）
+  isArchived         Boolean   @default(false) // 是否已归档
+  archivedAt         DateTime?
+  deletedAt          DateTime?
+
   @@index([keyType, isActive, isArchived])
   @@index([keyType, expiresAt])
-  
   @@map("sys_key_version")
 }
 
 model SysUser {
-  id               String         @id @default(cuid())
-  username         String         @unique
+  id               String             @id @default(cuid())
+  username         String             @unique
   passwordHash     String
   salt             String
   realName         String
@@ -89,20 +88,21 @@ model SysUser {
   phoneHash        String?
   email            String?
   avatar           String?
-  status           String         @default("ACTIVE")
-  twoFactorEnabled Boolean        @default(false)
+  status           String             @default("ACTIVE")
+  twoFactorEnabled Boolean            @default(false)
   lastLoginAt      DateTime?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   createdBy        String?
-  villageId        String?        // 所属村居 ID
-  village          SysVillage?    @relation(fields: [villageId], references: [id])
-  createdRecords   OperationLog[] @relation("UserCreatedRecords")
+  villageId        String? // 所属村居 ID
+  village          SysVillage?        @relation(fields: [villageId], references: [id])
+  createdRecords   OperationLog[]     @relation("UserCreatedRecords")
   sessions         SysSession[]
   roles            UserRole[]
   notifications    Notification[]
   readRecords      NotificationRead[]
 
+  @@index([villageId])
   @@map("sys_user")
 }
 
@@ -164,15 +164,18 @@ model SysSession {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  // Refresh Token 字段（双 Token 机制）
-  refreshToken           String?   @unique
-  refreshTokenExpiresAt  DateTime?
-  lastActivityAt         DateTime?
-  deviceFingerprint      String?
-  
-  user      SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  // Refresh Token 字段（双 Token 机制）
+  // 注意：refreshToken 存储哈希值，而非明文
+  refreshTokenHash      String?   @unique
+  refreshTokenExpiresAt DateTime?
+  lastActivityAt        DateTime?
+  deviceFingerprint     String?
+
+  user SysUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([refreshTokenHash])
   @@map("sys_session")
 }
 
@@ -190,19 +193,20 @@ model SysTown {
 }
 
 model SysVillage {
-  id        String   @id @default(cuid())
-  townId    String
-  code      String   @unique
-  name      String
-  status    String   @default("ACTIVE")
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  town      SysTown  @relation(fields: [townId], references: [id])
-  users     SysUser[]
-  bdcs      ZjdBdc[]
+  id              String           @id @default(cuid())
+  townId          String
+  code            String           @unique
+  name            String
+  status          String           @default("ACTIVE")
+  sortOrder       Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  town            SysTown          @relation(fields: [townId], references: [id])
+  users           SysUser[]
+  bdcs            ZjdBdc[]
   collectiveCerts CollectiveCert[]
 
+  @@index([townId])
   @@map("sys_village")
 }
 
@@ -316,62 +320,64 @@ model OperationLog {
   bdc          ZjdBdc?  @relation(fields: [bdcId], references: [id])
   user         SysUser  @relation("UserCreatedRecords", fields: [userId], references: [id])
 
+  @@index([userId])
+  @@index([bdcId])
   @@map("sys_operation_log")
 }
 
 // 村集体所有权证书表
 model CollectiveCert {
-  id               String           @id @default(cuid())
-  certNo           String           @unique
-  ownerName        String
-  ownerType        String           @default("VILLAGE_COLLECTIVE") // VILLAGE_COLLECTIVE, TOWN_COLLECTIVE
-  villageId        String
-  idCard           String?
-  idCardHash       String?
-  phone            String?
-  phoneHash        String?
-  address          String
-  area             Float
-  landUseType      String?
-  certIssueDate    DateTime?
-  certExpiryDate   DateTime?
-  status           CollectiveCertStatus @default(PENDING_APPROVE)
-  isFrozen         Boolean          @default(false)
-  freezeReason     String?
-  freezeBy         String?
-  freezeAt         DateTime?
+  id                 String               @id @default(cuid())
+  certNo             String               @unique
+  ownerName          String
+  ownerType          String               @default("VILLAGE_COLLECTIVE") // VILLAGE_COLLECTIVE, TOWN_COLLECTIVE
+  villageId          String
+  idCard             String?
+  idCardHash         String?
+  phone              String?
+  phoneHash          String?
+  address            String
+  area               Float
+  landUseType        String?
+  certIssueDate      DateTime?
+  certExpiryDate     DateTime?
+  status             CollectiveCertStatus @default(PENDING_APPROVE)
+  isFrozen           Boolean              @default(false)
+  freezeReason       String?
+  freezeBy           String?
+  freezeAt           DateTime?
   // 入库信息
-  stockBy          String?
-  stockAt          DateTime?
-  stockRemark      String?
-  approveBy        String?
-  approveAt        DateTime?
-  approveRemark    String?
+  stockBy            String?
+  stockAt            DateTime?
+  stockRemark        String?
+  approveBy          String?
+  approveAt          DateTime?
+  approveRemark      String?
   // 出库信息
-  outBy            String?
-  outAt            DateTime?
-  outReason        String?
-  outApproveBy     String?
-  outApproveAt     DateTime?
-  outApproveRemark String?
+  outBy              String?
+  outAt              DateTime?
+  outReason          String?
+  outApproveBy       String?
+  outApproveAt       DateTime?
+  outApproveRemark   String?
   expectedReturnDate DateTime?
-  actualReturnDate DateTime?
+  actualReturnDate   DateTime?
   // 归还信息
-  returnBy         String?
-  returnAt         DateTime?
-  returnRemark     String?
+  returnBy           String?
+  returnAt           DateTime?
+  returnRemark       String?
   // 注销信息
-  cancelBy         String?
-  cancelAt         DateTime?
-  cancelReason     String?
+  cancelBy           String?
+  cancelAt           DateTime?
+  cancelReason       String?
   // 附件
-  attachments      String?          // JSON 格式存储附件列表
-  remark           String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  createdBy        String
-  village          SysVillage       @relation(fields: [villageId], references: [id])
-  operations       CertOperation[]
+  attachments        String? // JSON 格式存储附件列表
+  remark             String?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  createdBy          String
+  village            SysVillage           @relation(fields: [villageId], references: [id])
+  operations         CertOperation[]
 
   @@index([villageId])
   @@index([status])
@@ -382,15 +388,15 @@ model CollectiveCert {
 
 // 证书操作记录表
 model CertOperation {
-  id              String          @id @default(cuid())
-  certId          String
-  operationType   CertOperationType
-  operatorId      String?
-  operatorName    String?
-  description     String?
-  metadata        String?         // JSON 格式存储额外信息
-  createdAt       DateTime        @default(now())
-  cert            CollectiveCert  @relation(fields: [certId], references: [id], onDelete: Cascade)
+  id            String            @id @default(cuid())
+  certId        String
+  operationType CertOperationType
+  operatorId    String?
+  operatorName  String?
+  description   String?
+  metadata      String? // JSON 格式存储额外信息
+  createdAt     DateTime          @default(now())
+  cert          CollectiveCert    @relation(fields: [certId], references: [id], onDelete: Cascade)
 
   @@index([certId])
   @@index([operationType])
@@ -421,25 +427,25 @@ enum NotificationStatus {
 
 // 通知公告
 model Notification {
-  id            String                @id @default(cuid())
-  title         String
-  content       String                // 富文本 HTML 内容
-  type          NotificationType      @default(SYSTEM)
-  priority      NotificationPriority  @default(NORMAL)
-  status        NotificationStatus    @default(DRAFT)
-  isPopup       Boolean               @default(false)
-  popupStartAt  DateTime?
-  popupEndAt    DateTime?
-  validFrom     DateTime?
-  validUntil    DateTime?
-  isPinned      Boolean               @default(false)
-  authorId      String
-  author        SysUser               @relation(fields: [authorId], references: [id])
-  readCount     Int                   @default(0)
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  publishedAt   DateTime?
-  readRecords   NotificationRead[]
+  id           String               @id @default(cuid())
+  title        String
+  content      String // 富文本 HTML 内容
+  type         NotificationType     @default(SYSTEM)
+  priority     NotificationPriority @default(NORMAL)
+  status       NotificationStatus   @default(DRAFT)
+  isPopup      Boolean              @default(false)
+  popupStartAt DateTime?
+  popupEndAt   DateTime?
+  validFrom    DateTime?
+  validUntil   DateTime?
+  isPinned     Boolean              @default(false)
+  authorId     String
+  author       SysUser              @relation(fields: [authorId], references: [id])
+  readCount    Int                  @default(0)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  publishedAt  DateTime?
+  readRecords  NotificationRead[]
 
   @@index([type, status])
   @@index([isPopup, popupStartAt, popupEndAt])
@@ -448,13 +454,14 @@ model Notification {
 
 // 通知阅读记录
 model NotificationRead {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   notificationId String
-  notification   Notification  @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
   userId         String
-  user           SysUser       @relation(fields: [userId], references: [id])
-  readAt         DateTime      @default(now())
+  user           SysUser      @relation(fields: [userId], references: [id])
+  readAt         DateTime     @default(now())
 
   @@unique([notificationId, userId])
+  @@index([userId])
   @@map("notification_read")
 }

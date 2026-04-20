@@ -40,7 +40,7 @@ export async function seedTestKeys() {
         data: {
           keyType,
           version: 1,
-          keyValue: storedValue,
+          keyData: storedValue,
           isActive: true,
           expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
           createdBy: 'test',

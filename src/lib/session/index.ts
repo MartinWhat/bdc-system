@@ -5,12 +5,22 @@
 
 import { prisma } from '@/lib/prisma'
 import { generateSessionToken } from '@/lib/auth'
+import { sm3Hash } from '@/lib/gm-crypto'
 import type { SysSession } from '@prisma/client'
+
+/**
+ * 哈希 Refresh Token
+ * @param refreshToken - 明文 Refresh Token
+ * @returns 哈希值
+ */
+function hashRefreshToken(refreshToken: string): string {
+  return sm3Hash(refreshToken)
+}
 
 /**
  * 创建新会话（双 Token 机制）
  * @param userId - 用户 ID
- * @param refreshToken - Refresh Token
+ * @param refreshToken - Refresh Token（明文）
  * @param accessTokenExpiresInHours - Access Token 过期时间（小时），默认 0.5 小时（30 分钟）
  * @param refreshTokenExpiresInDays - Refresh Token 过期时间（天），默认 7 天
  * @returns 会话对象
@@ -28,12 +38,15 @@ export async function createSession(
   const refreshTokenExpiresAt = new Date()
   refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + refreshTokenExpiresInDays)
 
+  // 存储 RefreshToken 的哈希值，而非明文
+  const refreshTokenHash = hashRefreshToken(refreshToken)
+
   const session = await prisma.sysSession.create({
     data: {
       userId,
       token,
       expiresAt,
-      refreshToken,
+      refreshTokenHash,
       refreshTokenExpiresAt,
       lastActivityAt: new Date(),
     },
@@ -107,12 +120,15 @@ export async function validateSession(token: string) {
 
 /**
  * 验证 Refresh Token
- * @param refreshToken - Refresh Token
+ * @param refreshToken - Refresh Token（明文）
  * @returns 会话对象或 null
  */
 export async function validateRefreshToken(refreshToken: string) {
+  // 使用哈希值查询会话
+  const refreshTokenHash = hashRefreshToken(refreshToken)
+
   const session = await prisma.sysSession.findUnique({
-    where: { refreshToken },
+    where: { refreshTokenHash },
     include: {
       user: {
         select: {
@@ -151,22 +167,58 @@ export async function validateRefreshToken(refreshToken: string) {
 }
 
 /**
- * 轮换 Refresh Token
- * @param sessionId - 会话 ID
- * @param newRefreshToken - 新的 Refresh Token
- * @returns 更新后的会话
+ * 轮换 Refresh Token（原子操作，修复竞态条件）
+ * @param oldRefreshToken - 旧的 Refresh Token（明文）
+ * @param newRefreshToken - 新的 Refresh Token（明文）
+ * @returns 更新后的会话或 null（如果旧 token 无效）
  */
-export async function rotateRefreshToken(sessionId: string, newRefreshToken: string) {
+export async function rotateRefreshToken(
+  oldRefreshToken: string,
+  newRefreshToken: string,
+): Promise<SysSession | null> {
   const refreshTokenExpiresAt = new Date()
   refreshTokenExpiresAt.setDate(refreshTokenExpiresAt.getDate() + 7)
 
-  return prisma.sysSession.update({
-    where: { id: sessionId },
+  const oldRefreshTokenHash = hashRefreshToken(oldRefreshToken)
+  const newRefreshTokenHash = hashRefreshToken(newRefreshToken)
+
+  // 使用原子更新：WHERE refreshTokenHash = oldHash，防止竞态条件
+  const updatedSession = await prisma.sysSession.updateMany({
+    where: {
+      refreshTokenHash: oldRefreshTokenHash,
+      refreshTokenExpiresAt: {
+        gt: new Date(), // 确保未过期
+      },
+    },
     data: {
-      refreshToken: newRefreshToken,
+      refreshTokenHash: newRefreshTokenHash,
       refreshTokenExpiresAt,
+      lastActivityAt: new Date(),
     },
   })
+
+  if (updatedSession.count === 0) {
+    return null
+  }
+
+  // 获取更新后的会话
+  const session = await prisma.sysSession.findFirst({
+    where: {
+      refreshTokenHash: newRefreshTokenHash,
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          username: true,
+          realName: true,
+          status: true,
+        },
+      },
+    },
+  })
+
+  return session
 }
 
 /**
