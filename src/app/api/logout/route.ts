@@ -5,26 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { destroySession } from '@/lib/session'
 import { sm3Hash } from '@/lib/gm-crypto'
+import { getRefreshToken } from '@/lib/auth/cookies'
 
 export async function POST(request: NextRequest) {
   try {
-    // 获取 Access Token
-    const authHeader = request.headers.get('authorization')
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
-
-    // 获取 Refresh Token（从请求体或 header）
-    const body = await request.json().catch(() => ({}))
-    const refreshToken = body.refreshToken
+    // 获取 Refresh Token（从 httpOnly Cookie 读取）
+    const refreshToken = getRefreshToken(request)
 
     // 获取用户 ID（由中间件注入）
     const userId = request.headers.get('x-user-id')
-
-    // 销毁 Access Token 对应的会话
-    if (accessToken) {
-      await destroySession(accessToken)
-    }
 
     // 销毁 Refresh Token 对应的会话（双 Token 机制）
     if (refreshToken) {

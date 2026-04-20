@@ -142,12 +142,10 @@ export async function POST(request: NextRequest) {
     // 登录成功后重置速率限制
     resetRateLimit(username, 'LOGIN')
 
-    // 返回登录成功响应
+    // 返回登录成功响应（Token 已通过 httpOnly Cookie 存储）
     const response = NextResponse.json({
       success: true,
       data: {
-        accessToken,
-        refreshToken,
         expiresIn: ACCESS_TOKEN_EXPIRES_IN,
         user: {
           id: user.id,
@@ -177,15 +175,8 @@ export async function POST(request: NextRequest) {
     console.error('Login error:', error)
     const errorMessage = error instanceof Error ? error.message : '未知错误'
 
-    // 记录登录失败日志
-    const body = await request.json().catch(() => ({}))
-    await logOperation({
-      userId: body.username || 'unknown',
-      action: 'LOGIN',
-      module: 'AUTH',
-      description: `用户 ${body.username || 'unknown'} 登录失败：${errorMessage}`,
-      status: 'FAILED',
-    })
+    // 登录失败不记录 OperationLog（因为 userId 是外键，必须存在）
+    // 改用 console.error 记录
 
     if (errorMessage === '用户已被禁用') {
       return NextResponse.json(

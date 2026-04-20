@@ -3,33 +3,22 @@
  * 使用 httpOnly Cookie 自动发送 Token，防止 XSS 攻击
  */
 
-import {
-  needsRefresh,
-  refreshAccessToken,
-  isAccessTokenExpired,
-  clearTokens,
-  extendTokenExpiry,
-} from '@/lib/token-manager'
+import { refreshAccessToken, clearTokens } from '@/lib/token-manager'
 import { triggerAuthExpiry } from '@/lib/auth-event'
 
-// 正在刷新 Token 的标志
-let isRefreshing = false
-// 等待刷新的请求队列
-let refreshSubscribers: ((success: boolean) => void)[] = []
+// 正在刷新 Token 的 Promise（用于防止并发刷新）
+let refreshPromise: Promise<boolean> | null = null
 
 /**
- * 添加请求到等待队列
+ * 获取刷新 Promise
  */
-function subscribeTokenRefresh(cb: (success: boolean) => void) {
-  refreshSubscribers.push(cb)
-}
-
-/**
- * 执行等待队列中的请求
- */
-function onTokenRefreshed(success: boolean) {
-  refreshSubscribers.forEach((cb) => cb(success))
-  refreshSubscribers = []
+function getRefreshPromise(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
 }
 
 /**
@@ -50,80 +39,37 @@ export async function authFetch(
     })
   }
 
-  // 检查 Token 是否已过期
-  if (isAccessTokenExpired()) {
-    console.log('[api-fetch] Token expired, attempting refresh...')
-
-    if (!isRefreshing) {
-      isRefreshing = true
-      const success = await refreshAccessToken()
-      isRefreshing = false
-      onTokenRefreshed(success)
-
-      if (!success) {
-        console.warn('[api-fetch] Token refresh failed, triggering auth expiry')
-        clearTokens()
-        triggerAuthExpiry()
-        // 返回 401 响应
-        return new Response(
-          JSON.stringify({ error: '认证已过期，请重新登录', code: 'TOKEN_EXPIRED' }),
-          {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' },
-          },
-        )
-      }
-    } else {
-      // 等待其他请求刷新
-      await new Promise<void>((resolve) => {
-        subscribeTokenRefresh((success) => {
-          if (!success) {
-            clearTokens()
-            triggerAuthExpiry()
-          }
-          resolve()
-        })
-      })
-    }
-  }
-
   // 执行请求（Cookie 会自动发送）
   const response = await fetch(url, {
     ...fetchOptions,
     credentials: 'include', // 自动发送 httpOnly Cookie
   })
 
-  // 处理 401 错误
+  // 处理 401 错误 - 尝试刷新 Token
   if (response.status === 401) {
     const errorData = await response.json().catch(() => ({}))
-    console.log('[api-fetch] 401 error:', errorData)
 
-    // 如果是 Token 刷新失败导致的 401，清除 Token 并触发登出
-    if (errorData.code === 'TOKEN_ROTATION_FAILED' || errorData.code === 'UNAUTHORIZED') {
-      clearTokens()
-      triggerAuthExpiry()
-    }
-
-    // 如果正在刷新，等待刷新完成
-    if (!isRefreshing && needsRefresh()) {
-      isRefreshing = true
-      const success = await refreshAccessToken()
-      isRefreshing = false
-      onTokenRefreshed(success)
+    // 如果是 Token 无效/过期，尝试刷新
+    if (
+      errorData.code === 'INVALID_TOKEN' ||
+      errorData.code === 'UNAUTHORIZED' ||
+      errorData.code === 'TOKEN_EXPIRED'
+    ) {
+      const success = await getRefreshPromise()
 
       if (success) {
         // 刷新成功，重试原请求
         return authFetch(url, options)
       } else {
+        // 刷新失败，清除状态并触发登出
         clearTokens()
         triggerAuthExpiry()
       }
+    } else {
+      // 其他 401 错误（如 Token 轮换失败），直接清除状态
+      clearTokens()
+      triggerAuthExpiry()
     }
-  }
-
-  // 用户活动后延长 Token 过期时间
-  if (response.ok) {
-    extendTokenExpiry()
   }
 
   return response

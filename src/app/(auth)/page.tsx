@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react'
 import { useAuthStore } from '@/lib/store/auth'
-import { useRouter } from 'next/navigation'
 import { Card, Row, Col, Statistic, Typography } from 'antd'
 import { UserOutlined, HomeOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
@@ -12,15 +11,13 @@ import NotificationPopup from '@/components/notifications/NotificationPopup'
 const { Text } = Typography
 
 export default function DashboardPage() {
-  const { user, loadFromStorage } = useAuthStore()
-  const router = useRouter()
+  const { user } = useAuthStore()
 
-  useEffect(() => {
-    loadFromStorage()
-  }, [])
+  // 显示用户名
+  const displayName = user?.realName || user?.username || '加载中...'
 
   return (
-    <PageContainer title="工作台" subTitle={`欢迎回来，${user?.realName || user?.username}`}>
+    <PageContainer title="工作台" subTitle={`欢迎回来，${displayName}`}>
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
           <Card hoverable>

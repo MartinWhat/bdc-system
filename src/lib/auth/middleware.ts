@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from './jwt'
 import { getActiveKey } from '@/lib/kms'
+import { getAccessToken } from './cookies'
 
 export interface AuthenticatedUser {
   userId: string
@@ -21,13 +22,20 @@ export interface AuthenticatedUser {
  */
 export async function getCurrentUser(request: NextRequest): Promise<AuthenticatedUser | null> {
   try {
-    // 从 Authorization header 获取 token
+    // 优先从 Authorization header 获取 token
     const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return null
+    let token: string | null = null
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7)
+    } else {
+      // 后备：从 Cookie 获取（支持 httpOnly Cookie）
+      token = getAccessToken(request)
     }
 
-    const token = authHeader.slice(7)
+    if (!token) {
+      return null
+    }
 
     // 获取 JWT 密钥
     const jwtKeyRecord = await getActiveKey('JWT_SECRET')

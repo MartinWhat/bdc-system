@@ -19,7 +19,7 @@ import {
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
-import { initTokenManager, TOKEN_REFRESH_EVENT, extendTokenExpiry } from '@/lib/token-manager'
+import { getUserInfoFromClient } from '@/lib/auth/cookies'
 import { authFetch } from '@/lib/api-fetch'
 
 const { Sider, Content, Header } = Layout
@@ -97,53 +97,32 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
-  const { user, clearAuth, loadFromStorage } = useAuthStore()
+  const { user, setAuth, clearAuth } = useAuthStore()
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
+  // 从 Cookie 加载用户信息
   useEffect(() => {
-    // 从 localStorage 加载认证信息
-    loadFromStorage()
-
-    const token = localStorage.getItem('access_token')
-    if (!token) {
+    const userInfo = getUserInfoFromClient()
+    if (userInfo) {
+      setAuth(userInfo as any)
+    } else {
       router.push('/login')
     }
-
-    // 监听其他标签页的 token 刷新
-    const handleTokenRefresh = () => {
-      loadFromStorage()
-      initTokenManager()
-    }
-
-    window.addEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
-
-    return () => {
-      window.removeEventListener(TOKEN_REFRESH_EVENT, handleTokenRefresh)
-    }
-  }, [router, loadFromStorage])
-
-  // 滑动过期：每次路由变化时重置 token 过期时间
-  useEffect(() => {
-    extendTokenExpiry()
-  }, [pathname])
+  }, [router, setAuth])
 
   const handleLogout = async () => {
     try {
-      // 调用登出 API 销毁会话
-      const refreshToken = localStorage.getItem('refresh_token')
-
       await authFetch('/api/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ refreshToken }),
+        credentials: 'include',
       })
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
-      // 清除本地认证信息
       clearAuth()
       router.push('/login')
     }

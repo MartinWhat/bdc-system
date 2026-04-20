@@ -84,12 +84,15 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
 
     console.log('[Middleware] Token verified successfully for user:', payload.username)
 
-    // 创建响应并注入用户信息到请求头
+    // 创建响应并注入用户信息到请求头（使用 encodeURIComponent 处理中文等非ASCII字符）
     const response = NextResponse.next()
     response.headers.set('x-user-id', payload.sub)
-    response.headers.set('x-username', payload.username)
-    response.headers.set('x-user-roles', JSON.stringify(payload.roles || []))
-    response.headers.set('x-user-permissions', JSON.stringify(payload.permissions || []))
+    response.headers.set('x-username', encodeURIComponent(payload.username))
+    response.headers.set('x-user-roles', encodeURIComponent(JSON.stringify(payload.roles || [])))
+    response.headers.set(
+      'x-user-permissions',
+      encodeURIComponent(JSON.stringify(payload.permissions || [])),
+    )
 
     return response
   } catch (error) {
@@ -102,11 +105,16 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
  * 从请求中获取用户信息
  */
 export function getUserFromRequest(request: NextRequest) {
+  const userId = request.headers.get('x-user-id')
+  const username = request.headers.get('x-username')
+  const roles = request.headers.get('x-user-roles')
+  const permissions = request.headers.get('x-user-permissions')
+
   return {
-    userId: request.headers.get('x-user-id'),
-    username: request.headers.get('x-username'),
-    roles: JSON.parse(request.headers.get('x-user-roles') || '[]') as string[],
-    permissions: JSON.parse(request.headers.get('x-user-permissions') || '[]') as string[],
+    userId,
+    username: username ? decodeURIComponent(username) : undefined,
+    roles: roles ? (JSON.parse(decodeURIComponent(roles)) as string[]) : [],
+    permissions: permissions ? (JSON.parse(decodeURIComponent(permissions)) as string[]) : [],
   }
 }
 

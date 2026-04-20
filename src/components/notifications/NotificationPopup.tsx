@@ -28,9 +28,17 @@ export function NotificationPopup() {
     if (currentPopup) {
       // 标记已读
       try {
-        const userStr = localStorage.getItem('user')
-        const user = userStr ? JSON.parse(userStr) : null
-        const userId = user?.id || 'anonymous'
+        // 从 Cookie 获取用户信息
+        const userCookie = document.cookie.match(/user_info=([^;]+)/)
+        let userId = 'anonymous'
+        if (userCookie) {
+          try {
+            const userInfo = JSON.parse(decodeURIComponent(userCookie[1]))
+            userId = userInfo.id || 'anonymous'
+          } catch {
+            // ignore parse error
+          }
+        }
 
         await authFetch(`/api/notifications/${currentPopup.id}/read`, {
           method: 'POST',
@@ -59,7 +67,7 @@ export function NotificationPopup() {
       ]}
       width={520}
       centered
-      maskClosable={false}
+      mask={{ closable: false }}
       className={styles.popup}
     >
       <div className={styles.header}>

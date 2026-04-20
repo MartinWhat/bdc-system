@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, Typography, Tag, Space, Button, Spin } from 'antd'
 import { ArrowLeftOutlined, CalendarOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const { Title, Text } = Typography
 
@@ -63,12 +64,7 @@ export default function NotificationDetailPage() {
   const fetchNotification = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/notifications/${id}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch(`/api/notifications/${id}`)
       const data = await res.json()
       if (data.success) {
         setNotification(data.data)

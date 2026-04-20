@@ -4,7 +4,6 @@
  */
 
 import { create } from 'zustand'
-import { initTokenManager, getTokenExpiry, isAccessTokenExpired } from '@/lib/token-manager'
 
 export interface UserInfo {
   id: string
@@ -19,35 +18,21 @@ export interface UserInfo {
 interface AuthState {
   user: UserInfo | null
   isAuthenticated: boolean
-  tokenExpiry: number | null
 
   // Actions
-  setAuth: (user: UserInfo, expiresIn?: number) => void
+  setAuth: (user: UserInfo) => void
   clearAuth: () => void
-  loadFromStorage: () => void
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
-  tokenExpiry: null,
 
-  setAuth: (user, expiresIn) => {
-    if (expiresIn) {
-      // Token 过期时间由 token-manager 管理
-    }
-    set({ user, isAuthenticated: true, tokenExpiry: getTokenExpiry() })
-    initTokenManager()
+  setAuth: (user) => {
+    set({ user, isAuthenticated: true })
   },
 
   clearAuth: () => {
-    set({ user: null, isAuthenticated: false, tokenExpiry: null })
-  },
-
-  loadFromStorage: () => {
-    // Cookie 模式下，Token 自动发送
-    // 需要调用 /api/auth/me 获取用户信息
-    // 这一步在 layout.tsx 中完成
-    initTokenManager()
+    set({ user: null, isAuthenticated: false })
   },
 }))

@@ -19,8 +19,8 @@ import {
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
-import { extendTokenExpiry } from '@/lib/token-manager'
-import { triggerAuthExpiry, onAuthExpiry } from '@/lib/auth-event'
+import { getUserInfoFromClient } from '@/lib/auth/cookies'
+import { onAuthExpiry } from '@/lib/auth-event'
 import { authFetch } from '@/lib/api-fetch'
 import { hasMenuPermission } from '@/config/menu-permissions'
 import ThemeToggle from '@/components/theme-toggle'
@@ -147,58 +147,12 @@ function filterMenuByPermission(
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
   const [reLoginModalVisible, setReLoginModalVisible] = useState(false)
+  const [loading, setLoading] = useState(true)
   const pathname = usePathname()
   const router = useRouter()
   const { user, setAuth, clearAuth } = useAuthStore()
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
-
-  // 从 Cookie 加载用户信息
-  useEffect(() => {
-    const loadUserInfo = async () => {
-      try {
-        const res = await fetch('/api/auth/me', {
-          credentials: 'include',
-        })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success) {
-            setAuth(data.data.user)
-          } else {
-            router.push('/login')
-          }
-        } else {
-          router.push('/login')
-        }
-      } catch (error) {
-        console.error('Failed to load user info:', error)
-        router.push('/login')
-      }
-    }
-
-    loadUserInfo()
-  }, [router, setAuth])
-
-  // 定时检查 token 有效性
-  useEffect(() => {
-    const checkTokenValidity = async () => {
-      const res = await fetch('/api/auth/me', {
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        clearAuth()
-        router.push('/login')
-      }
-    }
-
-    const interval = setInterval(checkTokenValidity, 30000)
-    return () => clearInterval(interval)
-  }, [router, clearAuth])
-
-  // 滑动过期
-  useEffect(() => {
-    extendTokenExpiry()
-  }, [pathname])
 
   // 拦截 fetch 检测 401
   useEffect(() => {
@@ -232,10 +186,30 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
   }, [clearAuth])
 
+  // 从 Cookie 加载用户信息（同步）
+  useEffect(() => {
+    const userInfo = getUserInfoFromClient()
+    if (userInfo) {
+      setAuth(userInfo as any)
+    } else {
+      router.push('/login')
+    }
+    setLoading(false)
+  }, [router, setAuth])
+
   const handleReLoginConfirm = useCallback(() => {
     setReLoginModalVisible(false)
     router.push('/login')
   }, [router])
+
+  // 加载中显示空白页
+  if (loading) {
+    return (
+      <Layout style={{ minHeight: '100vh', justifyContent: 'center', alignItems: 'center' }}>
+        <div>加载中...</div>
+      </Layout>
+    )
+  }
 
   const handleLogout = async () => {
     try {
@@ -263,6 +237,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     },
   ]
 
+  // 计算菜单项
   const menuItems = filterMenuByPermission(ALL_MENU_ITEMS, user?.permissions || [])
 
   return (
@@ -343,7 +318,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         open={reLoginModalVisible}
         onOk={handleReLoginConfirm}
         closable={false}
-        maskClosable={false}
+        mask={{ closable: false }}
         okText="重新登录"
         cancelText="取消"
         cancelButtonProps={{ style: { display: 'none' } }}

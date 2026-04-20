@@ -21,29 +21,8 @@ export function sm3Hash(data: string): string {
  * @returns 十六进制 HMAC 字符串
  */
 export function sm3Hmac(message: string, key: string): string {
-  // SM3-HMAC 实现: HMAC(SM3, key, message)
-  const blockSize = 64 // SM3 块大小 (字节)
-
-  // 如果密钥长度超过块大小，先哈希
-  let processedKey = key
-  if (key.length > blockSize) {
-    processedKey = sm3(key)
-  }
-
-  // 填充密钥到块大小
-  const paddedKey = processedKey.padEnd(blockSize, '\0')
-
-  // 创建内部和外部填充
-  const ipad = Array.from(paddedKey).map((c) => c.charCodeAt(0) ^ 0x36)
-  const opad = Array.from(paddedKey).map((c) => c.charCodeAt(0) ^ 0x5c)
-
-  // 内部哈希: H(K ⊕ ipad || message)
-  const innerHash = sm3Hash(String.fromCharCode(...ipad) + message)
-
-  // 外部哈希: H(K ⊕ opad || innerHash)
-  const finalHash = sm3Hash(String.fromCharCode(...opad) + innerHash)
-
-  return finalHash
+  // 使用 sm-crypto 库的 hmac 实现，它正确处理 UTF-8 编码
+  return sm3(message, { key, mode: 'hmac' })
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
+import { authFetch } from '@/lib/api-fetch'
 
 const typeOptions = [
   { label: '全部类型', value: '' },
@@ -90,7 +91,6 @@ export default function NotificationManagePage() {
   const fetchNotifications = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('access_token')
       const params = new URLSearchParams({
         page: page.toString(),
         pageSize: pageSize.toString(),
@@ -100,11 +100,7 @@ export default function NotificationManagePage() {
       // 管理页面默认显示所有状态，所以始终传递空字符串
       params.set('status', status)
 
-      const res = await fetch(`/api/notifications?${params}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
-      })
+      const res = await authFetch(`/api/notifications?${params}`)
       const data = await res.json()
       if (data.success) {
         setNotifications(data.data.list)
@@ -138,12 +134,8 @@ export default function NotificationManagePage() {
 
   const handleDelete = async (id: string) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/notifications/${id}`, {
+      const res = await authFetch(`/api/notifications/${id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
       })
       const data = await res.json()
       if (data.success) {
@@ -159,12 +151,8 @@ export default function NotificationManagePage() {
 
   const handlePublish = async (id: string) => {
     try {
-      const token = localStorage.getItem('access_token')
-      const res = await fetch(`/api/notifications/${id}/publish`, {
+      const res = await authFetch(`/api/notifications/${id}/publish`, {
         method: 'PUT',
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        },
       })
       const data = await res.json()
       if (data.success) {
@@ -180,15 +168,13 @@ export default function NotificationManagePage() {
 
   const handleSubmit = async (values: Record<string, unknown>) => {
     try {
-      const token = localStorage.getItem('access_token')
       const url = editingId ? `/api/notifications/${editingId}` : '/api/notifications'
       const method = editingId ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      const res = await authFetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : '',
         },
         body: JSON.stringify(values),
       })

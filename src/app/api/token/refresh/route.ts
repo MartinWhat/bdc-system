@@ -8,7 +8,7 @@ import { signJWT } from '@/lib/auth'
 import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
 import { validateRefreshToken, rotateRefreshToken } from '@/lib/session'
-import { setAuthCookies } from '@/lib/auth/cookies'
+import { setAuthCookies, getRefreshToken } from '@/lib/auth/cookies'
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 import { randomBytes } from 'crypto'
 
@@ -24,8 +24,14 @@ function generateRefreshToken(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}))
-    const { refreshToken } = body
+    // Cookie 模式下从 Cookie 读取 Refresh Token
+    let refreshToken = getRefreshToken(request)
+
+    // 向后兼容：如果 Cookie 中没有，尝试从请求体读取
+    if (!refreshToken) {
+      const body = await request.json().catch(() => ({}))
+      refreshToken = body.refreshToken
+    }
 
     if (!refreshToken) {
       return NextResponse.json(

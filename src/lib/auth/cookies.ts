@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production', // 生产环境仅 HTTPS
-  sameSite: 'strict' as const,
+  sameSite: 'lax' as const, // 允许重定向后发送 Cookie
   path: '/',
   maxAge: 60 * 60 * 24 * 7, // 7 天（秒）
 }
@@ -18,6 +18,27 @@ const COOKIE_OPTIONS = {
 const ACCESS_TOKEN_COOKIE = 'access_token'
 const REFRESH_TOKEN_COOKIE = 'refresh_token'
 const USER_COOKIE = 'user_info'
+
+/**
+ * 从 document.cookie 读取用户信息（客户端专用）
+ * 注意：user_info cookie 不是 httpOnly，所以可以被 JavaScript 读取
+ */
+export function getUserInfoFromClient(): unknown | null {
+  if (typeof document === 'undefined') return null
+
+  const cookies = document.cookie.split(';')
+  for (const cookie of cookies) {
+    const [name, value] = cookie.trim().split('=')
+    if (name === USER_COOKIE && value) {
+      try {
+        return JSON.parse(decodeURIComponent(value))
+      } catch {
+        return null
+      }
+    }
+  }
+  return null
+}
 
 /**
  * 设置 Cookie 到响应中
@@ -75,17 +96,22 @@ export function setAuthCookies(
     maxAge: 60 * 60 * 24 * 7, // 7 天
   })
 
-  // 用户信息 Cookie（非敏感，可不需要 httpOnly）
+  // 用户信息 Cookie（仅存储非敏感基本信息，使用 encodeURIComponent 处理中文）
   const userJson = JSON.stringify(user)
+  const encodedUserJson = encodeURIComponent(userJson)
   // 用户信息存储在客户端，用于 UI 显示
   // 注意：这里不使用 httpOnly，允许前端读取
-  response.cookies.set(USER_COOKIE, userJson, {
+  const userCookieOptions = {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax' as const,
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
-  })
+  }
+  const userCookieString = `${USER_COOKIE}=${encodedUserJson}; Path=${userCookieOptions.path}; SameSite=${userCookieOptions.sameSite}${
+    userCookieOptions.secure ? '; Secure' : ''
+  }${userCookieOptions.maxAge ? `; Max-Age=${userCookieOptions.maxAge}` : ''}`
+  response.headers.append('Set-Cookie', userCookieString)
 }
 
 /**
@@ -109,7 +135,9 @@ export function getUserFromCookie(request: NextRequest): unknown | null {
   const userStr = getCookie(request, USER_COOKIE)
   if (!userStr) return null
   try {
-    return JSON.parse(userStr)
+    // 解码 URL 编码的 Cookie 值
+    const decodedUserStr = decodeURIComponent(userStr)
+    return JSON.parse(decodedUserStr)
   } catch {
     return null
   }

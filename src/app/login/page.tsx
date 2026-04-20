@@ -55,7 +55,11 @@ export default function LoginPage() {
       // 只需保存用户信息到 Zustand store
       setAuth(data.data.user, data.data.expiresIn)
       message.success('登录成功')
-      router.push('/')
+
+      // 等待 Cookie 设置完成再跳转
+      setTimeout(() => {
+        router.push('/')
+      }, 300)
     } catch (error) {
       message.error('登录失败，请检查网络连接')
     } finally {
