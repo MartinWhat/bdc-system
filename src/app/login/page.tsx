@@ -53,7 +53,7 @@ export default function LoginPage() {
 
       // Cookie 模式下，Token 已自动存储在 Cookie 中
       // 只需保存用户信息到 Zustand store
-      setAuth(data.data.user, data.data.expiresIn)
+      setAuth(data.data.user)
       message.success('登录成功')
 
       // 等待 Cookie 设置完成再跳转

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField, generateQueryHash } from '@/lib/gm-crypto'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { generateQueryHash } from '@/lib/gm-crypto/query'
 import { seedTestKeys } from '@/test/helpers'
 
 describe('宅基地管理核心', () => {
@@ -65,7 +66,9 @@ describe('宅基地管理核心', () => {
     const idCardHash = await generateQueryHash('110101199001011234')
 
     const bdcs = await prisma.zjdBdc.findMany({
-      where: { idCardHash },
+      where: {
+        idCardHash: { equals: idCardHash },
+      },
     })
 
     expect(bdcs.length).toBeGreaterThan(0)

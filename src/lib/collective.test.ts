@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField, generateQueryHash } from '@/lib/gm-crypto'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { generateQueryHash } from '@/lib/gm-crypto/query'
 import { seedTestKeys } from '@/test/helpers'
 
 describe('村集体所有权证书管理', () => {

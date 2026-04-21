@@ -6,7 +6,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField, generateQueryHash } from '@/lib/gm-crypto'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { generateQueryHash } from '@/lib/gm-crypto/query'
 import {
   createUser,
   validateUserCredentials,

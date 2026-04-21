@@ -6,6 +6,7 @@
 import { sm3Hmac } from '@/lib/gm-crypto'
 import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
+import { generateQueryHash as generateQueryHashBase } from '@/lib/gm-crypto/encryption'
 
 /**
  * 生成查询哈希（辅助函数）
@@ -14,7 +15,7 @@ import { prisma } from '@/lib/prisma'
  */
 export async function generateQueryHash(value: string): Promise<string> {
   const masterKeyRecord = await getActiveKey('MASTER_KEY')
-  return sm3Hmac(value, masterKeyRecord.keyData)
+  return generateQueryHashBase(value, masterKeyRecord.keyData)
 }
 
 /**
