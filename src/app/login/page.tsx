@@ -12,6 +12,8 @@ import {
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
+import { motion } from 'framer-motion'
+import { SLIDE_UP, SLIDE_DOWN, STAGGER_CONTAINER, BUTTON_VARIANTS } from '@/config/motion'
 
 const { Title, Text } = Typography
 
@@ -132,8 +134,13 @@ export default function LoginPage() {
       {/* 主内容区 */}
       <div className="login-content">
         {/* 左侧品牌区 - 毛玻璃效果 */}
-        <div className="brand-panel">
-          <div className="brand-content">
+        <motion.div className="brand-panel" initial="initial" animate="animate" variants={SLIDE_UP}>
+          <motion.div
+            className="brand-content"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.2, ease: [0.0, 0.0, 0.2, 1] }}
+          >
             <div className="brand-section">
               <div className="brand-logo">
                 <HomeOutlined />
@@ -144,117 +151,186 @@ export default function LoginPage() {
               <Text className="brand-subtitle">宅基地信息综合管理平台</Text>
             </div>
 
-            <div className="slogan-section">
-              <div className="slogan-card">
+            <motion.div
+              className="slogan-section"
+              variants={STAGGER_CONTAINER}
+              initial="initial"
+              animate="animate"
+            >
+              <motion.div className="slogan-card" variants={SLIDE_UP}>
                 <CheckCircleFilled className="slogan-icon" />
                 <div className="slogan-text">依法登记 规范高效</div>
-              </div>
-              <div className="slogan-card">
+              </motion.div>
+              <motion.div className="slogan-card" variants={SLIDE_UP}>
                 <SecurityScanFilled className="slogan-icon" />
                 <div className="slogan-text">权责清晰 管理规范</div>
-              </div>
-              <div className="slogan-card">
+              </motion.div>
+              <motion.div className="slogan-card" variants={SLIDE_UP}>
                 <HomeOutlined className="slogan-icon" />
                 <div className="slogan-text">宅基地信息 一目了然</div>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
-            <div className="brand-footer">
-              <div className="footer-line"></div>
+            <motion.div
+              className="brand-footer"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.6 }}
+            >
+              <div className="footer-line" />
               <Text className="footer-text">专业 · 高效 · 便捷 · 安全</Text>
-            </div>
-          </div>
-        </div>
+            </motion.div>
+          </motion.div>
+        </motion.div>
 
         {/* 右侧登录表单区 */}
         <div className="form-panel">
-          <div
+          <motion.div
             className="login-form-card"
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.3, ease: [0.0, 0.0, 0.2, 1] }}
             style={
               isDark
                 ? { background: token.colorBgContainer, boxShadow: `0 2px 16px rgba(0, 0, 0, 0.4)` }
                 : {}
             }
           >
-            <div className="form-header">
+            <motion.div
+              className="form-header"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.4 }}
+            >
               <Title level={3} className="welcome-title">
                 欢迎登录
               </Title>
               <Text className="welcome-subtitle">请输入您的账号信息进行登录</Text>
-            </div>
+            </motion.div>
 
-            <Form
-              name="login"
-              onFinish={onFinish}
-              autoComplete="off"
-              size="large"
-              layout="vertical"
+            <motion.div
               className="login-form"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.5 }}
             >
-              <Form.Item
-                name="username"
-                label="用户名"
-                rules={[
-                  { required: true, message: '请输入用户名' },
-                  { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
-                ]}
+              <Form
+                name="login"
+                onFinish={onFinish}
+                autoComplete="off"
+                size="large"
+                layout="vertical"
               >
-                <Input
-                  prefix={<UserOutlined />}
-                  placeholder="请输入用户名"
-                  className="custom-input"
-                />
-              </Form.Item>
-
-              <Form.Item
-                name="password"
-                label="密码"
-                rules={[
-                  { required: true, message: '请输入密码' },
-                  { min: 6, message: '密码至少 6 位' },
-                ]}
-              >
-                <Input.Password
-                  prefix={<LockOutlined />}
-                  placeholder="请输入密码"
-                  className="custom-input"
-                />
-              </Form.Item>
-
-              <Form.Item className="form-action">
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={loading}
-                  className="login-btn"
-                  block
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 0.6 }}
                 >
-                  登 录
-                </Button>
-              </Form.Item>
-            </Form>
+                  <Form.Item
+                    name="username"
+                    label="用户名"
+                    rules={[
+                      { required: true, message: '请输入用户名' },
+                      { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
+                    ]}
+                  >
+                    <Input
+                      prefix={<UserOutlined />}
+                      placeholder="请输入用户名"
+                      className="custom-input"
+                    />
+                  </Form.Item>
+                </motion.div>
 
-            <div className="features-section">
-              <div className="feature-item">
+                <motion.div
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.4, delay: 0.7 }}
+                >
+                  <Form.Item
+                    name="password"
+                    label="密码"
+                    rules={[
+                      { required: true, message: '请输入密码' },
+                      { min: 6, message: '密码至少 6 位' },
+                    ]}
+                  >
+                    <Input.Password
+                      prefix={<LockOutlined />}
+                      placeholder="请输入密码"
+                      className="custom-input"
+                    />
+                  </Form.Item>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, delay: 0.8 }}
+                >
+                  <Form.Item className="form-action">
+                    <motion.div whileHover="hover" whileTap="tap" variants={BUTTON_VARIANTS}>
+                      <Button
+                        type="primary"
+                        htmlType="submit"
+                        loading={loading}
+                        className="login-btn"
+                        block
+                      >
+                        登 录
+                      </Button>
+                    </motion.div>
+                  </Form.Item>
+                </motion.div>
+              </Form>
+            </motion.div>
+
+            <motion.div
+              className="features-section"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.9 }}
+            >
+              <motion.div
+                className="feature-item"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 1.0 }}
+              >
                 <CheckCircleFilled className="feature-icon" />
                 <Text className="feature-text">依法登记 规范高效</Text>
-              </div>
-              <div className="feature-item">
+              </motion.div>
+              <motion.div
+                className="feature-item"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.4, delay: 1.1 }}
+              >
                 <SecurityScanFilled className="feature-icon" />
                 <Text className="feature-text">权责清晰 管理规范</Text>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
-            <div className="form-footer">
+            <motion.div
+              className="form-footer"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, delay: 1.2 }}
+            >
               <Text className="default-account">默认账号：admin / admin123</Text>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
 
-          <div className="page-footer">
+          <motion.div
+            className="page-footer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 1.3 }}
+          >
             <Text className="copyright-text">
               © 2024 不动产登记管理系统 版权所有 | 技术支持：XX 市信息中心
             </Text>
-          </div>
+          </motion.div>
         </div>
       </div>
 

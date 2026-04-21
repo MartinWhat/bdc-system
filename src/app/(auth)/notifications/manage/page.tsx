@@ -21,8 +21,10 @@ import {
   DeleteOutlined,
   SendOutlined,
   SearchOutlined,
+  FolderOutlined,
 } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
+import { AttachmentSelector } from '@/components/AttachmentSelector'
 import { authFetch } from '@/lib/api-fetch'
 
 const typeOptions = [
@@ -64,6 +66,7 @@ interface NotificationItem {
   readCount: number
   publishedAt?: string
   createdAt: string
+  pdfUrl?: string
   author: {
     id: string
     realName: string
@@ -83,6 +86,7 @@ export default function NotificationManagePage() {
   const [modalVisible, setModalVisible] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form] = Form.useForm()
+  const [selectorOpen, setSelectorOpen] = useState(false)
 
   useEffect(() => {
     fetchNotifications()
@@ -359,7 +363,7 @@ export default function NotificationManagePage() {
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={640}
+        width={720}
         destroyOnClose
       >
         <Form
@@ -379,6 +383,27 @@ export default function NotificationManagePage() {
           >
             <Input.TextArea rows={6} placeholder="请输入通知内容（支持富文本HTML）" />
           </Form.Item>
+
+          <Form.Item name="pdfUrl" label="PDF 附件">
+            <Space.Compact style={{ width: '100%' }}>
+              <Input placeholder="请输入 PDF 文件 URL（可选）" allowClear style={{ flex: 1 }} />
+              <Button icon={<FolderOutlined />} onClick={() => setSelectorOpen(true)}>
+                从附件库选择
+              </Button>
+            </Space.Compact>
+            <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+              提示：可上传 PDF 文件到附件库后选择，或直接输入外部 PDF 链接
+            </div>
+          </Form.Item>
+
+          <AttachmentSelector
+            open={selectorOpen}
+            onClose={() => setSelectorOpen(false)}
+            onSelect={(url) => {
+              form.setFieldValue('pdfUrl', url)
+            }}
+            fileTypeFilter={['pdf']}
+          />
 
           <Space size="large" style={{ width: '100%' }}>
             <Form.Item name="type" label="类型" initialValue="ANNOUNCEMENT">

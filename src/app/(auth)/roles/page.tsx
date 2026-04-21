@@ -53,6 +53,7 @@ export default function RolesPage() {
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
+  const [targetKeys, setTargetKeys] = useState<string[]>([])
   const [form] = Form.useForm()
 
   // 加载角色列表
@@ -193,13 +194,15 @@ export default function RolesPage() {
             icon={<EditOutlined />}
             onClick={() => {
               setEditingRole(record)
+              const permissionIds = record.permissions.map((p) => p.permission.id)
               form.setFieldsValue({
                 name: record.name,
                 code: record.code,
                 description: record.description,
                 status: record.status,
-                permissionIds: record.permissions.map((p) => p.permission.id),
+                permissionIds,
               })
+              setTargetKeys(permissionIds)
               setModalVisible(true)
             }}
           >
@@ -255,9 +258,10 @@ export default function RolesPage() {
           setModalVisible(false)
           setEditingRole(null)
           form.resetFields()
+          setTargetKeys([])
         }}
         footer={null}
-        width={800}
+        width={900}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
@@ -285,8 +289,18 @@ export default function RolesPage() {
                 key: p.id,
                 title: `${p.name} (${p.code})`,
               }))}
+              targetKeys={targetKeys}
+              onChange={(newTargetKeys) => {
+                const keys = newTargetKeys as string[]
+                setTargetKeys(keys)
+                form.setFieldValue('permissionIds', keys)
+              }}
               titles={['可选权限', '已选权限']}
               render={(item) => item.title}
+              showSearch
+              filterOption={(inputValue, option) => option!.title.indexOf(inputValue) > -1}
+              style={{ width: '100%' }}
+              listStyle={{ width: '100%', height: 300 }}
             />
           </Form.Item>
           <Form.Item>

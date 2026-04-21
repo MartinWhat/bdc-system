@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { signJWT } from '@/lib/auth'
-import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
 import { validateRefreshToken, rotateRefreshToken } from '@/lib/session'
 import { setAuthCookies, getRefreshToken } from '@/lib/auth/cookies'
@@ -13,7 +12,7 @@ import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
 import { randomBytes } from 'crypto'
 
 // Token 配置
-const ACCESS_TOKEN_EXPIRES_IN = 30 * 60 // 30 分钟（秒）
+const ACCESS_TOKEN_EXPIRES_IN = 3600 // 1 小时（秒）
 
 /**
  * 生成新的 Refresh Token
@@ -97,14 +96,8 @@ export async function POST(request: NextRequest) {
       new Set(user.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.code))),
     )
 
-    // 获取 JWT 密钥
-    const jwtKeyRecord = await getActiveKey('JWT_SECRET')
-    if (!jwtKeyRecord || !jwtKeyRecord.keyData) {
-      return NextResponse.json(
-        { error: '认证服务配置错误', code: 'AUTH_CONFIG_ERROR' },
-        { status: 500 },
-      )
-    }
+    // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
+    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
 
     // 签发新的 Access Token
     const newAccessToken = signJWT(
@@ -114,7 +107,7 @@ export async function POST(request: NextRequest) {
         roles,
         permissions,
       },
-      jwtKeyRecord.keyData,
+      jwtKey,
       ACCESS_TOKEN_EXPIRES_IN,
     )
 

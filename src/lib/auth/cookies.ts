@@ -16,6 +16,7 @@ const COOKIE_OPTIONS = {
 
 // Cookie 名称
 const ACCESS_TOKEN_COOKIE = 'access_token'
+const ACCESS_TOKEN_EXP_COOKIE = 'access_token_exp'
 const REFRESH_TOKEN_COOKIE = 'refresh_token'
 const USER_COOKIE = 'user_info'
 
@@ -26,17 +27,22 @@ const USER_COOKIE = 'user_info'
 export function getUserInfoFromClient(): unknown | null {
   if (typeof document === 'undefined') return null
 
+  console.log('[DEBUG cookies] document.cookie:', document.cookie)
   const cookies = document.cookie.split(';')
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split('=')
     if (name === USER_COOKIE && value) {
       try {
-        return JSON.parse(decodeURIComponent(value))
+        const userInfo = JSON.parse(decodeURIComponent(value))
+        console.log('[DEBUG cookies] user_info cookie found:', userInfo)
+        return userInfo
       } catch {
+        console.log('[DEBUG cookies] failed to parse user_info cookie')
         return null
       }
     }
   }
+  console.log('[DEBUG cookies] user_info cookie not found')
   return null
 }
 
@@ -54,7 +60,9 @@ export function setCookie(
     ...options,
   }
 
-  const cookieString = `${name}=${value}; Path=${cookieOptions.path}; SameSite=${cookieOptions.sameSite}; HttpOnly${
+  const cookieString = `${name}=${value}; Path=${cookieOptions.path}; SameSite=${cookieOptions.sameSite}${
+    cookieOptions.httpOnly ? '; HttpOnly' : ''
+  }${
     cookieOptions.secure ? '; Secure' : ''
   }${cookieOptions.maxAge ? `; Max-Age=${cookieOptions.maxAge}` : ''}`
 
@@ -86,14 +94,25 @@ export function setAuthCookies(
   refreshToken: string,
   user: unknown,
 ) {
-  // Access Token Cookie（30 分钟）
+  const accessTokenMaxAge = 3600 // 1 小时（秒）
+  const refreshTokenMaxAge = 60 * 60 * 24 * 7 // 7 天
+
+  // Access Token Cookie（1 小时）
   setCookie(response, ACCESS_TOKEN_COOKIE, accessToken, {
-    maxAge: 30 * 60, // 30 分钟
+    maxAge: accessTokenMaxAge,
+  })
+
+  // Access Token 过期时间（非 httpOnly，供客户端读取用于主动刷新）
+  // 存储 Unix 时间戳（秒）
+  const accessTokenExp = Math.floor(Date.now() / 1000) + accessTokenMaxAge
+  setCookie(response, ACCESS_TOKEN_EXP_COOKIE, String(accessTokenExp), {
+    httpOnly: false, // 允许 JavaScript 读取
+    maxAge: accessTokenMaxAge,
   })
 
   // Refresh Token Cookie（7 天）
   setCookie(response, REFRESH_TOKEN_COOKIE, refreshToken, {
-    maxAge: 60 * 60 * 24 * 7, // 7 天
+    maxAge: refreshTokenMaxAge,
   })
 
   // 用户信息 Cookie（仅存储非敏感基本信息，使用 encodeURIComponent 处理中文）
@@ -106,7 +125,7 @@ export function setAuthCookies(
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
     path: '/',
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: refreshTokenMaxAge,
   }
   const userCookieString = `${USER_COOKIE}=${encodedUserJson}; Path=${userCookieOptions.path}; SameSite=${userCookieOptions.sameSite}${
     userCookieOptions.secure ? '; Secure' : ''
@@ -148,6 +167,7 @@ export function getUserFromCookie(request: NextRequest): unknown | null {
  */
 export function clearAuthCookies(response: NextResponse) {
   deleteCookie(response, ACCESS_TOKEN_COOKIE)
+  deleteCookie(response, ACCESS_TOKEN_EXP_COOKIE)
   deleteCookie(response, REFRESH_TOKEN_COOKIE)
   deleteCookie(response, USER_COOKIE)
 }

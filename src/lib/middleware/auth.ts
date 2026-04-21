@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/auth'
-import { getActiveKey } from '@/lib/kms'
 import { getAccessToken, extractTokenFromHeader } from '@/lib/auth/cookies'
 
 export interface AuthenticatedRequest extends NextRequest {
@@ -57,20 +56,12 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     return NextResponse.json({ error: '未提供认证令牌', code: 'UNAUTHORIZED' }, { status: 401 })
   }
 
-  // 获取 JWT 密钥
+  // 使用环境变量中的 JWT 密钥（避免在 Middleware 中使用 Prisma）
+  const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
+
   try {
-    const jwtKeyRecord = await getActiveKey('JWT_SECRET')
-
-    if (!jwtKeyRecord || !jwtKeyRecord.keyData) {
-      console.error('[Middleware] JWT key not found or empty')
-      return NextResponse.json(
-        { error: '认证服务配置错误', code: 'AUTH_CONFIG_ERROR' },
-        { status: 500 },
-      )
-    }
-
     // 验证 token
-    const payload = verifyJWT(token, jwtKeyRecord.keyData)
+    const payload = verifyJWT(token, jwtKey)
 
     if (!payload) {
       console.log(
@@ -84,7 +75,7 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
 
     console.log('[Middleware] Token verified successfully for user:', payload.username)
 
-    // 创建响应并注入用户信息到请求头（使用 encodeURIComponent 处理中文等非ASCII字符）
+    // 创建响应并注入用户信息到请求头（使用 encodeURIComponent 处理中文等非 ASCII 字符）
     const response = NextResponse.next()
     response.headers.set('x-user-id', payload.sub)
     response.headers.set('x-username', encodeURIComponent(payload.username))

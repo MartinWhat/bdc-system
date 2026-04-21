@@ -3,7 +3,14 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, Typography, Tag, Space, Button, Spin } from 'antd'
-import { ArrowLeftOutlined, CalendarOutlined, UserOutlined, EyeOutlined } from '@ant-design/icons'
+import {
+  ArrowLeftOutlined,
+  CalendarOutlined,
+  UserOutlined,
+  EyeOutlined,
+  FilePdfOutlined,
+  DownloadOutlined,
+} from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
 import { authFetch } from '@/lib/api-fetch'
 
@@ -38,6 +45,7 @@ interface NotificationDetail {
   status: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
   isPopup: boolean
   isPinned: boolean
+  pdfUrl?: string
   readCount: number
   publishedAt?: string
   createdAt: string
@@ -171,6 +179,41 @@ export default function NotificationDetailPage() {
               color: 'rgba(0, 0, 0, 0.85)',
             }}
           />
+
+          {notification.pdfUrl && (
+            <div
+              style={{
+                marginTop: 32,
+                paddingTop: 24,
+                borderTop: '1px solid #f0f0f0',
+              }}
+            >
+              <Title level={5} style={{ marginBottom: 16 }}>
+                <FilePdfOutlined style={{ marginRight: 8 }} />
+                附件 PDF
+              </Title>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <div
+                  style={{
+                    border: '1px solid #d9d9d9',
+                    borderRadius: 4,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <iframe
+                    src={notification.pdfUrl}
+                    width="100%"
+                    height="600px"
+                    style={{ border: 'none' }}
+                    title="PDF 预览"
+                  />
+                </div>
+                <Button href={notification.pdfUrl} target="_blank" icon={<DownloadOutlined />}>
+                  下载 PDF
+                </Button>
+              </Space>
+            </div>
+          )}
         </div>
       </Card>
 

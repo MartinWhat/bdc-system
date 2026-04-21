@@ -15,6 +15,8 @@ import {
   HistoryOutlined,
   KeyOutlined,
   SettingOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -101,34 +103,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
-  // 动态更新 Sider Trigger 样式
-  useEffect(() => {
-    const updateSiderTriggerStyle = () => {
-      const trigger = document.querySelector('.ant-layout-sider-trigger') as HTMLElement
-      if (trigger) {
-        trigger.style.background = isDark ? token.colorBgContainer : '#fff'
-        trigger.style.color = token.colorText
-        trigger.style.borderTop = isDark ? `1px solid ${token.colorBorderSecondary}` : 'none'
-        const icon = trigger.querySelector('.anticon') as HTMLElement
-        if (icon) {
-          icon.style.color = token.colorText
-        }
-      }
-    }
-
-    // 初始设置
-    setTimeout(updateSiderTriggerStyle, 0)
-
-    // 监听 collapsed 变化后更新
-    const observer = new MutationObserver(updateSiderTriggerStyle)
-    const sider = document.querySelector('.ant-layout-sider')
-    if (sider) {
-      observer.observe(sider, { attributes: true, attributeFilter: ['class'] })
-    }
-
-    return () => observer.disconnect()
-  }, [isDark, token])
-
   // 从 Cookie 加载用户信息
   useEffect(() => {
     const userInfo = getUserInfoFromClient()
@@ -138,6 +112,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       router.push('/login')
     }
   }, [router, setAuth])
+
+  // 启动主动刷新定时器
+  useEffect(() => {
+    if (!user) return
+
+    import('@/lib/token-expiry').then(({ startTokenExpiryTimer, initTokenExpirySync }) => {
+      startTokenExpiryTimer()
+      const cleanup = initTokenExpirySync()
+      return cleanup
+    })
+  }, [user])
 
   const handleLogout = async () => {
     try {
@@ -168,7 +153,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
       <Sider
-        collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
         breakpoint="lg"
@@ -177,6 +161,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           background: isDark ? token.colorBgContainer : '#fff',
           borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
         }}
+        trigger={null}
       >
         <div
           style={{
@@ -213,9 +198,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
-            不动产证书管理系统
-          </Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span
+              onClick={() => setCollapsed(!collapsed)}
+              style={{ fontSize: 18, cursor: 'pointer', color: token.colorText }}
+            >
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </span>
+            <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
+              不动产证书管理系统
+            </Title>
+          </div>
           <Dropdown menu={{ items: userMenuItems }}>
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Avatar icon={<UserOutlined />} />

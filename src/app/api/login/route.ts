@@ -12,7 +12,6 @@ import {
 } from '@/lib/auth/user-service'
 import { signJWT } from '@/lib/auth'
 import { createSession } from '@/lib/session'
-import { getActiveKey } from '@/lib/kms'
 import { logOperation } from '@/lib/log'
 import { setAuthCookies } from '@/lib/auth/cookies'
 import { checkRateLimit, getClientIdentifier, resetRateLimit } from '@/lib/rate-limit'
@@ -28,7 +27,7 @@ const loginSchema = z.object({
 })
 
 // Token 配置
-const ACCESS_TOKEN_EXPIRES_IN = 30 * 60 // 30 分钟（秒）
+const ACCESS_TOKEN_EXPIRES_IN = 3600 // 1 小时（秒）
 const REFRESH_TOKEN_EXPIRES_IN_DAYS = 7 // 7 天
 
 /**
@@ -101,8 +100,8 @@ export async function POST(request: NextRequest) {
     const roles = await getUserRoles(user.id)
     const permissions = await getUserPermissions(user.id)
 
-    // 获取 JWT 密钥
-    const jwtKeyRecord = await getActiveKey('JWT_SECRET')
+    // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
+    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
 
     // 签发 Access Token（30 分钟）
     const accessToken = signJWT(
@@ -112,7 +111,7 @@ export async function POST(request: NextRequest) {
         roles,
         permissions,
       },
-      jwtKeyRecord.keyData,
+      jwtKey,
       ACCESS_TOKEN_EXPIRES_IN,
     )
 

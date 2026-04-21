@@ -1,5 +1,7 @@
 import React from 'react'
 import { Typography, Card, Spin, Empty, Skeleton, theme } from 'antd'
+import { motion } from 'framer-motion'
+import { PAGE_TRANSITION, PULSE } from '@/config/motion'
 import type { ReactNode } from 'react'
 
 const { Title } = Typography
@@ -40,6 +42,8 @@ interface PageContainerProps {
         /** 段落配置 */
         paragraph?: { rows: number }
       }
+  /** 是否禁用页面进入动画 */
+  disableAnimation?: boolean
 }
 
 /**
@@ -60,6 +64,7 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   contentStyle,
   dataSource,
   skeleton = false,
+  disableAnimation = false,
 }) => {
   const { token } = theme.useToken()
 
@@ -116,11 +121,23 @@ export const PageContainer: React.FC<PageContainerProps> = ({
           {skeleton ? (
             <Skeleton {...skeletonConfig} style={{ width: '100%', maxWidth: 800 }} />
           ) : (
-            <Spin size="large" tip="加载中..." />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Spin size="large" tip="加载中..." />
+            </motion.div>
           )}
         </div>
       ) : isEmpty ? (
-        <Empty description={emptyDescription} style={{ padding: '60px 0' }} />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <Empty description={emptyDescription} style={{ padding: '60px 0' }} />
+        </motion.div>
       ) : (
         children
       )}
@@ -131,7 +148,21 @@ export const PageContainer: React.FC<PageContainerProps> = ({
     return <Card style={{ margin: '24px 16px', ...cardStyle }}>{content}</Card>
   }
 
-  return content
+  if (disableAnimation) {
+    return content
+  }
+
+  return (
+    <motion.div
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      variants={PAGE_TRANSITION}
+      style={{ height: '100%' }}
+    >
+      {content}
+    </motion.div>
+  )
 }
 
 export default PageContainer

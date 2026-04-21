@@ -21,6 +21,7 @@ const updateNotificationSchema = z.object({
   validFrom: z.string().datetime().nullable().optional(),
   validUntil: z.string().datetime().nullable().optional(),
   isPinned: z.boolean().optional(),
+  pdfUrl: z.string().url().nullable().optional().or(z.literal('')),
 })
 
 // GET - 获取通知详情
@@ -30,15 +31,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const notification = await prisma.notification.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        type: true,
+        priority: true,
+        status: true,
+        isPopup: true,
+        popupStartAt: true,
+        popupEndAt: true,
+        validFrom: true,
+        validUntil: true,
+        isPinned: true,
+        pdfUrl: true,
+        readCount: true,
+        publishedAt: true,
+        createdAt: true,
+        updatedAt: true,
         author: {
           select: {
             id: true,
             realName: true,
           },
-        },
-        _count: {
-          select: { readRecords: true },
         },
       },
     })
@@ -141,6 +156,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       updateData.validUntil = validationResult.data.validUntil
         ? new Date(validationResult.data.validUntil)
         : null
+    }
+    if (validationResult.data.pdfUrl !== undefined) {
+      updateData.pdfUrl = validationResult.data.pdfUrl || null
     }
 
     const notification = await prisma.notification.update({

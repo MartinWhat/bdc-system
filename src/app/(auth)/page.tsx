@@ -7,6 +7,7 @@ import { UserOutlined, HomeOutlined, FileTextOutlined, BarChartOutlined } from '
 import PageContainer from '@/components/PageContainer'
 import NotificationCard from '@/components/notifications/NotificationCard'
 import NotificationPopup from '@/components/notifications/NotificationPopup'
+import { MotionCard, MotionContainer } from '@/components/motion'
 
 const { Text } = Typography
 
@@ -17,35 +18,39 @@ export default function DashboardPage() {
   const displayName = user?.realName || user?.username || '加载中...'
 
   return (
-    <PageContainer title="工作台" subTitle={`欢迎回来，${displayName}`}>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card hoverable>
-            <Statistic title="用户总数" value={0} prefix={<UserOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card hoverable>
-            <Statistic title="宅基地档案" value={0} prefix={<HomeOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card hoverable>
-            <Statistic title="领证记录" value={0} prefix={<FileTextOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card hoverable>
-            <Statistic title="待处理事项" value={0} prefix={<BarChartOutlined />} />
-          </Card>
-        </Col>
-      </Row>
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
-          <NotificationCard />
-        </Col>
-      </Row>
-      <NotificationPopup />
-    </PageContainer>
+    <MotionContainer>
+      <PageContainer title="工作台" subTitle={`欢迎回来，${displayName}`}>
+        <Row gutter={[16, 16]}>
+          <Col xs={24} sm={12} lg={6}>
+            <MotionCard>
+              <Statistic title="用户总数" value={0} prefix={<UserOutlined />} />
+            </MotionCard>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <MotionCard>
+              <Statistic title="宅基地档案" value={0} prefix={<HomeOutlined />} />
+            </MotionCard>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <MotionCard>
+              <Statistic title="领证记录" value={0} prefix={<FileTextOutlined />} />
+            </MotionCard>
+          </Col>
+          <Col xs={24} sm={12} lg={6}>
+            <MotionCard>
+              <Statistic title="待处理事项" value={0} prefix={<BarChartOutlined />} />
+            </MotionCard>
+          </Col>
+        </Row>
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+          <Col xs={24} lg={12}>
+            <MotionCard>
+              <NotificationCard />
+            </MotionCard>
+          </Col>
+        </Row>
+        <NotificationPopup />
+      </PageContainer>
+    </MotionContainer>
   )
 }

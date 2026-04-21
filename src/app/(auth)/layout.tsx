@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Layout, Menu, Typography, Avatar, Dropdown, Modal, theme } from 'antd'
 import type { MenuProps } from 'antd'
+import { motion } from 'framer-motion'
 import {
   UserOutlined,
   TeamOutlined,
@@ -15,6 +16,9 @@ import {
   HistoryOutlined,
   BellOutlined,
   ContactsOutlined,
+  FolderOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -60,6 +64,11 @@ const ALL_MENU_ITEMS: MenuProps['items'] = [
     key: '/notifications',
     icon: <BellOutlined />,
     label: '通知公告',
+  },
+  {
+    key: '/attachments',
+    icon: <FolderOutlined />,
+    label: '附件库',
   },
   {
     key: '/contacts',
@@ -154,35 +163,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
-  // 动态更新 Sider Trigger 样式
-  useEffect(() => {
-    const updateSiderTriggerStyle = () => {
-      const trigger = document.querySelector('.ant-layout-sider-trigger') as HTMLElement
-      if (trigger) {
-        trigger.style.background = isDark ? token.colorBgContainer : '#fff'
-        trigger.style.color = token.colorText
-        trigger.style.borderTop = isDark ? `1px solid ${token.colorBorderSecondary}` : 'none'
-        const icon = trigger.querySelector('.anticon') as HTMLElement
-        if (icon) {
-          icon.style.color = token.colorText
-        }
-      }
-    }
-
-    // 初始设置
-    setTimeout(updateSiderTriggerStyle, 0)
-
-    // 监听 collapsed 变化后更新
-    const observer = new MutationObserver(updateSiderTriggerStyle)
-    const sider = document.querySelector('.ant-layout-sider')
-    if (sider) {
-      observer.observe(sider, { attributes: true, attributeFilter: ['class'] })
-    }
-
-    return () => observer.disconnect()
-  }, [isDark, token])
-
-  // 拦截 fetch 检测 401
+  // 从 Cookie 加载用户信息（同步）
   useEffect(() => {
     const originalFetch = window.fetch
 
@@ -216,14 +197,35 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   // 从 Cookie 加载用户信息（同步）
   useEffect(() => {
+    console.log('[DEBUG layout] user loading effect running')
     const userInfo = getUserInfoFromClient()
+    console.log('[DEBUG layout] getUserInfoFromClient result:', userInfo)
     if (userInfo) {
+      console.log('[DEBUG layout] setting auth with userInfo')
       setAuth(userInfo as any)
     } else {
+      console.log('[DEBUG layout] no userInfo, redirecting to login')
       router.push('/login')
     }
     setLoading(false)
   }, [router, setAuth])
+
+  // 启动主动刷新定时器
+  useEffect(() => {
+    console.log('[DEBUG layout] token refresh effect running, user:', user)
+    if (!user) {
+      console.log('[DEBUG layout] user is null, NOT starting timer')
+      return
+    }
+
+    console.log('[DEBUG layout] user found, importing token-expiry...')
+    import('@/lib/token-expiry').then(({ startTokenExpiryTimer, initTokenExpirySync }) => {
+      console.log('[DEBUG layout] token-expiry loaded, starting timer')
+      startTokenExpiryTimer()
+      const cleanup = initTokenExpirySync()
+      return cleanup
+    })
+  }, [user])
 
   const handleReLoginConfirm = useCallback(() => {
     setReLoginModalVisible(false)
@@ -271,7 +273,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
       <Sider
-        collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
         breakpoint="lg"
@@ -280,6 +281,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           background: isDark ? token.colorBgContainer : '#fff',
           borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
         }}
+        trigger={null}
       >
         <div
           style={{
@@ -316,17 +318,40 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
-              不动产证书管理系统
-            </Title>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <motion.span
+              onClick={() => setCollapsed(!collapsed)}
+              style={{
+                fontSize: 18,
+                cursor: 'pointer',
+                color: token.colorText,
+                display: 'inline-block',
+              }}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </motion.span>
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
+                不动产证书管理系统
+              </Title>
+            </motion.div>
             <ThemeToggle />
           </div>
           <Dropdown menu={{ items: userMenuItems }}>
-            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <motion.div
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
               <Avatar icon={<UserOutlined />} />
               <span style={{ color: token.colorText }}>{user?.realName || user?.username}</span>
-            </div>
+            </motion.div>
           </Dropdown>
         </Header>
         <Content

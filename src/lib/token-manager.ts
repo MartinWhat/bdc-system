@@ -12,7 +12,9 @@ export const TOKEN_REFRESH_EVENT = 'bdc:token-refresh'
  * 刷新 Access Token（使用 Refresh Token）
  */
 export async function refreshAccessToken(): Promise<boolean> {
+  console.log('[DEBUG token-manager] refreshAccessToken called')
   try {
+    console.log('[DEBUG token-manager] calling /api/token/refresh')
     const response = await fetch('/api/token/refresh', {
       method: 'POST',
       headers: {
@@ -21,11 +23,14 @@ export async function refreshAccessToken(): Promise<boolean> {
       credentials: 'include', // 自动发送 Cookie（包含 Refresh Token）
     })
 
+    console.log('[DEBUG token-manager] response status:', response.status)
+
     if (!response.ok) {
       console.error('Token refresh failed:', response.status)
       return false
     }
 
+    console.log('[DEBUG token-manager] refresh success, dispatching event')
     // 触发刷新事件通知其他模块（仅浏览器环境）
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent(TOKEN_REFRESH_EVENT))

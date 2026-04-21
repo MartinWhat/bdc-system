@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -439,6 +438,7 @@ model Notification {
   validFrom    DateTime?
   validUntil   DateTime?
   isPinned     Boolean              @default(false)
+  pdfUrl       String? // PDF 附件 URL
   authorId     String
   author       SysUser              @relation(fields: [authorId], references: [id])
   readCount    Int                  @default(0)
@@ -464,4 +464,19 @@ model NotificationRead {
   @@unique([notificationId, userId])
   @@index([userId])
   @@map("notification_read")
+}
+
+// 附件库
+model Attachment {
+  id         String   @id @default(cuid())
+  name       String   // 原始文件名
+  url        String   // 文件访问 URL
+  fileType   String   // 文件类型：pdf, doc, docx, xls, xlsx 等
+  fileSize   Int?     // 文件大小（字节）
+  uploadedBy String   // 上传人 ID
+  createdAt  DateTime @default(now())
+
+  @@index([fileType])
+  @@index([uploadedBy])
+  @@map("attachment")
 }

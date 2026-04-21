@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from './jwt'
-import { getActiveKey } from '@/lib/kms'
 import { getAccessToken } from './cookies'
 
 export interface AuthenticatedUser {
@@ -37,11 +36,11 @@ export async function getCurrentUser(request: NextRequest): Promise<Authenticate
       return null
     }
 
-    // 获取 JWT 密钥
-    const jwtKeyRecord = await getActiveKey('JWT_SECRET')
+    // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
+    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
 
     // 验证 token
-    const payload = verifyJWT(token, jwtKeyRecord.keyData)
+    const payload = verifyJWT(token, jwtKey)
     if (!payload) {
       return null
     }

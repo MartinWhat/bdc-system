@@ -19,6 +19,7 @@ const createNotificationSchema = z.object({
   validFrom: z.string().datetime().optional(),
   validUntil: z.string().datetime().optional(),
   isPinned: z.boolean().default(false),
+  pdfUrl: z.string().url().optional().or(z.literal('')),
 })
 
 // GET - 获取通知列表
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest) {
           validFrom: true,
           validUntil: true,
           isPinned: true,
+          pdfUrl: true,
           readCount: true,
           publishedAt: true,
           createdAt: true,
@@ -156,6 +158,7 @@ export async function POST(request: NextRequest) {
       validFrom,
       validUntil,
       isPinned,
+      pdfUrl,
     } = validationResult.data
 
     const notification = await prisma.notification.create({
@@ -170,6 +173,7 @@ export async function POST(request: NextRequest) {
         validFrom: validFrom ? new Date(validFrom) : null,
         validUntil: validUntil ? new Date(validUntil) : null,
         isPinned,
+        pdfUrl: pdfUrl || null,
         status: 'DRAFT',
         authorId,
       },
