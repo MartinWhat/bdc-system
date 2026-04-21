@@ -143,7 +143,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        theme={isDark ? 'dark' : 'light'}
+        breakpoint="lg"
+        width={200}
         style={{
           background: isDark ? token.colorBgContainer : '#fff',
           borderRight: isDark ? `1px solid ${token.colorBorderSecondary}` : 'none',
@@ -168,7 +169,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           items={menuItems}
           onClick={({ key }) => router.push(key)}
           style={{
-            background: isDark ? token.colorBgContainer : undefined,
+            background: 'transparent',
             borderInlineEnd: 'none',
           }}
         />
