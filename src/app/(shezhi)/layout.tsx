@@ -101,6 +101,34 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
+  // 动态更新 Sider Trigger 样式
+  useEffect(() => {
+    const updateSiderTriggerStyle = () => {
+      const trigger = document.querySelector('.ant-layout-sider-trigger') as HTMLElement
+      if (trigger) {
+        trigger.style.background = isDark ? token.colorBgContainer : '#fff'
+        trigger.style.color = token.colorText
+        trigger.style.borderTop = isDark ? `1px solid ${token.colorBorderSecondary}` : 'none'
+        const icon = trigger.querySelector('.anticon') as HTMLElement
+        if (icon) {
+          icon.style.color = token.colorText
+        }
+      }
+    }
+
+    // 初始设置
+    setTimeout(updateSiderTriggerStyle, 0)
+
+    // 监听 collapsed 变化后更新
+    const observer = new MutationObserver(updateSiderTriggerStyle)
+    const sider = document.querySelector('.ant-layout-sider')
+    if (sider) {
+      observer.observe(sider, { attributes: true, attributeFilter: ['class'] })
+    }
+
+    return () => observer.disconnect()
+  }, [isDark, token])
+
   // 从 Cookie 加载用户信息
   useEffect(() => {
     const userInfo = getUserInfoFromClient()
