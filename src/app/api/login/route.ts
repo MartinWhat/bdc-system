@@ -14,7 +14,15 @@ import { signJWT } from '@/lib/auth'
 import { createSession } from '@/lib/session'
 import { logOperation } from '@/lib/log'
 import { setAuthCookies } from '@/lib/auth/cookies'
-import { checkRateLimit, getClientIdentifier, resetRateLimit } from '@/lib/rate-limit'
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  resetRateLimit,
+  isAccountLocked,
+  recordLoginFailure,
+  clearLoginFailure,
+} from '@/lib/rate-limit'
+import { AUTH_CONFIG } from '@/lib/auth/config'
 import { z } from 'zod'
 import { randomBytes } from 'crypto'
 
@@ -25,10 +33,6 @@ const loginSchema = z.object({
   // 双因素验证码（二期实现，一期暂不使用）
   twoFactorCode: z.string().optional(),
 })
-
-// Token 配置
-const ACCESS_TOKEN_EXPIRES_IN = 3600 // 1 小时（秒）
-const REFRESH_TOKEN_EXPIRES_IN_DAYS = 7 // 7 天
 
 /**
  * 生成 Refresh Token（使用加密安全的随机数）
@@ -55,6 +59,20 @@ export async function POST(request: NextRequest) {
 
     const { username, password } = validationResult.data
 
+    // 检查账户是否被锁定
+    const lockoutStatus = isAccountLocked(username)
+    if (lockoutStatus.locked) {
+      const remainingSeconds = Math.ceil((lockoutStatus.lockedUntil! - Date.now()) / 1000)
+      return NextResponse.json(
+        {
+          error: `账户已被锁定，请 ${Math.ceil(remainingSeconds / 60)} 分钟后再试`,
+          code: 'ACCOUNT_LOCKED',
+          retryAfter: remainingSeconds,
+        },
+        { status: 423 }, // 423 Locked
+      )
+    }
+
     // 速率限制检查（基于用户名）
     const loginRateLimit = checkRateLimit(username, 'LOGIN')
     if (!loginRateLimit.allowed) {
@@ -75,6 +93,8 @@ export async function POST(request: NextRequest) {
     const user = await validateUserCredentials(username, password)
 
     if (!user) {
+      // 记录登录失败
+      recordLoginFailure(username)
       return NextResponse.json(
         { error: '用户名或密码错误', code: 'INVALID_CREDENTIALS' },
         { status: 401 },
@@ -101,10 +121,13 @@ export async function POST(request: NextRequest) {
     const permissions = await getUserPermissions(user.id)
 
     // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
-    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
+    const jwtKey = process.env.JWT_SECRET_KEY
+    if (!jwtKey) {
+      throw new Error('JWT_SECRET_KEY environment variable is required')
+    }
 
-    // 签发 Access Token（30 分钟）
-    const accessToken = signJWT(
+    // 签发 Access Token
+    const accessToken = await signJWT(
       {
         sub: user.id,
         username: user.username,
@@ -112,18 +135,18 @@ export async function POST(request: NextRequest) {
         permissions,
       },
       jwtKey,
-      ACCESS_TOKEN_EXPIRES_IN,
+      AUTH_CONFIG.ACCESS_TOKEN_EXPIRES_IN,
     )
 
-    // 生成 Refresh Token（7 天）
+    // 生成 Refresh Token
     const refreshToken = generateRefreshToken()
 
     // 创建会话（双 Token 机制）
     await createSession(
       user.id,
       refreshToken,
-      0.5, // Access Token 30 分钟
-      REFRESH_TOKEN_EXPIRES_IN_DAYS, // Refresh Token 7 天
+      AUTH_CONFIG.SESSION_ACCESS_TOKEN_HOURS,
+      AUTH_CONFIG.REFRESH_TOKEN_EXPIRES_IN_DAYS,
     )
 
     // 更新最后登录时间
@@ -138,14 +161,15 @@ export async function POST(request: NextRequest) {
       status: 'SUCCESS',
     })
 
-    // 登录成功后重置速率限制
+    // 登录成功后重置速率限制和失败记录
     resetRateLimit(username, 'LOGIN')
+    clearLoginFailure(username)
 
     // 返回登录成功响应（Token 已通过 httpOnly Cookie 存储）
     const response = NextResponse.json({
       success: true,
       data: {
-        expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+        expiresIn: AUTH_CONFIG.ACCESS_TOKEN_EXPIRES_IN,
         user: {
           id: user.id,
           username: user.username,

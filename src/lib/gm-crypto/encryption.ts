@@ -224,7 +224,7 @@ export async function decryptRecordsFields<T extends Record<string, string | und
         decrypted[field] = await decryptSensitiveField(encryptedValue)
       } catch (error) {
         console.error(`Failed to decrypt field ${field}:`, error)
-        decrypted[field] = encryptedValue // 解密失败保留原值
+        decrypted[field] = '[解密失败]'
       }
     }
   }
@@ -248,9 +248,10 @@ export function generateQueryHash(value: string, masterKey: string): string {
  * @param fields - 要加密的字段
  * @returns 加密后的记录数组
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createEncryptionMiddleware<T extends Record<string, any>>(
   records: T[],
   fields: string[],
 ): Promise<T[]> {
-  return encryptRecordsFields(records, fields)
+  return encryptRecordsFields(records, fields) as Promise<T[]>
 }

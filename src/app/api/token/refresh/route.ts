@@ -9,10 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { validateRefreshToken, rotateRefreshToken } from '@/lib/session'
 import { setAuthCookies, getRefreshToken } from '@/lib/auth/cookies'
 import { checkRateLimit, getClientIdentifier } from '@/lib/rate-limit'
+import { AUTH_CONFIG } from '@/lib/auth/config'
 import { randomBytes } from 'crypto'
-
-// Token 配置
-const ACCESS_TOKEN_EXPIRES_IN = 3600 // 1 小时（秒）
 
 /**
  * 生成新的 Refresh Token
@@ -111,7 +109,7 @@ export async function POST(request: NextRequest) {
         permissions,
       },
       jwtKey,
-      ACCESS_TOKEN_EXPIRES_IN,
+      AUTH_CONFIG.ACCESS_TOKEN_EXPIRES_IN,
     )
 
     // 轮换 Refresh Token（安全增强：每次刷新后更换新 Token）
@@ -129,7 +127,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       data: {
-        expiresIn: ACCESS_TOKEN_EXPIRES_IN,
+        expiresIn: AUTH_CONFIG.ACCESS_TOKEN_EXPIRES_IN,
       },
     })
 

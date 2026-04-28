@@ -6,6 +6,7 @@
 import { prisma } from '@/lib/prisma'
 import { generateSessionToken } from '@/lib/auth'
 import { sm3Hash } from '@/lib/gm-crypto'
+import { AUTH_CONFIG } from '@/lib/auth/config'
 import type { SysSession } from '@prisma/client'
 
 /**
@@ -21,15 +22,15 @@ function hashRefreshToken(refreshToken: string): string {
  * 创建新会话（双 Token 机制）
  * @param userId - 用户 ID
  * @param refreshToken - Refresh Token（明文）
- * @param accessTokenExpiresInHours - Access Token 过期时间（小时），默认 0.5 小时（30 分钟）
- * @param refreshTokenExpiresInDays - Refresh Token 过期时间（天），默认 7 天
+ * @param accessTokenExpiresInHours - Access Token 过期时间（小时），默认从 AUTH_CONFIG 读取
+ * @param refreshTokenExpiresInDays - Refresh Token 过期时间（天），默认从 AUTH_CONFIG 读取
  * @returns 会话对象
  */
 export async function createSession(
   userId: string,
   refreshToken: string,
-  accessTokenExpiresInHours: number = 0.5,
-  refreshTokenExpiresInDays: number = 7,
+  accessTokenExpiresInHours: number = AUTH_CONFIG.SESSION_ACCESS_TOKEN_HOURS,
+  refreshTokenExpiresInDays: number = AUTH_CONFIG.REFRESH_TOKEN_EXPIRES_IN_DAYS,
 ) {
   const token = generateSessionToken()
   const expiresAt = new Date()
@@ -98,6 +99,11 @@ export async function validateSession(token: string) {
   })
 
   if (!session) {
+    return null
+  }
+
+  // 检查会话是否已撤销
+  if (session.isRevoked) {
     return null
   }
 
@@ -182,40 +188,43 @@ export async function rotateRefreshToken(
   const oldRefreshTokenHash = hashRefreshToken(oldRefreshToken)
   const newRefreshTokenHash = hashRefreshToken(newRefreshToken)
 
-  // 使用原子更新：WHERE refreshTokenHash = oldHash，防止竞态条件
-  const updatedSession = await prisma.sysSession.updateMany({
-    where: {
-      refreshTokenHash: oldRefreshTokenHash,
-      refreshTokenExpiresAt: {
-        gt: new Date(), // 确保未过期
-      },
-    },
-    data: {
-      refreshTokenHash: newRefreshTokenHash,
-      refreshTokenExpiresAt,
-      lastActivityAt: new Date(),
-    },
-  })
-
-  if (updatedSession.count === 0) {
-    return null
-  }
-
-  // 获取更新后的会话
-  const session = await prisma.sysSession.findFirst({
-    where: {
-      refreshTokenHash: newRefreshTokenHash,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          username: true,
-          realName: true,
-          status: true,
+  // 使用事务确保原子性，防止竞态条件
+  const session = await prisma.$transaction(async (tx) => {
+    // 使用原子更新：WHERE refreshTokenHash = oldHash，防止竞态条件
+    const updatedSession = await tx.sysSession.updateMany({
+      where: {
+        refreshTokenHash: oldRefreshTokenHash,
+        refreshTokenExpiresAt: {
+          gt: new Date(), // 确保未过期
         },
       },
-    },
+      data: {
+        refreshTokenHash: newRefreshTokenHash,
+        refreshTokenExpiresAt,
+        lastActivityAt: new Date(),
+      },
+    })
+
+    if (updatedSession.count === 0) {
+      return null
+    }
+
+    // 获取更新后的会话
+    return tx.sysSession.findFirst({
+      where: {
+        refreshTokenHash: newRefreshTokenHash,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            realName: true,
+            status: true,
+          },
+        },
+      },
+    })
   })
 
   return session
@@ -247,9 +256,22 @@ export async function updateSessionActivity(
  * @param token - 会话令牌
  */
 export async function destroySession(token: string) {
-  await prisma.sysSession.deleteMany({
+  await prisma.sysSession.updateMany({
     where: { token },
+    data: { isRevoked: true, revokedAt: new Date() },
   })
+}
+
+/**
+ * 主动撤销会话（用于黑名单）
+ * @param token - 会话令牌
+ */
+export async function revokeSession(token: string): Promise<boolean> {
+  const result = await prisma.sysSession.updateMany({
+    where: { token, isRevoked: false },
+    data: { isRevoked: true, revokedAt: new Date() },
+  })
+  return result.count > 0
 }
 
 /**
@@ -257,9 +279,23 @@ export async function destroySession(token: string) {
  * @param userId - 用户 ID
  */
 export async function destroyAllUserSessions(userId: string) {
-  await prisma.sysSession.deleteMany({
+  await prisma.sysSession.updateMany({
     where: { userId },
+    data: { isRevoked: true, revokedAt: new Date() },
   })
+}
+
+/**
+ * 主动撤销用户的所有会话
+ * @param userId - 用户 ID
+ * @returns 被撤销的会话数量
+ */
+export async function revokeAllUserSessions(userId: string): Promise<number> {
+  const result = await prisma.sysSession.updateMany({
+    where: { userId, isRevoked: false },
+    data: { isRevoked: true, revokedAt: new Date() },
+  })
+  return result.count
 }
 
 /**
