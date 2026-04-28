@@ -115,15 +115,14 @@ async function seedDefaultAdmin() {
     return
   }
 
-  // 密码加密（bcrypt 异步）
-  const { passwordHash, salt } = await hashUserPassword('admin123')
+  // 密码加密（bcrypt）
+  const passwordHash = await hashUserPassword('admin123')
 
   // 创建用户
   const adminUser = await prisma.sysUser.create({
     data: {
       username: 'admin',
       passwordHash,
-      salt,
       realName: '系统管理员',
       status: 'ACTIVE',
     },

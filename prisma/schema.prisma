@@ -79,7 +79,6 @@ model SysUser {
   id               String             @id @default(cuid())
   username         String             @unique
   passwordHash     String
-  salt             String
   realName         String
   idCard           String?
   idCardHash       String?
@@ -171,10 +170,15 @@ model SysSession {
   lastActivityAt        DateTime?
   deviceFingerprint     String?
 
+  // Token 黑名单（用于主动撤销）
+  isRevoked        Boolean  @default(false)
+  revokedAt        DateTime?
+
   user SysUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([refreshTokenHash])
+  @@index([isRevoked])
   @@map("sys_session")
 }
 
@@ -285,23 +289,78 @@ model ProcessNode {
 }
 
 model Objection {
-  id              String           @id @default(cuid())
+  id              String   @id @default(cuid())
   receiveRecordId String
   objectionType   String
   description     String
-  status          String           @default("PENDING")
+  status          String   @default("PENDING")
   resolveRemark   String?
   resolverId      String?
   resolverName    String?
   resolvedAt      DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  currentWorkflowId String?
+  currentStepOrder  Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
   receiveRecord   ZjdReceiveRecord @relation(fields: [receiveRecordId], references: [id], onDelete: Cascade)
+  tasks           ObjectionTask[]
 
   @@index([receiveRecordId])
   @@index([status])
   @@map("zjd_objection")
 }
+
+// 异议审批流程配置
+model ObjectionWorkflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  steps       ObjectionWorkflowStep[]
+  @@map("objection_workflow")
+}
+
+// 异议审批流程步骤配置
+model ObjectionWorkflowStep {
+  id          String   @id @default(cuid())
+  workflowId  String
+  stepOrder   Int
+  stepName    String
+  stepType    String   // SUBMIT, REVIEW, RE_REVIEW, FINAL
+  approverRole String?
+  isRequired  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  workflow    ObjectionWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  @@index([workflowId])
+  @@map("objection_workflow_step")
+}
+
+// 异议审批任务（运行时）
+model ObjectionTask {
+  id            String    @id @default(cuid())
+  objectionId   String
+  stepId        String
+  stepOrder     Int
+  stepName      String
+  stepType      String
+  status        String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approverId    String?
+  approverName  String?
+  assignedAt    DateTime?
+  approvedAt    DateTime?
+  approveRemark String?
+  createdAt     DateTime  @default(now())
+  objection     Objection @relation(fields: [objectionId], references: [id], onDelete: Cascade)
+  @@index([objectionId])
+  @@index([status])
+  @@map("objection_task")
+}
+
+// Objection 表扩展 - 流程关联字段（在 Objection 模型中添加）
+// currentWorkflowId  String?
+// currentStepOrder    Int      @default(1)
 
 model OperationLog {
   id           String   @id @default(cuid())
@@ -463,6 +522,7 @@ model NotificationRead {
 
   @@unique([notificationId, userId])
   @@index([userId])
+  @@index([notificationId])
   @@map("notification_read")
 }
 

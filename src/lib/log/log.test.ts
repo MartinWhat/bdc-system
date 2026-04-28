@@ -16,7 +16,6 @@ describe('操作日志服务', () => {
       data: {
         username: `log_test_user_${Date.now()}`,
         passwordHash: 'testhash',
-        salt: 'testsalt',
         realName: '日志测试用户',
         status: 'ACTIVE',
         createdBy: 'system',
@@ -136,7 +135,6 @@ describe('日志中间件', () => {
       data: {
         username: `log_middleware_user_${Date.now()}`,
         passwordHash: 'testhash',
-        salt: 'testsalt',
         realName: '日志中间件测试用户',
         status: 'ACTIVE',
         createdBy: 'system',

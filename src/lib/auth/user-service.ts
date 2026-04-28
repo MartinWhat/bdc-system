@@ -21,16 +21,15 @@ export interface CreateUserInput {
 /**
  * 创建新用户
  * @param input - 用户信息
- * @returns 创建的用户对象（不含密码哈希和盐）
+ * @returns 创建的用户对象（不含密码哈希）
  */
 export async function createUser(input: CreateUserInput) {
   // 密码加密（bcrypt）
-  const { passwordHash, salt } = await hashUserPassword(input.password)
+  const passwordHash = await hashUserPassword(input.password)
 
   const createData: {
     username: string
     passwordHash: string
-    salt: string
     realName: string
     email?: string | null
     createdBy: string
@@ -40,7 +39,6 @@ export async function createUser(input: CreateUserInput) {
   } = {
     username: input.username,
     passwordHash,
-    salt,
     realName: input.realName,
     email: input.email,
     createdBy: input.createdBy || 'system',
@@ -122,7 +120,7 @@ export async function validateUserCredentials(username: string, password: string
   }
 
   // 验证密码（bcrypt）
-  const isValid = await validateUserPassword(password, user.passwordHash, user.salt)
+  const isValid = await validateUserPassword(password, user.passwordHash)
 
   if (!isValid) {
     return null

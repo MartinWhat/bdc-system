@@ -169,7 +169,6 @@ export async function PATCH(request: NextRequest) {
       select: {
         id: true,
         passwordHash: true,
-        salt: true,
       },
     })
 
@@ -179,25 +178,20 @@ export async function PATCH(request: NextRequest) {
 
     // 验证原密码
     const { validateUserPassword } = await import('@/lib/auth')
-    const isPasswordValid = validateUserPassword(
-      oldPassword,
-      currentUser.passwordHash,
-      currentUser.salt,
-    )
+    const isPasswordValid = await validateUserPassword(oldPassword, currentUser.passwordHash)
 
     if (!isPasswordValid) {
       return NextResponse.json({ error: '原密码错误', code: 'INVALID_PASSWORD' }, { status: 400 })
     }
 
-    // 加密新密码（bcrypt 异步）
-    const { passwordHash: newHash, salt: newSalt } = await hashUserPassword(newPassword)
+    // 加密新密码（bcrypt）
+    const newHash = await hashUserPassword(newPassword)
 
     // 更新密码
     await prisma.sysUser.update({
       where: { id: user.userId },
       data: {
         passwordHash: newHash,
-        salt: newSalt,
       },
     })
 

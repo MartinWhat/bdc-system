@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { logOperation } from '@/lib/log'
+import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
 // 创建用户验证
@@ -37,7 +38,7 @@ const updateUserSchema = z.object({
 })
 
 // GET - 获取用户列表
-export async function GET(request: NextRequest) {
+async function getUsersHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -100,9 +101,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取用户列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(['user:read'], ['ADMIN'])(getUsersHandler)
 
 // POST - 创建用户
-export async function POST(request: NextRequest) {
+async function createUserHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createUserSchema.safeParse(body)
@@ -128,14 +130,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户名已存在', code: 'USERNAME_EXISTS' }, { status: 409 })
     }
 
-    // 密码加密（bcrypt 异步）
-    const { passwordHash, salt } = await hashUserPassword(password)
+    // 密码加密（bcrypt）
+    const passwordHash = await hashUserPassword(password)
 
     // 构建创建数据
     const createData = {
       username,
       passwordHash,
-      salt,
       realName,
       email: email || null,
       status: 'ACTIVE',
@@ -203,3 +204,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建用户失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(['user:create'], ['ADMIN'])(createUserHandler)
