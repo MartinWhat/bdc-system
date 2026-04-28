@@ -1,15 +1,31 @@
 /**
  * Cookie 管理模块
  * 用于安全地存储 Token（httpOnly + Secure + SameSite）
+ * 用户信息使用 AES-256-GCM 加密，密钥仅存在于服务端
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { encrypt, decrypt } from './crypto'
+
+/**
+ * 加密用户信息（服务端用，AES-256-GCM）
+ */
+export function encodeUserInfo(userInfo: unknown): string {
+  return encrypt(userInfo)
+}
+
+/**
+ * 解密用户信息（服务端用，AES-256-GCM）
+ */
+export function decodeUserInfo(encoded: string): unknown | null {
+  return decrypt(encoded)
+}
 
 // Cookie 配置
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production', // 生产环境仅 HTTPS
-  sameSite: 'lax' as const, // 允许重定向后发送 Cookie
+  sameSite: 'strict' as const, // 增强 CSRF 防护
   path: '/',
   maxAge: 60 * 60 * 24 * 7, // 7 天（秒）
 }
@@ -18,33 +34,7 @@ const COOKIE_OPTIONS = {
 const ACCESS_TOKEN_COOKIE = 'access_token'
 const ACCESS_TOKEN_EXP_COOKIE = 'access_token_exp'
 const REFRESH_TOKEN_COOKIE = 'refresh_token'
-const USER_COOKIE = 'user_info'
-
-/**
- * 从 document.cookie 读取用户信息（客户端专用）
- * 注意：user_info cookie 不是 httpOnly，所以可以被 JavaScript 读取
- */
-export function getUserInfoFromClient(): unknown | null {
-  if (typeof document === 'undefined') return null
-
-  console.log('[DEBUG cookies] document.cookie:', document.cookie)
-  const cookies = document.cookie.split(';')
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split('=')
-    if (name === USER_COOKIE && value) {
-      try {
-        const userInfo = JSON.parse(decodeURIComponent(value))
-        console.log('[DEBUG cookies] user_info cookie found:', userInfo)
-        return userInfo
-      } catch {
-        console.log('[DEBUG cookies] failed to parse user_info cookie')
-        return null
-      }
-    }
-  }
-  console.log('[DEBUG cookies] user_info cookie not found')
-  return null
-}
+export const USER_COOKIE = 'user_info'
 
 /**
  * 设置 Cookie 到响应中
@@ -92,7 +82,7 @@ export function setAuthCookies(
   response: NextResponse,
   accessToken: string,
   refreshToken: string,
-  user: unknown,
+  _user?: unknown, // 保留参数用于向后兼容，但不再使用
 ) {
   const accessTokenMaxAge = 3600 // 1 小时（秒）
   const refreshTokenMaxAge = 60 * 60 * 24 * 7 // 7 天
@@ -115,22 +105,8 @@ export function setAuthCookies(
     maxAge: refreshTokenMaxAge,
   })
 
-  // 用户信息 Cookie（仅存储非敏感基本信息，使用 encodeURIComponent 处理中文）
-  const userJson = JSON.stringify(user)
-  const encodedUserJson = encodeURIComponent(userJson)
-  // 用户信息存储在客户端，用于 UI 显示
-  // 注意：这里不使用 httpOnly，允许前端读取
-  const userCookieOptions = {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax' as const,
-    path: '/',
-    maxAge: refreshTokenMaxAge,
-  }
-  const userCookieString = `${USER_COOKIE}=${encodedUserJson}; Path=${userCookieOptions.path}; SameSite=${userCookieOptions.sameSite}${
-    userCookieOptions.secure ? '; Secure' : ''
-  }${userCookieOptions.maxAge ? `; Max-Age=${userCookieOptions.maxAge}` : ''}`
-  response.headers.append('Set-Cookie', userCookieString)
+  // 注意：user_info Cookie 已废弃，改用 /api/auth/me 接口获取用户信息
+  // 这样可以避免 Cookie 大小限制和 XSS 风险
 }
 
 /**
@@ -154,9 +130,8 @@ export function getUserFromCookie(request: NextRequest): unknown | null {
   const userStr = getCookie(request, USER_COOKIE)
   if (!userStr) return null
   try {
-    // 解码 URL 编码的 Cookie 值
-    const decodedUserStr = decodeURIComponent(userStr)
-    return JSON.parse(decodedUserStr)
+    // 解密 AES-256-GCM 加密的 Cookie 值
+    return decodeUserInfo(userStr)
   } catch {
     return null
   }
@@ -169,7 +144,7 @@ export function clearAuthCookies(response: NextResponse) {
   deleteCookie(response, ACCESS_TOKEN_COOKIE)
   deleteCookie(response, ACCESS_TOKEN_EXP_COOKIE)
   deleteCookie(response, REFRESH_TOKEN_COOKIE)
-  deleteCookie(response, USER_COOKIE)
+  // user_info Cookie 已废弃，不再删除
 }
 
 /**
