@@ -7,6 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { withPermission } from '@/lib/api/withPermission'
+import { getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
+import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 const createBdcSchema = z.object({
@@ -24,11 +28,11 @@ const createBdcSchema = z.object({
 })
 
 // GET - 获取宅基地列表
-export async function GET(request: NextRequest) {
+async function getBdcListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '10')
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '10'), 100)
     const keyword = searchParams.get('keyword') || ''
     const status = searchParams.get('status')
     const villageId = searchParams.get('villageId')
@@ -51,6 +55,14 @@ export async function GET(request: NextRequest) {
         { certNo: { contains: keyword } },
         { address: { contains: keyword } },
       ]
+    }
+
+    // 应用数据权限过滤
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      const filter = await getDataPermissionFilter(userId)
+      const dataWhere = buildBdcWhereClause(filter)
+      Object.assign(where, dataWhere)
     }
 
     const [total, bdcs] = await Promise.all([
@@ -95,9 +107,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取宅基地列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(['bdc:read'], ['ADMIN', 'BDC_MANAGER'])(getBdcListHandler)
 
 // POST - 创建宅基地档案
-export async function POST(request: NextRequest) {
+async function createBdcHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createBdcSchema.safeParse(body)
@@ -136,6 +149,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 构建创建数据
+    const { userId } = getUserFromRequest(request)
     const createData = {
       villageId,
       certNo,
@@ -144,7 +158,7 @@ export async function POST(request: NextRequest) {
       area,
       landUseType,
       status: 'PENDING',
-      createdBy: 'system',
+      createdBy: userId || 'system',
       idCard: '',
       idCardHash: '',
       phone: null as string | null,
@@ -177,6 +191,19 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // 记录操作日志
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      await logOperation({
+        userId,
+        bdcId: bdc.id,
+        action: 'BDC_CREATE',
+        module: 'BDC',
+        description: `创建宅基地档案：${certNo}`,
+        status: 'SUCCESS',
+      })
+    }
+
     return NextResponse.json({
       success: true,
       data: bdc,
@@ -186,3 +213,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建宅基地档案失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(['bdc:create'], ['ADMIN', 'BDC_MANAGER'])(createBdcHandler)

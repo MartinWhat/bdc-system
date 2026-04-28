@@ -97,10 +97,13 @@ export async function POST(request: NextRequest) {
     )
 
     // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
-    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
+    const jwtKey = process.env.JWT_SECRET_KEY
+    if (!jwtKey) {
+      throw new Error('JWT_SECRET_KEY environment variable is required')
+    }
 
     // 签发新的 Access Token
-    const newAccessToken = signJWT(
+    const newAccessToken = await signJWT(
       {
         sub: user.id,
         username: user.username,
@@ -126,8 +129,6 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       data: {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
         expiresIn: ACCESS_TOKEN_EXPIRES_IN,
       },
     })
