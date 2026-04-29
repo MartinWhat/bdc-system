@@ -17,13 +17,12 @@ async function createSystemUser() {
     return
   }
 
-  const { passwordHash, salt } = await hashUserPassword('system-password-not-for-login')
+  const passwordHash = await hashUserPassword('system-password-not-for-login')
 
   await prisma.sysUser.create({
     data: {
       username: 'system',
       passwordHash,
-      salt,
       realName: '系统用户',
       createdBy: 'system',
     },

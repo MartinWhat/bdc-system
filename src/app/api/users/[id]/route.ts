@@ -106,10 +106,35 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       updateData.phoneHash = result.hash
     }
 
-    // 更新用户
-    const user = await prisma.sysUser.update({
+    // 使用事务更新用户信息和角色关联
+    const user = await prisma.$transaction(async (tx) => {
+      const updated = await tx.sysUser.update({
+        where: { id },
+        data: updateData,
+      })
+
+      // 更新角色关联
+      if (roleIds !== undefined) {
+        await tx.userRole.deleteMany({
+          where: { userId: id },
+        })
+
+        if (roleIds.length > 0) {
+          await tx.userRole.createMany({
+            data: roleIds.map((roleId) => ({
+              userId: id,
+              roleId,
+            })),
+          })
+        }
+      }
+
+      return updated
+    })
+
+    // 重新查询用户及其角色
+    const userWithRoles = await prisma.sysUser.findUnique({
       where: { id },
-      data: updateData,
       include: {
         roles: {
           include: {
@@ -119,31 +144,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
-    // 更新角色关联
-    if (roleIds !== undefined) {
-      // 删除旧的角色关联
-      await prisma.userRole.deleteMany({
-        where: { userId: id },
-      })
-
-      // 创建新的角色关联
-      if (roleIds.length > 0) {
-        await Promise.all(
-          roleIds.map((roleId) =>
-            prisma.userRole.create({
-              data: {
-                userId: id,
-                roleId,
-              },
-            }),
-          ),
-        )
-      }
-    }
-
     return NextResponse.json({
       success: true,
-      data: user,
+      data: userWithRoles,
     })
   } catch (error: unknown) {
     console.error('Update user error:', error)

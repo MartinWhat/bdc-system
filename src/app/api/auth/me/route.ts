@@ -6,8 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getUserPermissions, getUserRoles } from '@/lib/auth/user-service'
+import { withPermission } from '@/lib/api/withPermission'
 
-export async function GET(request: NextRequest) {
+// GET /api/auth/me - 获取当前用户信息
+async function getCurrentUserInfoHandler(request: NextRequest) {
   try {
     const userId = request.headers.get('x-user-id')
 
@@ -53,3 +55,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取用户信息失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission()(getCurrentUserInfoHandler)

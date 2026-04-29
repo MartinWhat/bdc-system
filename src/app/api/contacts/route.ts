@@ -6,17 +6,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptSensitiveField } from '@/lib/gm-crypto'
-import { getCurrentUser } from '@/lib/auth/middleware'
+import { withPermission } from '@/lib/api/withPermission'
 
 // GET - 获取通讯录列表
-export async function GET(request: NextRequest) {
+async function getContactsListHandler(request: NextRequest) {
   try {
-    // 验证用户认证
-    const currentUser = await getCurrentUser(request)
-    if (!currentUser) {
-      return NextResponse.json({ error: '未认证', code: 'UNAUTHORIZED' }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const keyword = searchParams.get('keyword') || ''
     const role = searchParams.get('role') || ''
@@ -125,3 +119,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取通讯录失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(
+  ['contact:read'],
+  ['ADMIN', 'CONTACT_MANAGER'],
+)(getContactsListHandler)

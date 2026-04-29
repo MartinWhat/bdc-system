@@ -379,6 +379,8 @@ async function createObjectionRecords() {
         receiveRecordId: record.id,
         objectionType: 'OTHER',
         description: descriptions[i % descriptions.length],
+        contactName: '测试联系人',
+        contactPhone: '13800138000',
         status: 'PENDING',
       },
     })

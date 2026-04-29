@@ -24,7 +24,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   UploadOutlined,
-  ExclamationCircleOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -77,6 +76,9 @@ interface ReceiveRecord {
   hasIdCardFront?: boolean
   hasIdCardBack?: boolean
   hasScenePhoto?: boolean
+  // 异议状态
+  hasObjection?: boolean
+  activeObjectionId?: string | null
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -92,11 +94,9 @@ export default function LingzhengPage() {
   const [loading, setLoading] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
   const [receiveModalVisible, setReceiveModalVisible] = useState(false)
-  const [objectionModalVisible, setObjectionModalVisible] = useState(false)
   const [importModalVisible, setImportModalVisible] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<ReceiveRecord | null>(null)
   const [receiveForm] = Form.useForm()
-  const [objectionForm] = Form.useForm()
   const [importForm] = Form.useForm()
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
@@ -227,43 +227,6 @@ export default function LingzhengPage() {
       }
     } catch (error) {
       console.error('Receive error:', error)
-      message.error('操作失败')
-    }
-  }
-
-  const handleObjection = async (values: { objectionType: string; description: string }) => {
-    if (!selectedRecord) return
-
-    try {
-      const res = await authFetch('/api/objection', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          receiveRecordId: selectedRecord.id,
-          objectionType: values.objectionType,
-          description: values.description,
-        }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
-        }
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-      const data = await res.json()
-      if (data.success) {
-        message.success('异议已登记')
-        setObjectionModalVisible(false)
-        objectionForm.resetFields()
-        loadRecords()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Objection error:', error)
       message.error('操作失败')
     }
   }
@@ -510,9 +473,32 @@ export default function LingzhengPage() {
         render: (date) => dayjs(date).format('YYYY-MM-DD'),
       },
       {
+        title: '异议状态',
+        dataIndex: 'hasObjection',
+        key: 'hasObjection',
+        width: 100,
+        render: (hasObjection: boolean, record: ReceiveRecord) => {
+          if (hasObjection && record.activeObjectionId) {
+            return (
+              <Button
+                type="link"
+                danger
+                size="small"
+                onClick={() => {
+                  window.open(`/objection/${record.activeObjectionId}`, '_blank')
+                }}
+              >
+                异议中
+              </Button>
+            )
+          }
+          return <Tag color="green">正常</Tag>
+        },
+      },
+      {
         title: '操作',
         key: 'action',
-        width: 200,
+        width: 150,
         render: (_, record) => (
           <Space>
             <Button
@@ -525,35 +511,17 @@ export default function LingzhengPage() {
             >
               详情
             </Button>
-            {record.status === 'PENDING' && (
-              <Button size="small" type="primary" onClick={() => handleIssue(record)}>
-                发放
+            {record.status === 'ISSUED' && !record.hasObjection && (
+              <Button
+                size="small"
+                type="primary"
+                onClick={() => {
+                  setSelectedRecord(record)
+                  setReceiveModalVisible(true)
+                }}
+              >
+                领取
               </Button>
-            )}
-            {record.status === 'ISSUED' && (
-              <>
-                <Button
-                  size="small"
-                  type="primary"
-                  onClick={() => {
-                    setSelectedRecord(record)
-                    setReceiveModalVisible(true)
-                  }}
-                >
-                  领取
-                </Button>
-                <Button
-                  size="small"
-                  danger
-                  icon={<ExclamationCircleOutlined />}
-                  onClick={() => {
-                    setSelectedRecord(record)
-                    setObjectionModalVisible(true)
-                  }}
-                >
-                  异议
-                </Button>
-              </>
             )}
           </Space>
         ),
@@ -739,40 +707,6 @@ export default function LingzhengPage() {
             >
               <Button icon={<CameraOutlined />}>{scenePhoto ? '已拍照' : '拍照'}</Button>
             </Upload>
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* 异议模态框 */}
-      <Modal
-        title="登记异议"
-        open={objectionModalVisible}
-        onCancel={() => {
-          setObjectionModalVisible(false)
-          objectionForm.resetFields()
-        }}
-        onOk={() => objectionForm.submit()}
-      >
-        <Form form={objectionForm} layout="vertical" onFinish={handleObjection}>
-          <Form.Item
-            name="objectionType"
-            label="异议类型"
-            rules={[{ required: true, message: '请选择异议类型' }]}
-          >
-            <Select>
-              <Select.Option value="NAME_ERROR">姓名错误</Select.Option>
-              <Select.Option value="ID_CARD_ERROR">身份证错误</Select.Option>
-              <Select.Option value="AREA_ERROR">面积错误</Select.Option>
-              <Select.Option value="OTHER">其他</Select.Option>
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            name="description"
-            label="异议描述"
-            rules={[{ required: true, message: '请输入异议描述' }]}
-          >
-            <Input.TextArea rows={4} placeholder="请详细描述异议内容" />
           </Form.Item>
         </Form>
       </Modal>

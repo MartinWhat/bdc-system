@@ -5,6 +5,7 @@
 
 import { refreshAccessToken, clearTokens } from '@/lib/token-manager'
 import { triggerAuthExpiry } from '@/lib/auth-event'
+import { message } from 'antd'
 
 // 正在刷新 Token 的 Promise（用于防止并发刷新）
 let refreshPromise: Promise<boolean> | null = null
@@ -44,6 +45,17 @@ export async function authFetch(
     ...fetchOptions,
     credentials: 'include', // 自动发送 httpOnly Cookie
   })
+
+  // 处理 403 错误 - 提示权限不足
+  if (response.status === 403) {
+    try {
+      // 使用 clone() 读取错误信息，避免消耗原始 response body
+      const errorData = await response.clone().json()
+      message.error(errorData.error || '权限不足，无法访问该资源')
+    } catch {
+      message.error('权限不足')
+    }
+  }
 
   // 处理 401 错误 - 尝试刷新 Token
   if (response.status === 401) {

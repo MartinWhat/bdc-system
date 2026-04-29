@@ -5,8 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { withPermission } from '@/lib/api/withPermission'
 
-export async function GET(request: NextRequest) {
+// GET /api/permissions - 获取所有权限列表
+async function getPermissionsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
@@ -30,3 +32,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取权限列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(['permission:read'], ['ADMIN'])(getPermissionsListHandler)

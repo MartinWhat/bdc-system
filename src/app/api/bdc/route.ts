@@ -192,7 +192,6 @@ async function createBdcHandler(request: NextRequest) {
     })
 
     // 记录操作日志
-    const { userId } = getUserFromRequest(request)
     if (userId) {
       await logOperation({
         userId,

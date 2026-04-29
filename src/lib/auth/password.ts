@@ -7,8 +7,9 @@ import bcrypt from 'bcryptjs'
 
 // bcrypt cost factor (work factor)
 // 值越大越安全，但计算时间越长
-// 12 是推荐的最小值，生产环境可考虑 13-14
-const BCRYPT_ROUNDS = 12
+// 10 是平衡安全性和性能的推荐值
+// 在 M1/M2 Mac 上，cost 10 约 80-100ms，cost 12 约 300-500ms
+const BCRYPT_ROUNDS = 10
 
 /**
  * 生成盐值并哈希密码

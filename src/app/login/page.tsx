@@ -2,12 +2,15 @@
 
 import { useState } from 'react'
 import { Form, Input, Button, message, Typography, theme } from 'antd'
+import { useEffect } from 'react'
 import {
   UserOutlined,
   LockOutlined,
   HomeOutlined,
   CheckCircleFilled,
   SecurityScanFilled,
+  BulbOutlined,
+  BulbFilled,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -26,8 +29,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { setAuth } = useAuthStore()
-  const { isDark } = useThemeStore()
+  const { isDark, loadFromStorage } = useThemeStore()
   const { token } = theme.useToken()
+
+  useEffect(() => {
+    loadFromStorage()
+  }, [loadFromStorage])
 
   const onFinish = async (values: LoginFields) => {
     setLoading(true)
@@ -129,6 +136,17 @@ export default function LoginPage() {
             ))}
           </g>
         </svg>
+      </div>
+
+      {/* 主题切换按钮 */}
+      <div
+        className="theme-toggle-btn"
+        onClick={() => useThemeStore.getState().toggleTheme()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && useThemeStore.getState().toggleTheme()}
+      >
+        {isDark ? <BulbFilled /> : <BulbOutlined />}
       </div>
 
       {/* 主内容区 */}
@@ -440,6 +458,7 @@ export default function LoginPage() {
           z-index: 1;
           min-height: 100vh;
           display: flex;
+          align-items: stretch;
           padding: 40px 60px;
           gap: 40px;
         }
@@ -455,7 +474,7 @@ export default function LoginPage() {
 
         .brand-content {
           width: 100%;
-          max-width: 520px;
+          max-width: 480px;
           padding: 48px 40px;
           background: rgba(255, 255, 255, 0.1);
           backdrop-filter: blur(20px);
@@ -567,16 +586,20 @@ export default function LoginPage() {
 
         .login-form-card {
           width: 100%;
-          max-width: 420px;
-          padding: 40px 36px;
+          max-width: 480px;
+          min-height: 600px;
+          padding: 48px 40px;
           background: #ffffff;
           border-radius: 3px;
           box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+          display: flex;
+          flex-direction: column;
         }
 
         .form-header {
           text-align: center;
           margin-bottom: 32px;
+          flex-shrink: 0;
         }
 
         .welcome-title {
@@ -593,6 +616,7 @@ export default function LoginPage() {
 
         .login-form {
           margin-bottom: 16px;
+          flex-shrink: 0;
         }
 
         .login-form .ant-form-item-label > label {
@@ -657,7 +681,7 @@ export default function LoginPage() {
           flex-direction: column;
           gap: 12px;
           padding: 20px 0;
-          margin-top: 16px;
+          margin-top: auto;
           border-top: 1px solid #f0f0f0;
         }
 
@@ -681,6 +705,7 @@ export default function LoginPage() {
         .form-footer {
           text-align: center;
           padding-top: 16px;
+          flex-shrink: 0;
         }
 
         .default-account {
@@ -760,6 +785,63 @@ export default function LoginPage() {
 
         .dark-mode .default-account {
           color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* ========== 暗黑模式 - 背景适配 ========== */
+        .dark-mode .fullscreen-bg {
+          background: linear-gradient(135deg, #0d0d14 0%, #12121f 50%, #0a0a12 100%);
+        }
+
+        .dark-mode .float-circle-1,
+        .dark-mode .float-circle-2,
+        .dark-mode .float-circle-3,
+        .dark-mode .float-circle-4,
+        .dark-mode .float-circle-5,
+        .dark-mode .float-circle-6 {
+          opacity: 0.08;
+        }
+
+        .dark-mode .grid-pattern {
+          opacity: 0.02;
+        }
+
+        .dark-mode .copyright-text {
+          color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* ========== 主题切换按钮 ========== */
+        .theme-toggle-btn {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          z-index: 100;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: #ffffff;
+          font-size: 18px;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        }
+
+        .theme-toggle-btn:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .dark-mode .theme-toggle-btn {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(255, 255, 255, 0.08);
+          color: rgba(255, 255, 255, 0.8);
+        }
+
+        .dark-mode .theme-toggle-btn:hover {
+          background: rgba(255, 255, 255, 0.1);
         }
 
         /* ========== 响应式 ========== */

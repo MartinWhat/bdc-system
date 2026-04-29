@@ -6,7 +6,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
+// TODO: XSS 防护需要安装 dompurify
+// import DOMPurify from 'dompurify'
+
+/**
+ * HTML 内容 sanitization（待实现）
+ * 需要安装 dompurify 并在返回 content 前调用:
+ * DOMPurify.sanitize(content, { ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'li'] })
+ */
 
 const createNotificationSchema = z.object({
   title: z.string().min(1, '标题不能为空'),
@@ -23,7 +32,7 @@ const createNotificationSchema = z.object({
 })
 
 // GET - 获取通知列表
-export async function GET(request: NextRequest) {
+async function getNotificationsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -33,10 +42,6 @@ export async function GET(request: NextRequest) {
     const keyword = searchParams.get('keyword') || ''
 
     const where: Record<string, unknown> = {}
-
-    if (type) {
-      where.type = type
-    }
 
     if (type) {
       where.type = type
@@ -104,9 +109,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取通知列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission()(getNotificationsListHandler)
 
 // POST - 创建通知
-export async function POST(request: NextRequest) {
+async function createNotificationHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createNotificationSchema.safeParse(body)
@@ -196,3 +202,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建通知失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(['notification:create'], ['ADMIN'])(createNotificationHandler)

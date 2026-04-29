@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     const existingRecords = await prisma.zjdReceiveRecord.findMany({
       where: {
         bdcId: { in: existingBdcIds },
-        status: { in: ['PENDING', 'ISSUED'] },
+        status: 'ISSUED',
       },
       select: { bdcId: true },
     })
@@ -95,13 +95,14 @@ export async function POST(request: NextRequest) {
     if (recordsToCreate.length > 0) {
       // 使用事务批量创建
       await prisma.$transaction(async (tx) => {
-        // 批量创建领证记录
+        // 批量创建领证记录（导入即已发放状态）
         const createdRecords = await Promise.all(
           recordsToCreate.map((data) =>
             tx.zjdReceiveRecord.create({
               data: {
                 bdcId: data!.bdcId,
-                status: 'PENDING',
+                status: 'ISSUED',
+                issueDate: new Date(),
                 remark: data!.remark,
                 createdBy: operatorId,
               },
@@ -116,11 +117,11 @@ export async function POST(request: NextRequest) {
             return tx.processNode.create({
               data: {
                 receiveRecordId: record.id,
-                nodeType: 'IMPORT',
-                nodeName: '批量导入',
+                nodeType: 'ISSUE',
+                nodeName: '批量导入（已发放）',
                 operatorId,
                 operatorName: '系统',
-                description: `批量导入证书编号：${item?.certNo}`,
+                description: `批量导入证书编号：${item?.certNo}，已自动发放`,
               },
             })
           }),

@@ -43,6 +43,9 @@ export function generateSalt(length: number = 16): string {
  * @param password - 原始密码
  * @param salt - 盐值（可选，不提供则自动生成）
  * @returns { hash: string, salt: string }
+ * @警告 此函数使用 SM3 哈希，不适合密码存储！SM3 是快速哈希函数，无法抵御暴力破解。
+ *       用户密码验证应使用 bcrypt（见 src/lib/auth/password.ts）
+ *       此函数仅保留用于兼容现有数据
  */
 export function encryptPassword(password: string, salt?: string): { hash: string; salt: string } {
   const finalSalt = salt || generateSalt()
@@ -56,6 +59,7 @@ export function encryptPassword(password: string, salt?: string): { hash: string
  * @param storedHash - 存储的哈希值
  * @param salt - 盐值
  * @returns 是否匹配
+ * @警告 此函数使用 SM3 哈希，不适合密码验证！应使用 bcrypt（见 src/lib/auth/password.ts）
  */
 export function verifyPassword(password: string, storedHash: string, salt: string): boolean {
   const { hash } = encryptPassword(password, salt)

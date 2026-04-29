@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { activateKey, archiveKey, deleteKey, getActiveKey } from '@/lib/kms'
+import { activateKey, archiveKey, deleteKey } from '@/lib/kms'
+import { getCurrentUser } from '@/lib/auth/middleware'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -16,6 +17,12 @@ interface Params {
 // GET - 获取密钥详情
 export async function GET(request: NextRequest, { params }: Params) {
   try {
+    // 鉴权检查
+    const user = await getCurrentUser(request)
+    if (!user) {
+      return NextResponse.json({ error: '未认证', code: 'UNAUTHORIZED' }, { status: 401 })
+    }
+
     const { id } = await params
 
     const keyRecord = await prisma.sysKeyVersion.findUnique({

@@ -5,6 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { withPermission } from '@/lib/api/withPermission'
+import { getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter } from '@/lib/auth/data-permission'
 import { z } from 'zod'
 
 const statusSchema = z.object({
@@ -12,7 +15,43 @@ const statusSchema = z.object({
   reason: z.string().optional(),
 })
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * 检查用户是否有权访问指定宅基地记录
+ */
+async function canAccessBdc(
+  request: NextRequest,
+  bdcVillageId: string,
+  bdcCreatedBy?: string,
+): Promise<boolean> {
+  const { userId } = getUserFromRequest(request)
+  if (!userId) return false
+
+  const filter = await getDataPermissionFilter(userId)
+
+  switch (filter.scope) {
+    case 'ALL':
+      return true
+    case 'TOWN':
+      if (!filter.townIds || filter.townIds.length === 0) return false
+      const townVillages = await prisma.sysVillage.findMany({
+        where: { townId: { in: filter.townIds } },
+        select: { id: true },
+      })
+      return townVillages.some((v) => v.id === bdcVillageId)
+    case 'VILLAGE':
+      if (!filter.villageIds || filter.villageIds.length === 0) return false
+      return filter.villageIds.includes(bdcVillageId)
+    case 'SELF':
+      return bdcCreatedBy === userId
+    default:
+      return false
+  }
+}
+
+async function updateBdcStatusHandler(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await params
     const body = await request.json()
@@ -38,6 +77,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json(
         { error: '宅基地档案不存在', code: 'BDC_NOT_FOUND' },
         { status: 404 },
+      )
+    }
+
+    // 检查数据权限
+    const canAccess = await canAccessBdc(request, existingBdc.villageId, existingBdc.createdBy)
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: '无权更新该宅基地状态', code: 'FORBIDDEN' },
+        { status: 403 },
       )
     }
 
@@ -81,3 +129,5 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: '更新状态失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+
+export const PUT = withPermission(['bdc:update'], ['ADMIN', 'BDC_MANAGER'])(updateBdcStatusHandler)

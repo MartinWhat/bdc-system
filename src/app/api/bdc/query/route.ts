@@ -8,8 +8,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getActiveKey } from '@/lib/kms'
 import { sm3Hmac } from '@/lib/gm-crypto'
-import { getUserRoles } from '@/lib/auth/user-service'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
+import { withPermission } from '@/lib/api/withPermission'
+import { getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
 import { z } from 'zod'
 
 const querySchema = z.object({
@@ -17,21 +19,8 @@ const querySchema = z.object({
   phone: z.string().optional(),
 })
 
-export async function GET(request: NextRequest) {
+async function getBdcQueryHandler(request: NextRequest) {
   try {
-    // 权限检查：只有管理员或有 bdc:query 权限的用户可调用
-    const userId = request.headers.get('x-user-id')
-    if (!userId) {
-      return NextResponse.json({ error: '未认证', code: 'UNAUTHORIZED' }, { status: 401 })
-    }
-
-    const roles = await getUserRoles(userId)
-    const hasPermission = roles.includes('ADMIN') || roles.includes('BDC_MANAGER')
-
-    if (!hasPermission) {
-      return NextResponse.json({ error: '权限不足', code: 'FORBIDDEN' }, { status: 403 })
-    }
-
     const { searchParams } = new URL(request.url)
     const idCard = searchParams.get('idCard')
     const phone = searchParams.get('phone')
@@ -58,6 +47,16 @@ export async function GET(request: NextRequest) {
     if (phone) {
       const phoneHash = sm3Hmac(phone, masterKeyRecord.keyData)
       where.phoneHash = phoneHash
+    }
+
+    // 应用数据权限过滤
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      const filter = await getDataPermissionFilter(userId)
+      const dataWhere = buildBdcWhereClause(filter)
+      if (Object.keys(dataWhere).length > 0) {
+        Object.assign(where, dataWhere)
+      }
     }
 
     const bdcs = await prisma.zjdBdc.findMany({
@@ -88,3 +87,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '查询失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+
+// 使用 withPermission 包装 GET 方法，要求 ADMIN 或 BDC_MANAGER 角色
+export const GET = withPermission([], ['ADMIN', 'BDC_MANAGER'])(getBdcQueryHandler)

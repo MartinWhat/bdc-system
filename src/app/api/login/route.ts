@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 验证用户凭据
+    // 验证用户凭据（包含角色和权限信息）
     const user = await validateUserCredentials(username, password)
 
     if (!user) {
@@ -116,9 +116,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取用户角色和权限
-    const roles = await getUserRoles(user.id)
-    const permissions = await getUserPermissions(user.id)
+    // 从已查询的用户数据中提取角色和权限（避免重复查询）
+    const roles = user.roles.map((ur) => ur.role.code)
+    const permissions = new Set<string>()
+    for (const userRole of user.roles) {
+      for (const rolePerm of userRole.role.permissions) {
+        permissions.add(rolePerm.permission.code)
+      }
+    }
+    const permissionList = Array.from(permissions)
 
     // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
     const jwtKey = process.env.JWT_SECRET_KEY
@@ -132,7 +138,7 @@ export async function POST(request: NextRequest) {
         sub: user.id,
         username: user.username,
         roles,
-        permissions,
+        permissions: permissionList,
       },
       jwtKey,
       AUTH_CONFIG.ACCESS_TOKEN_EXPIRES_IN,
@@ -177,7 +183,7 @@ export async function POST(request: NextRequest) {
           email: user.email,
           avatar: user.avatar,
           roles,
-          permissions,
+          permissions: permissionList,
         },
       },
     })
@@ -190,7 +196,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       avatar: user.avatar,
       roles,
-      permissions,
+      permissions: permissionList,
     })
 
     return response

@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptSensitiveField, encryptSensitiveField } from '@/lib/gm-crypto'
-import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
@@ -58,22 +57,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let phone = cert.phone
 
     if (idCard) {
-      try {
-        const decrypted = await decryptSensitiveField(idCard)
-        // 详情页显示完整身份证号，仅对非管理员脱敏
-        idCard = decrypted
-      } catch {
-        idCard = '解密失败'
-      }
+      idCard = await decryptSensitiveField(idCard)
     }
 
     if (phone) {
-      try {
-        const decrypted = await decryptSensitiveField(phone)
-        phone = decrypted
-      } catch {
-        phone = '解密失败'
-      }
+      phone = await decryptSensitiveField(phone)
     }
 
     return NextResponse.json({

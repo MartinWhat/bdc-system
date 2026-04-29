@@ -10,6 +10,7 @@ import { encryptSensitiveField, sm4Decrypt } from '@/lib/gm-crypto'
 import { getActiveKey } from '@/lib/kms'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { getCurrentUserId } from '@/lib/auth/middleware'
+import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
 // 创建证书验证 schema
@@ -33,7 +34,7 @@ const createCertSchema = z.object({
 })
 
 // GET - 获取证书列表
-export async function GET(request: NextRequest) {
+async function getCollectiveListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -118,7 +119,7 @@ export async function GET(request: NextRequest) {
           const [iv, ciphertext] = encrypted.split(':')
           return sm4Decrypt(ciphertext, sm4Key, iv)
         } catch {
-          return '解密失败'
+          throw new Error(`身份证解密失败: ${encrypted.substring(0, 20)}...`)
         }
       })
 
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest) {
           const [iv, ciphertext] = encrypted.split(':')
           return sm4Decrypt(ciphertext, sm4Key, iv)
         } catch {
-          return '解密失败'
+          throw new Error(`手机号解密失败: ${encrypted.substring(0, 20)}...`)
         }
       })
     }
@@ -162,9 +163,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取证书列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(
+  ['collective:read'],
+  ['ADMIN', 'COLLECTIVE_MANAGER'],
+)(getCollectiveListHandler)
 
 // POST - 创建证书（入库申请）
-export async function POST(request: NextRequest) {
+async function createCollectiveCertHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createCertSchema.safeParse(body)
@@ -274,3 +279,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建证书失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(
+  ['collective:create'],
+  ['ADMIN', 'COLLECTIVE_MANAGER'],
+)(createCollectiveCertHandler)

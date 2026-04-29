@@ -5,8 +5,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { withPermission } from '@/lib/api/withPermission'
 
-export async function GET(request: NextRequest) {
+// GET /api/stats - 获取综合统计数据（仪表盘用）
+async function getStatsHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const townId = searchParams.get('townId')
@@ -94,8 +96,9 @@ export async function GET(request: NextRequest) {
     const pendingCertApprove = await prisma.collectiveCert.count({
       where: { ...baseWhere, status: 'PENDING_APPROVE' },
     })
+    // 待领取：已发放但尚未领取完成的记录
     const pendingReceive = await prisma.zjdReceiveRecord.count({
-      where: { status: 'PENDING' },
+      where: { status: 'ISSUED' },
     })
     const pendingObjection = await prisma.objection.count({
       where: { status: 'PENDING' },
@@ -147,3 +150,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取统计失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(['stats:read'], ['ADMIN', 'STATS_VIEWER'])(getStatsHandler)

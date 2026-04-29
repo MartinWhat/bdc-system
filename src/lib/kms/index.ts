@@ -4,7 +4,16 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { sm3Hash, sm4Encrypt, sm4Decrypt, generateSalt, generateSM4Key } from '@/lib/gm-crypto'
+import { Prisma } from '@prisma/client'
+import {
+  sm4Encrypt,
+  sm4Decrypt,
+  generateSalt,
+  generateSM4Key,
+  sm3Hmac,
+  createEncryptionContext,
+  encryptWithContext,
+} from '@/lib/gm-crypto'
 
 export type KeyType = 'MASTER_KEY' | 'SM4_DATA' | 'SM2_SIGN' | 'JWT_SECRET'
 
@@ -42,6 +51,11 @@ export const KEY_ROTATION_DAYS: Record<KeyType, number> = {
  */
 const KEY_CACHE_TTL_MS = 5 * 60 * 1000 // 5 分钟缓存
 const keyCache: Map<KeyType, { key: KeyRecord; expiresAt: number }> = new Map()
+
+/**
+ * 防止缓存击穿：正在进行的密钥查询 promise
+ */
+const pendingPromises: Map<KeyType, Promise<KeyRecord>> = new Map()
 
 /**
  * 清除密钥缓存
@@ -83,12 +97,6 @@ function generateMasterKey(): string {
 }
 
 /**
- * 获取主密钥（用于加密其他密钥）
- * 注意：MASTER_KEY 本身使用 SM3 哈希存储（不可逆），
- * 但用于 SM3-HMAC 生成查询索引时只需要单向哈希
- */
-
-/**
  * 获取回退密钥（用于解密）
  * 优先级：环境变量 > 数据库主密钥
  */
@@ -107,12 +115,7 @@ async function getFallbackKey(): Promise<string> {
  * @returns 加密后的密钥值
  */
 async function encryptKeyValue(keyType: KeyType, keyValue: string): Promise<string> {
-  // MASTER_KEY 使用 SM3 哈希（单向，不可逆）
-  if (keyType === 'MASTER_KEY') {
-    return sm3Hash(keyValue)
-  }
-
-  // 其他密钥类型使用 SM4 加密（可逆）
+  // 使用回退密钥加密所有密钥类型（包括 MASTER_KEY），确保可解密
   const fallbackKey = await getFallbackKey()
   const iv = generateSalt(16)
   const encrypted = sm4Encrypt(keyValue, fallbackKey, iv)
@@ -125,11 +128,7 @@ async function encryptKeyValue(keyType: KeyType, keyValue: string): Promise<stri
  * @returns 明文密钥值
  */
 async function decryptKeyValue(keyType: KeyType, encryptedValue: string): Promise<string> {
-  // MASTER_KEY 是单向哈希，无法解密
-  if (keyType === 'MASTER_KEY') {
-    throw new Error('MASTER_KEY 是单向哈希，无法解密')
-  }
-
+  // 所有密钥类型统一使用回退密钥解密
   const [iv, ciphertext] = encryptedValue.split(':')
 
   // 使用回退密钥解密
@@ -164,7 +163,7 @@ export async function createKeyRecord(
     defaultExpiresAt.setDate(defaultExpiresAt.getDate() + days)
   }
 
-  // 使用 SM4 加密存储密钥值（MASTER_KEY 使用 SM3 哈希）
+  // 使用 SM4 加密存储密钥值
   const encryptedValue = await encryptKeyValue(keyType, keyValue)
 
   const record = await prisma.sysKeyVersion.create({
@@ -214,7 +213,7 @@ export async function activateKey(keyId: string): Promise<void> {
 }
 
 /**
- * 获取当前活跃的密钥（带缓存）
+ * 获取当前活跃的密钥（带缓存，防止缓存击穿）
  * @param keyType - 密钥类型
  * @param useCache - 是否使用缓存，默认 true
  * @returns 密钥记录（包含解密的 keyValue）
@@ -228,52 +227,270 @@ export async function getActiveKey(keyType: KeyType, useCache = true): Promise<K
     }
   }
 
-  const keyRecord = await prisma.sysKeyVersion.findFirst({
-    where: {
-      keyType,
-      isActive: true,
-    },
-    orderBy: { version: 'desc' },
-  })
-
-  if (!keyRecord) {
-    throw new Error(`未找到活跃的 ${keyType} 密钥`)
+  // 如果已有相同类型的请求在进行中，等待其结果（防止缓存击穿）
+  if (pendingPromises.has(keyType)) {
+    return pendingPromises.get(keyType)!
   }
 
-  // 解密密钥值（MASTER_KEY 保持哈希形式）
-  const decryptedKeyValue =
-    keyType === 'MASTER_KEY' ? keyRecord.keyData : await decryptKeyValue(keyType, keyRecord.keyData)
+  // 创建新的查询 promise
+  const promise = (async () => {
+    try {
+      const keyRecord = await prisma.sysKeyVersion.findFirst({
+        where: {
+          keyType,
+          isActive: true,
+        },
+        orderBy: { version: 'desc' },
+      })
 
-  const result = {
-    ...keyRecord,
-    keyData: decryptedKeyValue,
-  } as unknown as KeyRecord
+      if (!keyRecord) {
+        throw new Error(`未找到活跃的 ${keyType} 密钥`)
+      }
 
-  // 更新缓存
-  if (useCache) {
-    keyCache.set(keyType, {
-      key: result,
-      expiresAt: Date.now() + KEY_CACHE_TTL_MS,
-    })
-  }
+      // 解密密钥值（所有密钥类型统一解密）
+      const decryptedKeyValue = await decryptKeyValue(keyType, keyRecord.keyData)
 
-  return result
+      const result = {
+        ...keyRecord,
+        keyData: decryptedKeyValue,
+      } as unknown as KeyRecord
+
+      // 更新缓存
+      if (useCache) {
+        keyCache.set(keyType, {
+          key: result,
+          expiresAt: Date.now() + KEY_CACHE_TTL_MS,
+        })
+      }
+
+      return result
+    } finally {
+      // 查询完成后移除 pending promise
+      pendingPromises.delete(keyType)
+    }
+  })()
+
+  pendingPromises.set(keyType, promise)
+  return promise
 }
 
 /**
- * 轮换密钥
+ * 轮换密钥（自动重加密已有数据，符合 NIST SP 800-57 要求）
  * @param keyType - 密钥类型
  * @param createdBy - 创建人 ID
  * @returns 新密钥记录
  */
 export async function rotateKey(keyType: KeyType, createdBy: string): Promise<KeyRecord> {
+  // 获取旧密钥（用于重加密）
+  const oldKey = await getActiveKey(keyType)
+
   // 创建新密钥
   const newKey = await createKeyRecord(keyType, createdBy)
 
   // 激活新密钥
   await activateKey(newKey.id)
 
+  // 重加密已有数据（SM4_DATA 和 MASTER_KEY 需要重加密）
+  if (keyType === 'SM4_DATA' || keyType === 'MASTER_KEY') {
+    try {
+      await reEncryptAllData(keyType, oldKey, newKey)
+    } catch (error) {
+      console.error(`Re-encryption failed for ${keyType}:`, error)
+      // 重加密失败不影响密钥轮换，但应记录警告
+    }
+  }
+
   return newKey
+}
+
+/**
+ * 重加密所有使用指定密钥类型的数据
+ * 用于密钥轮换后重新加密已有数据，符合 NIST SP 800-57 合规要求
+ * @param keyType - 密钥类型
+ * @param oldKey - 旧密钥
+ * @param newKey - 新密钥
+ */
+async function reEncryptAllData(
+  keyType: KeyType,
+  oldKey: KeyRecord,
+  newKey: KeyRecord,
+): Promise<void> {
+  const oldContext = {
+    sm4Key: keyType === 'MASTER_KEY' ? (await getActiveKey('SM4_DATA')).keyData : oldKey.keyData,
+    masterKey: keyType === 'SM4_DATA' ? (await getActiveKey('MASTER_KEY')).keyData : oldKey.keyData,
+  }
+  const newContext = {
+    sm4Key: keyType === 'MASTER_KEY' ? (await getActiveKey('SM4_DATA')).keyData : newKey.keyData,
+    masterKey: keyType === 'SM4_DATA' ? (await getActiveKey('MASTER_KEY')).keyData : newKey.keyData,
+  }
+
+  if (keyType === 'SM4_DATA') {
+    // SM4_DATA 轮换：重加密所有加密字段
+    await reEncryptSM4Data(oldKey, newKey)
+  } else if (keyType === 'MASTER_KEY') {
+    // MASTER_KEY 轮换：重新生成所有哈希索引
+    await reEncryptMasterKeyData(oldKey, newKey)
+  }
+}
+
+/**
+ * 重加密 SM4_DATA 密钥加密的数据
+ */
+async function reEncryptSM4Data(oldKey: KeyRecord, newKey: KeyRecord): Promise<void> {
+  // 重新获取上下文（确保使用正确的密钥）
+  const oldCtx = { sm4Key: oldKey.keyData, masterKey: (await getActiveKey('MASTER_KEY')).keyData }
+  const newCtx = { sm4Key: newKey.keyData, masterKey: (await getActiveKey('MASTER_KEY')).keyData }
+
+  // 定义需要重加密的表和字段
+  const tables = [
+    {
+      name: 'SysUser',
+      records: await prisma.sysUser.findMany({
+        where: { idCard: { contains: ':' } },
+        select: { id: true, idCard: true, phone: true },
+      }),
+      reEncrypt: async (record: { id: string; idCard?: string | null; phone?: string | null }) => {
+        const updateData: Record<string, string> = {}
+        if (record.idCard) {
+          const { encrypted, hash } = reEncryptField(record.idCard, oldCtx.sm4Key, newCtx)
+          updateData.idCard = encrypted
+          updateData.idCardHash = hash
+        }
+        if (record.phone && record.phone.includes(':')) {
+          const { encrypted, hash } = reEncryptField(record.phone, oldCtx.sm4Key, newCtx)
+          updateData.phone = encrypted
+          updateData.phoneHash = hash
+        }
+        if (Object.keys(updateData).length > 0) {
+          await prisma.sysUser.update({ where: { id: record.id }, data: updateData })
+        }
+      },
+    },
+    {
+      name: 'ZjdReceiveRecord',
+      records: await prisma.zjdReceiveRecord.findMany({
+        where: { receiverIdCard: { contains: ':' } },
+        select: { id: true, receiverIdCard: true, receiverPhone: true },
+      }),
+      reEncrypt: async (record: {
+        id: string
+        receiverIdCard?: string | null
+        receiverPhone?: string | null
+      }) => {
+        const updateData: Record<string, string> = {}
+        if (record.receiverIdCard) {
+          const { encrypted, hash } = reEncryptField(record.receiverIdCard, oldCtx.sm4Key, newCtx)
+          updateData.receiverIdCard = encrypted
+          updateData.receiverIdCardHash = hash
+        }
+        if (record.receiverPhone && record.receiverPhone.includes(':')) {
+          const { encrypted, hash } = reEncryptField(record.receiverPhone, oldCtx.sm4Key, newCtx)
+          updateData.receiverPhone = encrypted
+          updateData.receiverPhoneHash = hash
+        }
+        if (Object.keys(updateData).length > 0) {
+          await prisma.zjdReceiveRecord.update({ where: { id: record.id }, data: updateData })
+        }
+      },
+    },
+  ]
+
+  for (const table of tables) {
+    for (const record of table.records) {
+      try {
+        await table.reEncrypt(record)
+      } catch (error) {
+        console.error(`Failed to re-encrypt ${table.name} record ${record.id}:`, error)
+      }
+    }
+  }
+}
+
+/**
+ * 重新生成 MASTER_KEY 哈希索引的数据
+ */
+async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Promise<void> {
+  const oldCtx = { sm4Key: (await getActiveKey('SM4_DATA')).keyData, masterKey: oldKey.keyData }
+  const newCtx = { sm4Key: (await getActiveKey('SM4_DATA')).keyData, masterKey: newKey.keyData }
+
+  // SysUser: idCardHash, phoneHash
+  const users = await prisma.sysUser.findMany({
+    where: {
+      OR: [{ idCardHash: { not: null } }, { phoneHash: { not: null } }],
+    },
+    select: { id: true, idCard: true, phone: true },
+  })
+
+  for (const user of users) {
+    try {
+      const updateData: Record<string, string> = {}
+      if (user.idCard) {
+        const [iv, ciphertext] = user.idCard.split(':')
+        const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : user.idCard
+        updateData.idCardHash = sm3Hmac(plaintext, newCtx.masterKey)
+      }
+      if (user.phone) {
+        const [iv, ciphertext] = user.phone.split(':')
+        const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : user.phone
+        updateData.phoneHash = sm3Hmac(plaintext, newCtx.masterKey)
+      }
+      if (Object.keys(updateData).length > 0) {
+        await prisma.sysUser.update({ where: { id: user.id }, data: updateData })
+      }
+    } catch (error) {
+      console.error(`Failed to re-generate hash for SysUser ${user.id}:`, error)
+    }
+  }
+
+  // CollectiveCert: similar fields
+  const certs = await prisma.collectiveCert.findMany({
+    where: {
+      OR: [{ idCardHash: { not: null } }, { phoneHash: { not: null } }],
+    },
+    select: { id: true, idCard: true, phone: true },
+  })
+
+  for (const cert of certs) {
+    try {
+      const updateData: Record<string, string> = {}
+      if (cert.idCard) {
+        const [iv, ciphertext] = cert.idCard.split(':')
+        const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : cert.idCard
+        updateData.idCardHash = sm3Hmac(plaintext, newCtx.masterKey)
+      }
+      if (cert.phone) {
+        const [iv, ciphertext] = cert.phone.split(':')
+        const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : cert.phone
+        updateData.phoneHash = sm3Hmac(plaintext, newCtx.masterKey)
+      }
+      if (Object.keys(updateData).length > 0) {
+        await prisma.collectiveCert.update({ where: { id: cert.id }, data: updateData })
+      }
+    } catch (error) {
+      console.error(`Failed to re-generate hash for CollectiveCert ${cert.id}:`, error)
+    }
+  }
+}
+
+/**
+ * 使用新密钥重新加密单个字段
+ */
+function reEncryptField(
+  encryptedValue: string,
+  oldSm4Key: string,
+  newContext: { sm4Key: string; masterKey: string },
+): { encrypted: string; hash: string } {
+  // 解析旧加密值
+  const [oldIv, oldCiphertext] = encryptedValue.split(':')
+  if (!oldIv || !oldCiphertext) {
+    throw new Error('Invalid encrypted value format')
+  }
+
+  // 解密
+  const plaintext = sm4Decrypt(oldCiphertext, oldSm4Key, oldIv)
+
+  // 使用新密钥和上下文重新加密
+  return encryptWithContext(plaintext, newContext)
 }
 
 /**
@@ -337,7 +554,7 @@ export async function getAllKeys(
   keyType: KeyType,
   includeArchived: boolean = false,
 ): Promise<KeyRecord[]> {
-  const where: any = {
+  const where: Prisma.SysKeyVersionWhereInput = {
     keyType,
     deletedAt: null, // 排除已删除的密钥
   }
@@ -355,8 +572,7 @@ export async function getAllKeys(
   const decryptedKeys: KeyRecord[] = []
   for (const key of keys) {
     try {
-      const decryptedKeyValue =
-        keyType === 'MASTER_KEY' ? key.keyData : await decryptKeyValue(keyType, key.keyData)
+      const decryptedKeyValue = await decryptKeyValue(keyType, key.keyData)
 
       decryptedKeys.push({
         ...key,
@@ -394,8 +610,7 @@ export async function getDecryptKeys(keyType: KeyType): Promise<KeyRecord[]> {
   const decryptedKeys: KeyRecord[] = []
   for (const key of keys) {
     try {
-      const decryptedKeyValue =
-        keyType === 'MASTER_KEY' ? key.keyData : await decryptKeyValue(keyType, key.keyData)
+      const decryptedKeyValue = await decryptKeyValue(keyType, key.keyData)
 
       decryptedKeys.push({
         ...key,

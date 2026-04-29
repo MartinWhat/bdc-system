@@ -293,6 +293,8 @@ model Objection {
   receiveRecordId String
   objectionType   String
   description     String
+  contactName     String
+  contactPhone    String
   status          String   @default("PENDING")
   resolveRemark   String?
   resolverId      String?

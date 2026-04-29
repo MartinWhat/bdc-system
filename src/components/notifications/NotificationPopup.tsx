@@ -3,6 +3,7 @@
 import { Modal, Typography, Button, Space, Tag } from 'antd'
 import { BellOutlined } from '@ant-design/icons'
 import { useNotificationStore } from '@/lib/store/notification'
+import { useAuthStore } from '@/lib/store/auth'
 import { authFetch } from '@/lib/api-fetch'
 import styles from './NotificationPopup.module.css'
 
@@ -23,22 +24,14 @@ const priorityColors = {
 
 export function NotificationPopup() {
   const { currentPopup, popupVisible, closePopup } = useNotificationStore()
+  const { user } = useAuthStore()
 
   const handleClose = async () => {
     if (currentPopup) {
       // 标记已读
       try {
-        // 从 Cookie 获取用户信息
-        const userCookie = document.cookie.match(/user_info=([^;]+)/)
-        let userId = 'anonymous'
-        if (userCookie) {
-          try {
-            const userInfo = JSON.parse(decodeURIComponent(userCookie[1]))
-            userId = userInfo.id || 'anonymous'
-          } catch {
-            // ignore parse error
-          }
-        }
+        // 从 auth store 获取用户 ID，不从 cookie 读取
+        const userId = user?.id || 'anonymous'
 
         await authFetch(`/api/notifications/${currentPopup.id}/read`, {
           method: 'POST',

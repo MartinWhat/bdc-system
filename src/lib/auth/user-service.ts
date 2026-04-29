@@ -76,7 +76,7 @@ export async function createUser(input: CreateUserInput) {
 }
 
 /**
- * 通过用户名查找用户
+ * 通过用户名查找用户（包含角色和权限信息）
  * @param username - 用户名
  * @returns 用户对象（含密码哈希）
  */
@@ -102,13 +102,15 @@ export async function findUserByUsername(username: string) {
 }
 
 /**
- * 验证用户登录凭据
+ * 验证用户登录凭据（优化版：一次查询获取所有信息）
  * @param username - 用户名
  * @param password - 密码
  * @returns 用户对象或 null
  */
 export async function validateUserCredentials(username: string, password: string) {
+  const startTime = Date.now()
   const user = await findUserByUsername(username)
+  const dbTime = Date.now() - startTime
 
   if (!user) {
     return null
@@ -120,10 +122,19 @@ export async function validateUserCredentials(username: string, password: string
   }
 
   // 验证密码（bcrypt）
+  const verifyStart = Date.now()
   const isValid = await validateUserPassword(password, user.passwordHash)
+  const verifyTime = Date.now() - verifyStart
 
   if (!isValid) {
     return null
+  }
+
+  // 性能日志（开发环境）
+  if (process.env.NODE_ENV === 'development') {
+    console.log(
+      `[Auth] DB: ${dbTime}ms, Password verify: ${verifyTime}ms, Total: ${Date.now() - startTime}ms`,
+    )
   }
 
   return user

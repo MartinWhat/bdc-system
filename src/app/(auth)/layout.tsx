@@ -23,7 +23,7 @@ import {
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
-import { getUserInfoFromClient } from '@/lib/auth/cookies'
+
 import { onAuthExpiry } from '@/lib/auth-event'
 import { authFetch } from '@/lib/api-fetch'
 import { hasMenuPermission } from '@/config/menu-permissions'
@@ -49,6 +49,11 @@ const ALL_MENU_ITEMS: MenuProps['items'] = [
     key: '/lingzheng',
     icon: <FileTextOutlined />,
     label: '领证管理',
+  },
+  {
+    key: '/objection',
+    icon: <FileTextOutlined />,
+    label: '异议管理',
   },
   {
     key: '/collective',
@@ -131,26 +136,27 @@ function filterMenuByPermission(
 ): MenuProps['items'] {
   if (!items) return []
 
-  return items.filter((item) => {
-    if (!item) return false
+  const result: MenuProps['items'] = []
+
+  for (const item of items) {
+    if (!item) continue
 
     // 处理分组
     if (item.type === 'group' && item.children) {
       const filteredChildren = filterMenuByPermission(item.children, permissions)
       if (filteredChildren && filteredChildren.length > 0) {
-        return true
+        result.push({ ...item, children: filteredChildren })
       }
-      return false
+      continue
     }
 
     const key = item.key as string
-    if (key) {
-      const hasPermission = hasMenuPermission(key, permissions)
-      return hasPermission
+    if (key && hasMenuPermission(key, permissions)) {
+      result.push(item)
     }
+  }
 
-    return true
-  })
+  return result
 }
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -195,20 +201,69 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     }
   }, [clearAuth])
 
-  // 从 Cookie 加载用户信息（同步）
+  // 通过 API 加载用户信息（从 httpOnly JWT cookie 获取）
   useEffect(() => {
-    console.log('[DEBUG layout] user loading effect running')
-    const userInfo = getUserInfoFromClient()
-    console.log('[DEBUG layout] getUserInfoFromClient result:', userInfo)
-    if (userInfo) {
-      console.log('[DEBUG layout] setting auth with userInfo')
-      setAuth(userInfo as any)
-    } else {
-      console.log('[DEBUG layout] no userInfo, redirecting to login')
-      router.push('/login')
+    const loadUserInfo = async () => {
+      try {
+        const response = await authFetch('/api/auth/me', {
+          credentials: 'include',
+        })
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            // 未登录，跳转登录页
+            router.push('/login')
+            setLoading(false)
+            return
+          }
+          clearAuth()
+          router.push('/login')
+          setLoading(false)
+          return
+        }
+
+        const data = await response.json()
+        const userData = data.data
+
+        if (!userData) {
+          clearAuth()
+          router.push('/login')
+          setLoading(false)
+          return
+        }
+
+        // 设置用户信息到 store（来自服务端验证的数据）
+        setAuth(userData)
+
+        // 检查上次登录时间
+        const lastLoginAt = userData.lastLoginAt
+        if (lastLoginAt) {
+          const now = Date.now()
+          const oneDayMs = 24 * 60 * 60 * 1000 // 24 小时
+          const lastLoginTime = new Date(lastLoginAt).getTime()
+
+          // 如果超过 24 小时未登录，静默跳转登录页
+          if (now - lastLoginTime > oneDayMs) {
+            clearAuth()
+            router.push('/login')
+            setLoading(false)
+            return
+          }
+        }
+      } catch (error) {
+        console.error('[DEBUG layout] failed to fetch /api/auth/me:', error)
+        // 如果 API 调用失败，为了安全起见，跳转登录页
+        clearAuth()
+        router.push('/login')
+        setLoading(false)
+        return
+      }
+
+      setLoading(false)
     }
-    setLoading(false)
-  }, [router, setAuth])
+
+    loadUserInfo()
+  }, [router, setAuth, clearAuth])
 
   // 启动主动刷新定时器
   useEffect(() => {

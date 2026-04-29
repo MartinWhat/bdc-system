@@ -1,6 +1,6 @@
 {
   "name": "bdc-system",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -33,6 +33,7 @@
     "dayjs": "^1.11.20",
     "dotenv": "^16.6.1",
     "framer-motion": "^12.38.0",
+    "jose": "^6.2.3",
     "mariadb": "^3.5.2",
     "next": "16.2.3",
     "pdfkit": "^0.18.0",

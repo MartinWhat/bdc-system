@@ -7,8 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sm4Encrypt } from '@/lib/gm-crypto'
 import { getActiveKey } from '@/lib/kms'
+import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 
 // 最大文件大小：10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -17,11 +17,11 @@ const uploadSchema = z.object({
   fileName: z.string().min(1, '文件名不能为空'),
   fileType: z.enum(['image/jpeg', 'image/png', 'image/jpg']),
   base64Data: z.string().min(1, '文件内容不能为空').max(MAX_FILE_SIZE, '文件大小不能超过 10MB'),
-  recordId: z.string().uuid('领证记录 ID 格式不正确'),
+  recordId: z.string().min(1, '领证记录 ID 不能为空'),
   fileCategory: z.enum(['ID_CARD_FRONT', 'ID_CARD_BACK', 'SCENE_PHOTO']),
 })
 
-export async function POST(request: NextRequest) {
+async function uploadFileHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = uploadSchema.safeParse(body)
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { fileName, fileType, base64Data, recordId, fileCategory } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(
@@ -118,3 +118,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '上传失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(['upload:file'])(uploadFileHandler)

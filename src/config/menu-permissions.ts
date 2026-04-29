@@ -18,6 +18,8 @@ export const MENU_PERMISSIONS: Record<string, string[]> = {
   '/': [], // 工作台无需权限
   '/bdc': ['bdc:manage'],
   '/lingzheng': ['bdc:manage'],
+  '/objection': ['objection:read'], // 异议管理
+  '/objection/workflow': ['objection:manage'], // 异议流程配置
   '/collective': ['collective:manage'],
   '/stats': ['stats:view'],
   '/notifications': ['notification:view'],

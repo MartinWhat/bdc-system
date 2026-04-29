@@ -8,6 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { withPermission } from '@/lib/api/withPermission'
+import { getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter } from '@/lib/auth/data-permission'
+import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 const updateBdcSchema = z.object({
@@ -25,8 +29,45 @@ const updateBdcSchema = z.object({
   remark: z.string().optional(),
 })
 
+/**
+ * 检查用户是否有权访问指定宅基地记录
+ */
+async function canAccessBdc(
+  request: NextRequest,
+  bdcVillageId: string,
+  bdcCreatedBy?: string,
+): Promise<boolean> {
+  const { userId } = getUserFromRequest(request)
+  if (!userId) return false
+
+  const filter = await getDataPermissionFilter(userId)
+
+  switch (filter.scope) {
+    case 'ALL':
+      return true
+    case 'TOWN':
+      // 需要查询该村居所属的镇街
+      if (!filter.townIds || filter.townIds.length === 0) return false
+      const townVillages = await prisma.sysVillage.findMany({
+        where: { townId: { in: filter.townIds } },
+        select: { id: true },
+      })
+      return townVillages.some((v) => v.id === bdcVillageId)
+    case 'VILLAGE':
+      if (!filter.villageIds || filter.villageIds.length === 0) return false
+      return filter.villageIds.includes(bdcVillageId)
+    case 'SELF':
+      return bdcCreatedBy === userId
+    default:
+      return false
+  }
+}
+
 // GET - 获取宅基地详情
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function getBdcDetailHandler(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await params
 
@@ -51,6 +92,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
+    // 检查数据权限
+    const canAccess = await canAccessBdc(request, bdc.villageId, bdc.createdBy)
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: '无权访问该宅基地档案', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+
     // 脱敏处理
     const sanitizedBdc = {
       ...bdc,
@@ -69,7 +119,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 // PUT - 更新宅基地档案
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function updateBdcHandler(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await params
     const body = await request.json()
@@ -93,6 +146,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json(
         { error: '宅基地档案不存在', code: 'BDC_NOT_FOUND' },
         { status: 404 },
+      )
+    }
+
+    // 检查数据权限
+    const canAccess = await canAccessBdc(request, existingBdc.villageId, existingBdc.createdBy)
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: '无权修改该宅基地档案', code: 'FORBIDDEN' },
+        { status: 403 },
       )
     }
 
@@ -134,6 +196,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
+    // 记录操作日志
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      await logOperation({
+        userId,
+        bdcId: id,
+        action: 'BDC_UPDATE',
+        module: 'BDC',
+        description: `更新宅基地档案：${existingBdc.certNo}`,
+        status: 'SUCCESS',
+      })
+    }
+
     return NextResponse.json({
       success: true,
       data: bdc,
@@ -145,7 +220,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 // DELETE - 删除宅基地档案
-export async function DELETE(
+async function deleteBdcHandler(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -163,11 +238,33 @@ export async function DELETE(
       )
     }
 
+    // 检查数据权限
+    const canAccess = await canAccessBdc(request, existingBdc.villageId, existingBdc.createdBy)
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: '无权删除该宅基地档案', code: 'FORBIDDEN' },
+        { status: 403 },
+      )
+    }
+
     // 软删除：更新状态为已注销
     await prisma.zjdBdc.update({
       where: { id },
       data: { status: 'CANCELLED' },
     })
+
+    // 记录操作日志
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      await logOperation({
+        userId,
+        bdcId: id,
+        action: 'BDC_DELETE',
+        module: 'BDC',
+        description: `删除（注销）宅基地档案：${existingBdc.certNo}`,
+        status: 'SUCCESS',
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -189,3 +286,8 @@ function maskPhone(phone: string): string {
   if (!phone || phone.length < 7) return phone
   return phone.slice(0, 3) + '****' + phone.slice(-4)
 }
+
+// 导出带权限检查的 handlers
+export const GET = withPermission(['bdc:read'], ['ADMIN', 'BDC_MANAGER'])(getBdcDetailHandler)
+export const PUT = withPermission(['bdc:update'], ['ADMIN', 'BDC_MANAGER'])(updateBdcHandler)
+export const DELETE = withPermission(['bdc:delete'], ['ADMIN', 'BDC_MANAGER'])(deleteBdcHandler)

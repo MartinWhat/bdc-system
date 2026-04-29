@@ -1,9 +1,9 @@
 /**
  * JWT 工具模块
- * 使用 SM3-HMAC 进行签名（不使用传统 HS256）
+ * 使用 jose 库 + HS256 算法（常量时间签名验证）
  */
 
-import { sm3Hmac } from '@/lib/gm-crypto'
+import { SignJWT, jwtVerify } from 'jose'
 
 export interface JWTPayload {
   sub: string // 用户ID
@@ -20,24 +20,19 @@ export interface JWTHeader {
 }
 
 /**
- * Base64URL 编码
+ * JWT 验证错误类型
  */
-function base64UrlEncode(data: string): string {
-  return Buffer.from(data)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '')
+export enum JWTErrorType {
+  TOKEN_MALFORMED = 'TOKEN_MALFORMED', // Token 格式错误（不是三部分）
+  TOKEN_SIGNATURE_INVALID = 'TOKEN_SIGNATURE_INVALID', // 签名无效
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED', // Token 已过期
+  TOKEN_INVALID = 'TOKEN_INVALID', // 其他无效情况
 }
 
-/**
- * Base64URL 解码
- */
-function base64UrlDecode(data: string): string {
-  const padded = data.replace(/-/g, '+').replace(/_/g, '/')
-  const padLength = (4 - (padded.length % 4)) % 4
-  const paddedData = padded + '='.repeat(padLength)
-  return Buffer.from(paddedData, 'base64').toString('utf-8')
+export interface JWTVerifyResult {
+  success: boolean
+  payload?: JWTPayload
+  error?: JWTErrorType
 }
 
 /**
@@ -47,67 +42,65 @@ function base64UrlDecode(data: string): string {
  * @param expiresIn - 过期时间（秒）
  * @returns JWT 字符串
  */
-export function signJWT(
+export async function signJWT(
   payload: Omit<JWTPayload, 'iat' | 'exp'>,
   secret: string,
   expiresIn: number = 3600,
-): string {
-  const header: JWTHeader = {
-    alg: 'SM3-HMAC',
-    typ: 'JWT',
-  }
+): Promise<string> {
+  const encoder = new TextEncoder()
+  const key = encoder.encode(secret)
 
-  const now = Math.floor(Date.now() / 1000)
-  const fullPayload: JWTPayload = {
-    ...payload,
-    iat: now,
-    exp: now + expiresIn,
-  }
-
-  const encodedHeader = base64UrlEncode(JSON.stringify(header))
-  const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload))
-
-  const signatureInput = `${encodedHeader}.${encodedPayload}`
-  const signature = sm3Hmac(signatureInput, secret)
-
-  return `${signatureInput}.${signature}`
+  return new SignJWT(payload as Record<string, unknown>)
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setExpirationTime(`${expiresIn}s`)
+    .sign(key)
 }
 
 /**
- * 验证并解析 JWT
+ * 验证并解析 JWT（返回详细错误类型）
+ * @param token - JWT 字符串
+ * @param secret - 签名密钥
+ * @returns 验证结果（包含成功/失败状态和具体错误类型）
+ */
+export async function verifyJWTDetailed(token: string, secret: string): Promise<JWTVerifyResult> {
+  try {
+    const encoder = new TextEncoder()
+    const key = encoder.encode(secret)
+
+    const { payload } = await jwtVerify(token, key, {
+      algorithms: ['HS256'],
+    })
+
+    return {
+      success: true,
+      payload: payload as unknown as JWTPayload,
+    }
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message.includes('JWTExpired')) {
+        return { success: false, error: JWTErrorType.TOKEN_EXPIRED }
+      }
+      if (err.message.includes('Invalid signature')) {
+        return { success: false, error: JWTErrorType.TOKEN_SIGNATURE_INVALID }
+      }
+      if (err.message.includes('JWT malformed')) {
+        return { success: false, error: JWTErrorType.TOKEN_MALFORMED }
+      }
+    }
+    return { success: false, error: JWTErrorType.TOKEN_INVALID }
+  }
+}
+
+/**
+ * 验证并解析 JWT（旧版兼容，返回 null 表示失败）
  * @param token - JWT 字符串
  * @param secret - 签名密钥
  * @returns 解析后的载荷或 null
  */
-export function verifyJWT(token: string, secret: string): JWTPayload | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) {
-      return null
-    }
-
-    const [encodedHeader, encodedPayload, signature] = parts
-
-    // 验证签名
-    const signatureInput = `${encodedHeader}.${encodedPayload}`
-    const expectedSignature = sm3Hmac(signatureInput, secret)
-
-    if (signature !== expectedSignature) {
-      return null
-    }
-
-    // 解析载荷
-    const payload: JWTPayload = JSON.parse(base64UrlDecode(encodedPayload))
-
-    // 检查过期时间
-    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) {
-      return null
-    }
-
-    return payload
-  } catch {
-    return null
-  }
+export async function verifyJWT(token: string, secret: string): Promise<JWTPayload | null> {
+  const result = await verifyJWTDetailed(token, secret)
+  return result.success && result.payload ? result.payload : null
 }
 
 /**

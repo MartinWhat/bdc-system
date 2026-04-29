@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 提取角色和权限
-    const roles = user.roles.map((ur) => ur.role.name)
+    const roles = user.roles.map((ur) => ur.role.code)
     const permissions = Array.from(
       new Set(user.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.code))),
     )

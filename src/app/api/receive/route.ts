@@ -9,15 +9,16 @@ import { prisma } from '@/lib/prisma'
 import { sm4Decrypt } from '@/lib/gm-crypto'
 import { getActiveKey } from '@/lib/kms'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
+import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
 const createReceiveSchema = z.object({
-  bdcId: z.string().uuid('宅基地 ID 格式不正确'),
+  bdcId: z.string().min(1, '宅基地 ID 不能为空'),
   remark: z.string().optional(),
 })
 
 // GET - 获取领证记录列表
-export async function GET(request: NextRequest) {
+async function getReceiveRecordsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -73,6 +74,11 @@ export async function GET(request: NextRequest) {
           processNodes: {
             orderBy: { createdAt: 'asc' },
           },
+          objections: {
+            where: { status: { in: ['PENDING', 'PROCESSING'] } },
+            take: 1,
+            select: { id: true },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -98,7 +104,7 @@ export async function GET(request: NextRequest) {
           const [iv, ciphertext] = encrypted.split(':')
           return sm4Decrypt(ciphertext, sm4Key, iv)
         } catch {
-          return '解密失败'
+          throw new Error(`身份证解密失败: ${encrypted.substring(0, 20)}...`)
         }
       })
 
@@ -107,7 +113,7 @@ export async function GET(request: NextRequest) {
           const [iv, ciphertext] = encrypted.split(':')
           return sm4Decrypt(ciphertext, sm4Key, iv)
         } catch {
-          return '解密失败'
+          throw new Error(`手机号解密失败: ${encrypted.substring(0, 20)}...`)
         }
       })
     }
@@ -118,16 +124,26 @@ export async function GET(request: NextRequest) {
     phonesToDecrypt.forEach((enc, i) => phoneMap.set(enc, decryptedPhones[i]))
 
     const sanitizedRecords = records.map((record) => ({
-      ...record,
+      id: record.id,
+      bdcId: record.bdcId,
+      status: record.status,
+      receiverName: record.receiverName,
       receiverIdCard: record.receiverIdCard
         ? maskIdCard(idCardMap.get(record.receiverIdCard) || '解密失败')
         : null,
       receiverPhone: record.receiverPhone
         ? maskPhone(phoneMap.get(record.receiverPhone) || '解密失败')
         : null,
-      idCardFrontPhoto: undefined,
-      idCardBackPhoto: undefined,
-      scenePhoto: undefined,
+      remark: record.remark,
+      applyDate: record.applyDate,
+      issueDate: record.issueDate,
+      receiveDate: record.receiveDate,
+      signedBy: record.signedBy,
+      signedDate: record.signedDate,
+      bdc: record.bdc,
+      processNodes: record.processNodes,
+      hasObjection: record.objections.length > 0,
+      activeObjectionId: record.objections[0]?.id || null,
     }))
 
     return NextResponse.json({
@@ -147,9 +163,13 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+export const GET = withPermission(
+  ['receive:read'],
+  ['ADMIN', 'RECEIVE_CLERK'],
+)(getReceiveRecordsListHandler)
 
 // POST - 创建领证记录（单个）
-export async function POST(request: NextRequest) {
+async function createReceiveRecordHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createReceiveSchema.safeParse(body)
@@ -176,7 +196,7 @@ export async function POST(request: NextRequest) {
     const existingRecord = await prisma.zjdReceiveRecord.findFirst({
       where: {
         bdcId,
-        status: { in: ['PENDING', 'ISSUED'] },
+        status: 'ISSUED',
       },
     })
 
@@ -187,37 +207,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 创建领证记录
-    const record = await prisma.zjdReceiveRecord.create({
-      data: {
-        bdcId,
-        status: 'PENDING',
-        remark,
-        createdBy: 'system',
-      },
-      include: {
-        bdc: {
-          include: {
-            village: {
-              include: {
-                town: true,
+    // 使用事务创建领证记录和流程节点
+    const record = await prisma.$transaction(async (tx) => {
+      const newRecord = await tx.zjdReceiveRecord.create({
+        data: {
+          bdcId,
+          status: 'ISSUED',
+          issueDate: new Date(),
+          remark,
+          createdBy: 'system',
+        },
+        include: {
+          bdc: {
+            include: {
+              village: {
+                include: {
+                  town: true,
+                },
               },
             },
           },
         },
-      },
-    })
+      })
 
-    // 创建流程节点
-    await prisma.processNode.create({
-      data: {
-        receiveRecordId: record.id,
-        nodeType: 'IMPORT',
-        nodeName: '导入待领证',
-        operatorId: 'system',
-        operatorName: '系统',
-        description: '手动创建领证记录',
-      },
+      await tx.processNode.create({
+        data: {
+          receiveRecordId: newRecord.id,
+          nodeType: 'ISSUE',
+          nodeName: '手动创建（已发放）',
+          operatorId: 'system',
+          operatorName: '系统',
+          description: '手动创建领证记录，已自动发放',
+        },
+      })
+
+      return newRecord
     })
 
     return NextResponse.json({ success: true, data: record })
@@ -226,3 +250,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建领证记录失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(
+  ['receive:create'],
+  ['ADMIN', 'RECEIVE_CLERK'],
+)(createReceiveRecordHandler)

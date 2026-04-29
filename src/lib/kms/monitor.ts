@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { getActiveKey, getAllKeys, isKeyExpired, KEY_ROTATION_DAYS, type KeyType } from '@/lib/kms'
+import { getActiveKey, getAllKeys, KEY_ROTATION_DAYS, type KeyType } from '@/lib/kms'
 
 /**
  * 密钥状态报告
@@ -15,6 +15,7 @@ export interface KeyStatusReport {
     id: string
     version: number
     expiresAt: Date
+    createdAt: Date
     daysUntilExpiry: number
   }
   historicalKeys: number
@@ -66,6 +67,7 @@ export async function generateKeyStatusReport(): Promise<KeyStatusReport[]> {
           id: activeKey.id,
           version: activeKey.version,
           expiresAt: activeKey.expiresAt,
+          createdAt: activeKey.createdAt,
           daysUntilExpiry: daysUntilExpiry,
         },
         historicalKeys,
@@ -117,7 +119,7 @@ export async function checkAlerts(): Promise<Alert[]> {
     // 检查是否需要轮换（达到轮换周期的 80%）
     const rotationDays = KEY_ROTATION_DAYS[keyType]
     const daysSinceCreation = Math.ceil(
-      (now.getTime() - activeKey.expiresAt.getTime()) / (1000 * 60 * 60 * 24) + rotationDays,
+      (now.getTime() - activeKey.createdAt.getTime()) / (1000 * 60 * 60 * 24),
     )
 
     if (daysSinceCreation >= rotationDays * 0.8) {

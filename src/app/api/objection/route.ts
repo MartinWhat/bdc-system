@@ -8,15 +8,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getCurrentUserId } from '@/lib/auth/middleware'
+import { withPermission } from '@/lib/api/withPermission'
+
+const PHONE_REGEX = /^1[3-9]\d{9}$/
 
 const createObjectionSchema = z.object({
-  receiveRecordId: z.string().uuid('领证记录 ID 格式不正确'),
+  receiveRecordId: z.string().min(1, '领证记录 ID 不能为空'),
   objectionType: z.enum(['NAME_ERROR', 'ID_CARD_ERROR', 'AREA_ERROR', 'OTHER']),
   description: z.string().min(1, '异议描述不能为空').max(500, '异议描述不能超过 500 字'),
+  contactName: z.string().min(1, '联系人不能为空'),
+  contactPhone: z.string().regex(PHONE_REGEX, '手机号格式不正确'),
 })
 
 // GET - 获取异议列表
-export async function GET(request: NextRequest) {
+async function getObjectionsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -68,9 +73,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: '获取异议列表失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const GET = withPermission(
+  ['objection:read'],
+  ['ADMIN', 'OBJECTION_HANDLER'],
+)(getObjectionsListHandler)
 
 // POST - 创建异议记录
-export async function POST(request: NextRequest) {
+async function createObjectionHandler(request: NextRequest) {
   try {
     const body = await request.json()
     const validationResult = createObjectionSchema.safeParse(body)
@@ -82,7 +91,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { receiveRecordId, objectionType, description } = validationResult.data
+    const { receiveRecordId, objectionType, description, contactName, contactPhone } =
+      validationResult.data
     const operatorId = await getCurrentUserId(request)
 
     if (!operatorId) {
@@ -112,14 +122,32 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 使用事务创建异议记录并更新状态
+    // 获取激活的默认流程
+    const workflow = await prisma.objectionWorkflow.findFirst({
+      where: { isActive: true },
+      include: { steps: { orderBy: { stepOrder: 'asc' } } },
+    })
+
+    if (!workflow || workflow.steps.length === 0) {
+      return NextResponse.json(
+        { error: '未配置异议处理流程，请联系管理员', code: 'WORKFLOW_NOT_FOUND' },
+        { status: 400 },
+      )
+    }
+
+    // 使用事务创建异议记录、流程节点和第一个任务
     const result = await prisma.$transaction(async (tx) => {
-      // 创建异议记录
+      // 创建异议记录（状态为 PROCESSING）
       const objection = await tx.objection.create({
         data: {
           receiveRecordId,
           objectionType,
           description,
+          contactName,
+          contactPhone,
+          status: 'PROCESSING',
+          currentWorkflowId: workflow.id,
+          currentStepOrder: 1,
         },
         include: {
           receiveRecord: {
@@ -127,6 +155,22 @@ export async function POST(request: NextRequest) {
               bdc: true,
             },
           },
+        },
+      })
+
+      // 创建第一个任务（处理人为当前操作人）
+      const firstStep = workflow.steps[0]
+      await tx.objectionTask.create({
+        data: {
+          objectionId: objection.id,
+          stepId: firstStep.id,
+          stepOrder: firstStep.stepOrder,
+          stepName: firstStep.stepName,
+          stepType: firstStep.stepType,
+          status: 'PENDING',
+          approverId: operatorId,
+          approverName: '系统',
+          assignedAt: new Date(),
         },
       })
 
@@ -157,3 +201,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: '创建异议记录失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
+export const POST = withPermission(
+  ['objection:create'],
+  ['ADMIN', 'OBJECTION_HANDLER'],
+)(createObjectionHandler)

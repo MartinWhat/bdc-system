@@ -12,8 +12,29 @@ interface RateLimitStore {
   }
 }
 
+// 账户锁定存储
+interface AccountLockoutStore {
+  [username: string]: {
+    failedAttempts: number // 连续失败次数
+    lockedUntil: number | null // 锁定截止时间
+    lastFailedAt: number // 最后失败时间
+  }
+}
+
 // 内存存储（生产环境建议使用 Redis）
+// 注意：内存存储在 serverless或多实例部署时不生效，限流可被绕过
+// TODO(生产环境): 替换为 Redis 存储，使用原子操作保证限流准确性
 const store: RateLimitStore = {}
+
+// 账户锁定存储（独立管理）
+const lockoutStore: AccountLockoutStore = {}
+
+// 账户锁定配置
+const ACCOUNT_LOCKOUT_CONFIG = {
+  maxFailedAttempts: 5, // 连续失败 5 次后锁定
+  lockoutDurationMs: 15 * 60 * 1000, // 锁定 15 分钟
+  resetFailedAttemptsAfterMs: 30 * 60 * 1000, // 30 分钟无失败后重置计数
+}
 
 // 清理过期记录的间隔（毫秒）
 const CLEANUP_INTERVAL = 60 * 1000 // 1 分钟
@@ -188,6 +209,117 @@ if (typeof global !== 'undefined') {
 export function resetRateLimit(identifier: string, type: keyof typeof DEFAULT_CONFIG = 'LOGIN') {
   const key = generateKey(identifier, type)
   delete store[key]
+}
+
+/**
+ * 检查账户是否被锁定
+ * @param username - 用户名
+ * @returns 是否被锁定及锁定截止时间
+ */
+export function isAccountLocked(username: string): { locked: boolean; lockedUntil: number | null } {
+  const record = lockoutStore[username]
+  if (!record) {
+    return { locked: false, lockedUntil: null }
+  }
+
+  // 检查是否已过锁定时间
+  if (record.lockedUntil && Date.now() > record.lockedUntil) {
+    // 锁定已过期，清除记录
+    delete lockoutStore[username]
+    return { locked: false, lockedUntil: null }
+  }
+
+  return { locked: true, lockedUntil: record.lockedUntil }
+}
+
+/**
+ * 记录登录失败
+ * @param username - 用户名
+ */
+export function recordLoginFailure(username: string): void {
+  const now = Date.now()
+  const record = lockoutStore[username]
+
+  if (!record) {
+    lockoutStore[username] = {
+      failedAttempts: 1,
+      lockedUntil: null,
+      lastFailedAt: now,
+    }
+    return
+  }
+
+  // 检查是否需要重置失败计数（30分钟无失败）
+  if (now - record.lastFailedAt > ACCOUNT_LOCKOUT_CONFIG.resetFailedAttemptsAfterMs) {
+    record.failedAttempts = 1
+    record.lastFailedAt = now
+    record.lockedUntil = null
+    return
+  }
+
+  record.failedAttempts++
+  record.lastFailedAt = now
+
+  // 检查是否需要锁定账户
+  if (record.failedAttempts >= ACCOUNT_LOCKOUT_CONFIG.maxFailedAttempts) {
+    record.lockedUntil = now + ACCOUNT_LOCKOUT_CONFIG.lockoutDurationMs
+  }
+}
+
+/**
+ * 清除登录失败记录（登录成功后调用）
+ * @param username - 用户名
+ */
+export function clearLoginFailure(username: string): void {
+  delete lockoutStore[username]
+}
+
+/**
+ * 获取账户锁定状态
+ * @param username - 用户名
+ * @returns 锁定状态信息
+ */
+export function getAccountLockoutStatus(username: string): {
+  failedAttempts: number
+  isLocked: boolean
+  lockedUntil: number | null
+  remainingLockTimeMs: number | null
+} {
+  const record = lockoutStore[username]
+  if (!record) {
+    return {
+      failedAttempts: 0,
+      isLocked: false,
+      lockedUntil: null,
+      remainingLockTimeMs: null,
+    }
+  }
+
+  const now = Date.now()
+  let remainingLockTimeMs: number | null = null
+  let isLocked = false
+
+  if (record.lockedUntil) {
+    if (now > record.lockedUntil) {
+      // 锁定已过期
+      delete lockoutStore[username]
+      return {
+        failedAttempts: 0,
+        isLocked: false,
+        lockedUntil: null,
+        remainingLockTimeMs: null,
+      }
+    }
+    isLocked = true
+    remainingLockTimeMs = record.lockedUntil - now
+  }
+
+  return {
+    failedAttempts: record.failedAttempts,
+    isLocked,
+    lockedUntil: record.lockedUntil,
+    remainingLockTimeMs,
+  }
 }
 
 export type RateLimitType = keyof typeof DEFAULT_CONFIG

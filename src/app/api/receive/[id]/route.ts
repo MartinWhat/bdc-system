@@ -73,22 +73,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     let receiverPhone = record.receiverPhone
 
     if (receiverIdCard) {
-      try {
-        const decrypted = await decryptSensitiveField(receiverIdCard)
-        // 只返回脱敏后的
-        receiverIdCard = decrypted.slice(0, 3) + '****' + decrypted.slice(-4)
-      } catch {
-        receiverIdCard = '解密失败'
-      }
+      const decrypted = await decryptSensitiveField(receiverIdCard)
+      // 只返回脱敏后的
+      receiverIdCard = decrypted.slice(0, 3) + '****' + decrypted.slice(-4)
     }
 
     if (receiverPhone) {
-      try {
-        const decrypted = await decryptSensitiveField(receiverPhone)
-        receiverPhone = decrypted.slice(0, 3) + '****' + decrypted.slice(-4)
-      } catch {
-        receiverPhone = '解密失败'
-      }
+      const decrypted = await decryptSensitiveField(receiverPhone)
+      receiverPhone = decrypted.slice(0, 3) + '****' + decrypted.slice(-4)
     }
 
     return NextResponse.json({
@@ -162,6 +154,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // 构建更新数据
     const updateData: Record<string, unknown> = {}
     const processNodeData: Record<string, unknown> = {}
+    let shouldUpdateBdc = false
 
     // 处理状态操作
     if (action) {
@@ -201,12 +194,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           processNodeData.nodeType = 'COMPLETE'
           processNodeData.nodeName = '领取完成'
           processNodeData.description = `领取人：${receiverName}`
-
-          // 更新宅基地状态为 ISSUED
-          await prisma.zjdBdc.update({
-            where: { id: record.bdcId },
-            data: { status: 'ISSUED' },
-          })
+          shouldUpdateBdc = true
           break
 
         case 'cancel': // 取消
@@ -247,7 +235,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updateData.remark = remark
     }
 
-    // 使用事务更新记录和创建流程节点
+    // 使用事务更新记录、创建流程节点，以及更新宅基地状态
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const updated = await tx.zjdReceiveRecord.update({
         where: { id },
@@ -264,6 +252,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           },
         },
       })
+
+      // 更新宅基地状态为已发放
+      if (shouldUpdateBdc) {
+        await tx.zjdBdc.update({
+          where: { id: record.bdcId },
+          data: { status: 'ISSUED' },
+        })
+      }
 
       // 创建流程节点
       if (processNodeData.nodeType) {

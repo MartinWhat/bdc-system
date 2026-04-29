@@ -37,10 +37,13 @@ export async function getCurrentUser(request: NextRequest): Promise<Authenticate
     }
 
     // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
-    const jwtKey = process.env.JWT_SECRET_KEY || 'default-jwt-secret-key-change-in-production'
+    const jwtKey = process.env.JWT_SECRET_KEY
+    if (!jwtKey) {
+      throw new Error('JWT_SECRET_KEY environment variable is required')
+    }
 
     // 验证 token
-    const payload = verifyJWT(token, jwtKey)
+    const payload = await verifyJWT(token, jwtKey)
     if (!payload) {
       return null
     }
