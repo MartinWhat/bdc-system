@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 
 // 导入数据项 schema
 const importItemSchema = z.object({
@@ -32,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { items } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

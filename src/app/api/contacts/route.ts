@@ -5,7 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { decryptSensitiveField } from '@/lib/gm-crypto'
+import { sm4Decrypt } from '@/lib/gm-crypto'
+import { getActiveKey } from '@/lib/kms'
+import { maskPhone } from '@/lib/utils/mask'
 import { withPermission } from '@/lib/api/withPermission'
 
 // GET - 获取通讯录列表
@@ -98,14 +100,28 @@ async function getContactsListHandler(request: NextRequest) {
       }),
     ])
 
-    // 解密敏感信息
-    const decryptedUsers = await Promise.all(
-      users.map(async (user) => ({
-        ...user,
-        phone: user.phone ? await decryptSensitiveField(user.phone) : '',
-        roles: user.roles.map((ur) => ur.role),
-      })),
-    )
+    // 批量解密手机号并脱敏
+    const phonesToDecrypt = users.filter((u) => u.phone).map((u) => u.phone as string)
+
+    const phoneMap = new Map<string, string>()
+    if (phonesToDecrypt.length > 0) {
+      const sm4KeyRecord = await getActiveKey('SM4_DATA')
+      const sm4Key = sm4KeyRecord.keyData
+      for (const encrypted of phonesToDecrypt) {
+        try {
+          const [iv, ciphertext] = encrypted.split(':')
+          phoneMap.set(encrypted, sm4Decrypt(ciphertext, sm4Key, iv))
+        } catch {
+          phoneMap.set(encrypted, '')
+        }
+      }
+    }
+
+    const decryptedUsers = users.map((user) => ({
+      ...user,
+      phone: user.phone ? maskPhone(phoneMap.get(user.phone) || '') : '',
+      roles: user.roles.map((ur) => ur.role),
+    }))
 
     return NextResponse.json({
       success: true,

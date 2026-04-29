@@ -1,18 +1,11 @@
 /**
  * JWT 认证中间件
- * 验证请求中的 JWT 令牌并注入用户信息
+ * 验证请求中的 JWT 令牌并注入用户信息到请求头
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWT } from '@/lib/auth'
 import { getAccessToken, extractTokenFromHeader } from '@/lib/auth/cookies'
-
-export interface AuthenticatedRequest extends NextRequest {
-  userId?: string
-  username?: string
-  roles?: string[]
-  permissions?: string[]
-}
 
 interface JWTPayload {
   sub: string
@@ -98,45 +91,14 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     payload = await verifyJWT(token, jwtKey)
 
     if (!payload) {
-      console.log(
-        '[Middleware] Token verification failed for:',
-        pathname,
-        'Token prefix:',
-        token.substring(0, 20),
-      )
       return NextResponse.json({ error: '无效的认证令牌', code: 'INVALID_TOKEN' }, { status: 401 })
     }
-
-    console.log('[Middleware] Token verified successfully for user:', payload.username)
   } catch (error) {
     console.error('[Middleware] Auth service error:', error)
     return NextResponse.json({ error: '认证服务错误', code: 'AUTH_ERROR' }, { status: 500 })
   }
 
-  // 使用 Object.defineProperty 直接附加到 request 对象（避免响应头丢失问题）
-  // 注意：必须在 NextResponse.next() 之前设置，否则后续 handler 无法访问
-  Object.defineProperty(request, 'userId', {
-    value: payload.sub,
-    writable: false,
-    enumerable: true,
-  })
-  Object.defineProperty(request, 'username', {
-    value: payload.username,
-    writable: false,
-    enumerable: true,
-  })
-  Object.defineProperty(request, 'roles', {
-    value: payload.roles || [],
-    writable: false,
-    enumerable: true,
-  })
-  Object.defineProperty(request, 'permissions', {
-    value: payload.permissions || [],
-    writable: false,
-    enumerable: true,
-  })
-
-  // 同时设置到 header 中（确保 API Route 可以通过 headers.get 读取）
+  // 设置用户信息到响应头（API Route 可通过 headers.get 读取）
   const response = NextResponse.next()
   response.headers.set('x-user-id', payload.sub || '')
   response.headers.set('x-username', encodeURIComponent(payload.username || ''))
@@ -170,43 +132,36 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
 }
 
 /**
- * 从请求中获取用户信息
- * 优先从 request 对象属性读取（中间件直接附加，可信来源）
- * 回退到从请求头读取（兼容性）
+ * 从请求头中获取用户信息（由 Middleware 注入）
  */
 export function getUserFromRequest(request: NextRequest) {
-  // 优先从 request 对象属性读取（中间件直接附加，比请求头更可信）
-  const userId = (request as any).userId || request.headers.get('x-user-id')
-  const username = (request as any).username || request.headers.get('x-username')
-  const roles = (request as any).roles || request.headers.get('x-user-roles')
-  const permissions = (request as any).permissions || request.headers.get('x-user-permissions')
+  const userId = request.headers.get('x-user-id')
+  const username = request.headers.get('x-username')
+  const rolesHeader = request.headers.get('x-user-roles')
+  const permissionsHeader = request.headers.get('x-user-permissions')
 
   let parsedRoles: string[] = []
   let parsedPermissions: string[] = []
 
-  if (Array.isArray(roles)) {
-    parsedRoles = roles
-  } else if (roles) {
+  if (rolesHeader) {
     try {
-      parsedRoles = JSON.parse(decodeURIComponent(roles as string))
+      parsedRoles = JSON.parse(decodeURIComponent(rolesHeader))
     } catch {
       parsedRoles = []
     }
   }
 
-  if (Array.isArray(permissions)) {
-    parsedPermissions = permissions
-  } else if (permissions) {
+  if (permissionsHeader) {
     try {
-      parsedPermissions = JSON.parse(decodeURIComponent(permissions as string))
+      parsedPermissions = JSON.parse(decodeURIComponent(permissionsHeader))
     } catch {
       parsedPermissions = []
     }
   }
 
   return {
-    userId,
-    username: username ? decodeURIComponent(username as string) : undefined,
+    userId: userId || undefined,
+    username: username ? decodeURIComponent(username) : undefined,
     roles: parsedRoles,
     permissions: parsedPermissions,
   }

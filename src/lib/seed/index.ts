@@ -17,21 +17,32 @@ async function seedRolesAndPermissions() {
   const permissions = [
     { code: 'user:manage', name: '用户管理', type: 'MENU' },
     { code: 'user:create', name: '创建用户', type: 'BUTTON' },
-    { code: 'user:update', name: '编辑用户', type: 'BUTTON' },
-    { code: 'user:delete', name: '删除用户', type: 'BUTTON' },
+    { code: 'user:read', name: '查看用户', type: 'BUTTON' },
     { code: 'role:manage', name: '角色管理', type: 'MENU' },
+    { code: 'permission:read', name: '查看权限', type: 'BUTTON' },
     { code: 'town:manage', name: '镇街管理', type: 'MENU' },
     { code: 'village:manage', name: '村居管理', type: 'MENU' },
-    { code: 'bdc:manage', name: '宅基地管理', type: 'MENU' },
-    { code: 'bdc:certify', name: '宅基地发证', type: 'BUTTON' },
-    { code: 'collective:manage', name: '村集体管理', type: 'MENU' },
-    { code: 'stats:view', name: '查看统计', type: 'MENU' },
+    { code: 'bdc:read', name: '查看宅基地', type: 'MENU' },
+    { code: 'bdc:create', name: '创建宅基地', type: 'BUTTON' },
+    { code: 'bdc:update', name: '编辑宅基地', type: 'BUTTON' },
+    { code: 'bdc:delete', name: '删除宅基地', type: 'BUTTON' },
+    { code: 'collective:read', name: '查看村集体证书', type: 'MENU' },
+    { code: 'collective:create', name: '创建村集体证书', type: 'BUTTON' },
+    { code: 'objection:read', name: '查看异议', type: 'MENU' },
+    { code: 'objection:create', name: '创建异议', type: 'BUTTON' },
+    { code: 'objection:write', name: '处理异议', type: 'BUTTON' },
+    { code: 'objection:manage', name: '异议流程管理', type: 'MENU' },
+    { code: 'receive:read', name: '查看领证记录', type: 'MENU' },
+    { code: 'receive:create', name: '创建领证记录', type: 'BUTTON' },
+    { code: 'upload:file', name: '上传文件', type: 'BUTTON' },
+    { code: 'contact:read', name: '查看通讯录', type: 'MENU' },
+    { code: 'contact:manage', name: '通讯录管理', type: 'MENU' },
+    { code: 'stats:read', name: '查看统计', type: 'MENU' },
     { code: 'notification:view', name: '查看通知', type: 'MENU' },
+    { code: 'notification:create', name: '创建通知', type: 'BUTTON' },
     { code: 'notification:manage', name: '通知管理', type: 'MENU' },
     { code: 'log:view', name: '查看日志', type: 'MENU' },
     { code: 'kms:manage', name: '密钥管理', type: 'MENU' },
-    { code: 'contact:view', name: '查看通讯录', type: 'MENU' },
-    { code: 'system:settings', name: '系统设置', type: 'MENU' },
   ]
 
   for (const perm of permissions) {
@@ -63,6 +74,46 @@ async function seedRolesAndPermissions() {
       code: 'VIEWER',
       name: '查看者',
       description: '仅查看权限',
+    },
+    {
+      code: 'BDC_MANAGER',
+      name: '宅基地管理员',
+      description: '宅基地管理权限',
+    },
+    {
+      code: 'COLLECTIVE_MANAGER',
+      name: '村集体管理员',
+      description: '村集体证书管理权限',
+    },
+    {
+      code: 'OBJECTION_HANDLER',
+      name: '异议处理员',
+      description: '异议处理权限',
+    },
+    {
+      code: 'RECEIVE_CLERK',
+      name: '领证办事员',
+      description: '领证记录管理权限',
+    },
+    {
+      code: 'CONTACT_MANAGER',
+      name: '通讯录管理员',
+      description: '通讯录管理权限',
+    },
+    {
+      code: 'STATS_VIEWER',
+      name: '统计查看员',
+      description: '查看统计报表权限',
+    },
+    {
+      code: 'TOWN_ADMIN',
+      name: '镇街管理员',
+      description: '镇街级数据管理权限',
+    },
+    {
+      code: 'VILLAGE_ADMIN',
+      name: '村居管理员',
+      description: '村居级数据管理权限',
     },
   ]
 
@@ -111,7 +162,30 @@ async function seedDefaultAdmin() {
   })
 
   if (existingUser) {
-    console.log('  管理员用户已存在，跳过')
+    // 确保已有用户分配了 ADMIN 角色
+    const adminRole = await prisma.sysRole.findUnique({
+      where: { code: 'ADMIN' },
+    })
+    if (adminRole) {
+      const existingUserRole = await prisma.userRole.findUnique({
+        where: {
+          userId_roleId: {
+            userId: existingUser.id,
+            roleId: adminRole.id,
+          },
+        },
+      })
+      if (!existingUserRole) {
+        await prisma.userRole.create({
+          data: {
+            userId: existingUser.id,
+            roleId: adminRole.id,
+          },
+        })
+        console.log('  ✓ 为已有管理员用户补充分配角色')
+      }
+    }
+    console.log('  管理员用户已存在，跳过创建')
     return
   }
 

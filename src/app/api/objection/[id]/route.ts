@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 
 const resolveObjectionSchema = z.object({
   status: z.enum(['RESOLVED', 'REJECTED']),
@@ -67,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { status, resolveRemark } = validationResult.data
-    const resolverId = await getCurrentUserId(request)
+    const resolverId = request.headers.get('x-user-id')
 
     if (!resolverId) {
       return NextResponse.json(

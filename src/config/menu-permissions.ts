@@ -16,15 +16,15 @@ export interface MenuItemPermission {
 export const MENU_PERMISSIONS: Record<string, string[]> = {
   // 主菜单
   '/': [], // 工作台无需权限
-  '/bdc': ['bdc:manage'],
-  '/lingzheng': ['bdc:manage'],
+  '/bdc': ['bdc:read'],
+  '/lingzheng': ['bdc:read'],
   '/objection': ['objection:read'], // 异议管理
   '/objection/workflow': ['objection:manage'], // 异议流程配置
-  '/collective': ['collective:manage'],
-  '/stats': ['stats:view'],
+  '/collective': ['collective:read'],
+  '/stats': ['stats:read'],
   '/notifications': ['notification:view'],
   '/profile': [], // 个人信息无需特殊权限
-  '/contacts': ['contact:view'], // 通讯录
+  '/contacts': ['contact:read'], // 通讯录
 
   // 系统设置
   '/users': ['user:manage'],

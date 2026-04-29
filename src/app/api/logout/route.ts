@@ -6,9 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sm3Hash } from '@/lib/gm-crypto'
-import { getRefreshToken } from '@/lib/auth/cookies'
+import { getRefreshToken, clearAuthCookies } from '@/lib/auth/cookies'
 
-import { destroySession, destroyAllUserSessions } from '@/lib/session'
+import { destroyAllUserSessions } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,10 +30,13 @@ export async function POST(request: NextRequest) {
       await destroyAllUserSessions(userId)
     }
 
-    return NextResponse.json({
+    // 清除客户端 httpOnly Cookie
+    const response = NextResponse.json({
       success: true,
       message: '登出成功',
     })
+    clearAuthCookies(response)
+    return response
   } catch (error) {
     console.error('Logout error:', error)
     return NextResponse.json({ error: '登出失败', code: 'SERVER_ERROR' }, { status: 500 })

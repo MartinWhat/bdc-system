@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 import { withPermission } from '@/lib/api/withPermission'
 
 const PHONE_REGEX = /^1[3-9]\d{9}$/
@@ -25,7 +24,7 @@ async function getObjectionsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '10')
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '10'), 100)
     const status = searchParams.get('status')
     const receiveRecordId = searchParams.get('receiveRecordId')
 
@@ -93,7 +92,7 @@ async function createObjectionHandler(request: NextRequest) {
 
     const { receiveRecordId, objectionType, description, contactName, contactPhone } =
       validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

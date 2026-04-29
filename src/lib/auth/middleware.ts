@@ -1,11 +1,18 @@
 /**
- * API 认证中间件
- * 从 JWT Token 获取当前用户信息
+ * API 认证中间件（已废弃）
+ *
+ * @deprecated 此文件中的函数已废弃，请使用以下替代方案：
+ * - getUserFromRequest(request) 从 '@/lib/middleware/auth' 导入
+ * - withPermission() HOF 从 '@/lib/api/withPermission' 导入
+ *
+ * Middleware 层已统一处理 JWT 验证并注入用户信息到请求头，
+ * API Route 层无需再次验证 JWT。
+ *
+ * 保留此文件仅用于向后兼容，新代码请勿使用。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyJWT } from './jwt'
-import { getAccessToken } from './cookies'
+import { getUserFromRequest } from '@/lib/middleware/auth'
 
 export interface AuthenticatedUser {
   userId: string
@@ -15,72 +22,35 @@ export interface AuthenticatedUser {
 }
 
 /**
- * 从请求中获取当前认证用户
- * @param request - Next.js 请求对象
- * @returns 认证用户信息或 null
+ * @deprecated 使用 getUserFromRequest(request) 从 '@/lib/middleware/auth' 导入
  */
-export async function getCurrentUser(request: NextRequest): Promise<AuthenticatedUser | null> {
-  try {
-    // 优先从 Authorization header 获取 token
-    const authHeader = request.headers.get('authorization')
-    let token: string | null = null
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.slice(7)
-    } else {
-      // 后备：从 Cookie 获取（支持 httpOnly Cookie）
-      token = getAccessToken(request)
-    }
-
-    if (!token) {
-      return null
-    }
-
-    // 使用环境变量中的 JWT 密钥（与 Middleware 保持一致）
-    const jwtKey = process.env.JWT_SECRET_KEY
-    if (!jwtKey) {
-      throw new Error('JWT_SECRET_KEY environment variable is required')
-    }
-
-    // 验证 token
-    const payload = await verifyJWT(token, jwtKey)
-    if (!payload) {
-      return null
-    }
-
-    return {
-      userId: payload.sub,
-      username: payload.username,
-      roles: payload.roles,
-      permissions: payload.permissions,
-    }
-  } catch (error) {
-    console.error('Get current user error:', error)
-    return null
+export function getCurrentUser(request: NextRequest): AuthenticatedUser | null {
+  const { userId, username, roles, permissions } = getUserFromRequest(request)
+  if (!userId) return null
+  return {
+    userId: userId as string,
+    username: username || '',
+    roles,
+    permissions,
   }
 }
 
 /**
- * 获取当前用户 ID 的辅助函数
- * @param request - Next.js 请求对象
- * @returns 用户 ID 或 null
+ * @deprecated 使用 request.headers.get('x-user-id') 或 getUserFromRequest(request).userId
  */
-export async function getCurrentUserId(request: NextRequest): Promise<string | null> {
-  const user = await getCurrentUser(request)
-  return user?.userId || null
+export function getCurrentUserId(request: NextRequest): string | null {
+  return request.headers.get('x-user-id') || null
 }
 
 /**
- * 认证中间件装饰器
- * @param handler - 处理函数
- * @param requiredPermissions - 所需权限（可选）
+ * @deprecated 使用 withPermission() HOF 从 '@/lib/api/withPermission' 导入
  */
 export function withAuth<T extends NextRequest>(
   handler: (request: T, user: AuthenticatedUser) => Promise<NextResponse>,
   requiredPermissions?: string[],
 ) {
   return async function authenticatedHandler(request: T): Promise<NextResponse> {
-    const user = await getCurrentUser(request)
+    const user = getCurrentUser(request)
 
     if (!user) {
       return NextResponse.json(

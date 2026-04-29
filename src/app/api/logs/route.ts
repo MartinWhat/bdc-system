@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '20')
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '20'), 100)
     const userId = searchParams.get('userId') || undefined
     const moduleParam = searchParams.get('module') || undefined
     const action = searchParams.get('action') || undefined

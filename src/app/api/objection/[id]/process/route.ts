@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withPermission } from '@/lib/api/withPermission'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
 const processSchema = z.object({
@@ -149,7 +148,7 @@ async function executeProcessHandler(
     }
 
     const { action, remark, nextApproverId, nextApproverName } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json({ error: '未认证', code: 'UNAUTHORIZED' }, { status: 401 })

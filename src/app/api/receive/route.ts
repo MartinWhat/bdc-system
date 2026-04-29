@@ -6,9 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sm4Decrypt } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
-import { maskIdCard, maskPhone } from '@/lib/utils/mask'
+import { decryptAndMaskRecords } from '@/lib/utils/batch-decrypt'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
@@ -84,56 +82,19 @@ async function getReceiveRecordsListHandler(request: NextRequest) {
       }),
     ])
 
-    // 解密敏感字段并脱敏（性能优化：批量解密）
-    const idCardsToDecrypt = records
-      .filter((r) => r.receiverIdCard)
-      .map((r) => r.receiverIdCard as string)
-    const phonesToDecrypt = records
-      .filter((r) => r.receiverPhone)
-      .map((r) => r.receiverPhone as string)
+    // 解密敏感字段并脱敏（使用批量解密工具函数）
+    const decryptedRecords = await decryptAndMaskRecords(records, [
+      { field: 'receiverIdCard', maskType: 'idCard' },
+      { field: 'receiverPhone', maskType: 'phone' },
+    ])
 
-    let decryptedIdCards: string[] = []
-    let decryptedPhones: string[] = []
-
-    if (idCardsToDecrypt.length > 0 || phonesToDecrypt.length > 0) {
-      const sm4KeyRecord = await getActiveKey('SM4_DATA')
-      const sm4Key = sm4KeyRecord.keyData
-
-      decryptedIdCards = idCardsToDecrypt.map((encrypted) => {
-        try {
-          const [iv, ciphertext] = encrypted.split(':')
-          return sm4Decrypt(ciphertext, sm4Key, iv)
-        } catch {
-          throw new Error(`身份证解密失败: ${encrypted.substring(0, 20)}...`)
-        }
-      })
-
-      decryptedPhones = phonesToDecrypt.map((encrypted) => {
-        try {
-          const [iv, ciphertext] = encrypted.split(':')
-          return sm4Decrypt(ciphertext, sm4Key, iv)
-        } catch {
-          throw new Error(`手机号解密失败: ${encrypted.substring(0, 20)}...`)
-        }
-      })
-    }
-
-    const idCardMap = new Map<string, string>()
-    const phoneMap = new Map<string, string>()
-    idCardsToDecrypt.forEach((enc, i) => idCardMap.set(enc, decryptedIdCards[i]))
-    phonesToDecrypt.forEach((enc, i) => phoneMap.set(enc, decryptedPhones[i]))
-
-    const sanitizedRecords = records.map((record) => ({
+    const sanitizedRecords = decryptedRecords.map((record, index) => ({
       id: record.id,
       bdcId: record.bdcId,
       status: record.status,
       receiverName: record.receiverName,
-      receiverIdCard: record.receiverIdCard
-        ? maskIdCard(idCardMap.get(record.receiverIdCard) || '解密失败')
-        : null,
-      receiverPhone: record.receiverPhone
-        ? maskPhone(phoneMap.get(record.receiverPhone) || '解密失败')
-        : null,
+      receiverIdCard: record.receiverIdCard,
+      receiverPhone: record.receiverPhone,
       remark: record.remark,
       applyDate: record.applyDate,
       issueDate: record.issueDate,
@@ -142,8 +103,10 @@ async function getReceiveRecordsListHandler(request: NextRequest) {
       signedDate: record.signedDate,
       bdc: record.bdc,
       processNodes: record.processNodes,
-      hasObjection: record.objections.length > 0,
-      activeObjectionId: record.objections[0]?.id || null,
+      // 从原始记录获取 objections（decryptAndMaskRecords 不保留数组类型）
+      hasObjection: (records[index].objections as unknown[])?.length > 0,
+      activeObjectionId:
+        ((records[index].objections as unknown[])?.[0] as { id?: string })?.id || null,
     }))
 
     return NextResponse.json({

@@ -7,7 +7,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createEncryptionContext, encryptWithContext } from '@/lib/gm-crypto'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
 const batchImportSchema = z.object({
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { items } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

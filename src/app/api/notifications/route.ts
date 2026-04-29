@@ -7,15 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { withPermission } from '@/lib/api/withPermission'
+import { sanitizeHtml } from '@/lib/utils/sanitize'
 import { z } from 'zod'
-// TODO: XSS 防护需要安装 dompurify
-// import DOMPurify from 'dompurify'
-
-/**
- * HTML 内容 sanitization（待实现）
- * 需要安装 dompurify 并在返回 content 前调用:
- * DOMPurify.sanitize(content, { ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'ul', 'li'] })
- */
 
 const createNotificationSchema = z.object({
   title: z.string().min(1, '标题不能为空'),
@@ -36,7 +29,7 @@ async function getNotificationsListHandler(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('pageSize') || '10')
+    const pageSize = Math.min(parseInt(searchParams.get('pageSize') || '10'), 100)
     const type = searchParams.get('type')
     const status = searchParams.get('status')
     const keyword = searchParams.get('keyword') || ''
@@ -167,10 +160,14 @@ async function createNotificationHandler(request: NextRequest) {
       pdfUrl,
     } = validationResult.data
 
+    // XSS 防护：清洗 HTML 内容
+    const sanitizedTitle = sanitizeHtml(title)
+    const sanitizedContent = sanitizeHtml(content)
+
     const notification = await prisma.notification.create({
       data: {
-        title,
-        content,
+        title: sanitizedTitle,
+        content: sanitizedContent,
         type,
         priority,
         isPopup,

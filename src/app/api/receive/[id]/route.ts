@@ -8,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
 import { z } from 'zod'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 
 // 身份证验证正则
 const ID_CARD_REGEX = /^[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]$/
@@ -132,7 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       remark,
     } = validationResult.data
 
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

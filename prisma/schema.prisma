@@ -56,7 +56,7 @@ model SysKeyVersion {
   id        String   @id @default(cuid())
   keyType   String
   version   Int
-  keyData   String
+  keyData   String   @db.Text
   isActive  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

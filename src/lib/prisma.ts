@@ -26,9 +26,13 @@ if (!databaseUrl) {
 
 const connectionConfig = parseDatabaseUrl(databaseUrl)
 
+// 连接池配置
+// 开发环境使用较小连接池，生产环境使用较大连接池
+const connectionLimit = process.env.NODE_ENV === 'production' ? 15 : 5
+
 const adapter = new PrismaMariaDb({
   ...connectionConfig,
-  connectionLimit: 5,
+  connectionLimit,
 })
 
 const globalForPrisma = globalThis as unknown as {

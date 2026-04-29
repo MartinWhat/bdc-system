@@ -56,28 +56,68 @@ async function getStatsHandler(request: NextRequest) {
       PENDING_APPROVE: '待审核',
     }
 
-    // 5. 镇街统计
-    const towns = await prisma.sysTown.findMany({
+    // 5. 镇街统计（使用数据库 GROUP BY 代替应用层计算）
+    const townBdcStats = await prisma.zjdBdc.groupBy({
+      by: ['villageId'],
+      where: baseWhere,
+      _count: { id: true },
+    })
+
+    const townCertStats = await prisma.collectiveCert.groupBy({
+      by: ['villageId'],
+      where: baseWhere,
+      _count: { id: true },
+    })
+
+    // 获取镇街和村居信息
+    const townsData = await prisma.sysTown.findMany({
       include: {
-        villages: {
-          include: {
-            bdcs: { select: { id: true, status: true } },
-            collectiveCerts: { select: { id: true, status: true } },
-          },
-        },
+        villages: { select: { id: true, name: true } },
       },
     })
 
-    const townStats = towns.map((town) => {
-      const bdcCount = town.villages.reduce((sum, v) => sum + v.bdcs.length, 0)
-      const certCount = town.villages.reduce((sum, v) => sum + v.collectiveCerts.length, 0)
-      return {
-        townId: town.id,
-        townName: town.name,
-        bdcCount,
-        certCount,
+    // 构建村居到镇街的映射
+    const villageToTown = new Map<string, { townId: string; townName: string; villageId: string }>()
+    for (const town of townsData) {
+      for (const village of town.villages) {
+        villageToTown.set(village.id, {
+          townId: town.id,
+          townName: town.name,
+          villageId: village.id,
+        })
       }
-    })
+    }
+
+    // 聚合镇街统计
+    const townCountMap = new Map<
+      string,
+      { townId: string; townName: string; bdcCount: number; certCount: number }
+    >()
+    for (const town of townsData) {
+      townCountMap.set(town.id, { townId: town.id, townName: town.name, bdcCount: 0, certCount: 0 })
+    }
+
+    for (const stat of townBdcStats) {
+      const townInfo = villageToTown.get(stat.villageId)
+      if (townInfo) {
+        const townStat = townCountMap.get(townInfo.townId)
+        if (townStat) {
+          townStat.bdcCount += stat._count.id
+        }
+      }
+    }
+
+    for (const stat of townCertStats) {
+      const townInfo = villageToTown.get(stat.villageId)
+      if (townInfo) {
+        const townStat = townCountMap.get(townInfo.townId)
+        if (townStat) {
+          townStat.certCount += stat._count.id
+        }
+      }
+    }
+
+    const townStats = Array.from(townCountMap.values())
 
     // 6. 本月新增
     const now = new Date()

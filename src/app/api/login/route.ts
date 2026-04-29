@@ -16,6 +16,7 @@ import { logOperation } from '@/lib/log'
 import { setAuthCookies } from '@/lib/auth/cookies'
 import {
   checkRateLimit,
+  checkRateLimitAsync,
   getClientIdentifier,
   resetRateLimit,
   isAccountLocked,
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest) {
     const { username, password } = validationResult.data
 
     // 检查账户是否被锁定
-    const lockoutStatus = isAccountLocked(username)
+    const lockoutStatus = await isAccountLocked(username)
     if (lockoutStatus.locked) {
       const remainingSeconds = Math.ceil((lockoutStatus.lockedUntil! - Date.now()) / 1000)
       return NextResponse.json(
@@ -73,8 +74,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 速率限制检查（基于用户名）
-    const loginRateLimit = checkRateLimit(username, 'LOGIN')
+    // 速率限制检查（基于用户名，异步版本）
+    const loginRateLimit = await checkRateLimitAsync(username, 'LOGIN')
     if (!loginRateLimit.allowed) {
       return NextResponse.json(
         {
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       // 记录登录失败
-      recordLoginFailure(username)
+      await recordLoginFailure(username)
       return NextResponse.json(
         { error: '用户名或密码错误', code: 'INVALID_CREDENTIALS' },
         { status: 401 },
@@ -168,8 +169,8 @@ export async function POST(request: NextRequest) {
     })
 
     // 登录成功后重置速率限制和失败记录
-    resetRateLimit(username, 'LOGIN')
-    clearLoginFailure(username)
+    await resetRateLimit(username, 'LOGIN')
+    await clearLoginFailure(username)
 
     // 返回登录成功响应（Token 已通过 httpOnly Cookie 存储）
     const response = NextResponse.json({

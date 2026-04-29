@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
 const freezeSchema = z.object({
@@ -28,7 +27,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const { freezeReason } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(
@@ -114,7 +113,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

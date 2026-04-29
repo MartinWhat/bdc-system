@@ -335,85 +335,99 @@ async function reEncryptAllData(
 
 /**
  * 重加密 SM4_DATA 密钥加密的数据
+ * 使用批量更新 + 并发控制优化性能
  */
 async function reEncryptSM4Data(oldKey: KeyRecord, newKey: KeyRecord): Promise<void> {
   // 重新获取上下文（确保使用正确的密钥）
   const oldCtx = { sm4Key: oldKey.keyData, masterKey: (await getActiveKey('MASTER_KEY')).keyData }
   const newCtx = { sm4Key: newKey.keyData, masterKey: (await getActiveKey('MASTER_KEY')).keyData }
 
-  // 定义需要重加密的表和字段
-  const tables = [
-    {
-      name: 'SysUser',
-      records: await prisma.sysUser.findMany({
-        where: { idCard: { contains: ':' } },
-        select: { id: true, idCard: true, phone: true },
-      }),
-      reEncrypt: async (record: { id: string; idCard?: string | null; phone?: string | null }) => {
-        const updateData: Record<string, string> = {}
-        if (record.idCard) {
-          const { encrypted, hash } = reEncryptField(record.idCard, oldCtx.sm4Key, newCtx)
-          updateData.idCard = encrypted
-          updateData.idCardHash = hash
-        }
-        if (record.phone && record.phone.includes(':')) {
-          const { encrypted, hash } = reEncryptField(record.phone, oldCtx.sm4Key, newCtx)
-          updateData.phone = encrypted
-          updateData.phoneHash = hash
-        }
-        if (Object.keys(updateData).length > 0) {
-          await prisma.sysUser.update({ where: { id: record.id }, data: updateData })
-        }
-      },
-    },
-    {
-      name: 'ZjdReceiveRecord',
-      records: await prisma.zjdReceiveRecord.findMany({
-        where: { receiverIdCard: { contains: ':' } },
-        select: { id: true, receiverIdCard: true, receiverPhone: true },
-      }),
-      reEncrypt: async (record: {
-        id: string
-        receiverIdCard?: string | null
-        receiverPhone?: string | null
-      }) => {
-        const updateData: Record<string, string> = {}
-        if (record.receiverIdCard) {
-          const { encrypted, hash } = reEncryptField(record.receiverIdCard, oldCtx.sm4Key, newCtx)
-          updateData.receiverIdCard = encrypted
-          updateData.receiverIdCardHash = hash
-        }
-        if (record.receiverPhone && record.receiverPhone.includes(':')) {
-          const { encrypted, hash } = reEncryptField(record.receiverPhone, oldCtx.sm4Key, newCtx)
-          updateData.receiverPhone = encrypted
-          updateData.receiverPhoneHash = hash
-        }
-        if (Object.keys(updateData).length > 0) {
-          await prisma.zjdReceiveRecord.update({ where: { id: record.id }, data: updateData })
-        }
-      },
-    },
-  ]
+  // 批量查询 SysUser 加密记录
+  const sysUsers = await prisma.sysUser.findMany({
+    where: { idCard: { contains: ':' } },
+    select: { id: true, idCard: true, phone: true },
+  })
 
-  for (const table of tables) {
-    for (const record of table.records) {
-      try {
-        await table.reEncrypt(record)
-      } catch (error) {
-        console.error(`Failed to re-encrypt ${table.name} record ${record.id}:`, error)
-      }
+  // 批量查询 ZjdReceiveRecord 加密记录
+  const receiveRecords = await prisma.zjdReceiveRecord.findMany({
+    where: { receiverIdCard: { contains: ':' } },
+    select: { id: true, receiverIdCard: true, receiverPhone: true },
+  })
+
+  // 并发控制：每批处理 50 条记录
+  const BATCH_SIZE = 50
+
+  // 批量更新 SysUser
+  const sysUserUpdates = sysUsers.map((record) => {
+    const updateData: Record<string, string> = {}
+    if (record.idCard) {
+      const { encrypted, hash } = reEncryptField(record.idCard, oldCtx.sm4Key, newCtx)
+      updateData.idCard = encrypted
+      updateData.idCardHash = hash
     }
+    if (record.phone && record.phone.includes(':')) {
+      const { encrypted, hash } = reEncryptField(record.phone, oldCtx.sm4Key, newCtx)
+      updateData.phone = encrypted
+      updateData.phoneHash = hash
+    }
+    return { id: record.id, data: updateData }
+  })
+
+  // 分批执行更新
+  for (let i = 0; i < sysUserUpdates.length; i += BATCH_SIZE) {
+    const batch = sysUserUpdates.slice(i, i + BATCH_SIZE)
+    await Promise.all(
+      batch.map((update) =>
+        prisma.sysUser.update({ where: { id: update.id }, data: update.data }).catch((error) => {
+          console.error(`Failed to re-encrypt SysUser ${update.id}:`, error)
+        }),
+      ),
+    )
+  }
+
+  // 批量更新 ZjdReceiveRecord
+  const receiveUpdates = receiveRecords.map((record) => {
+    const updateData: Record<string, string> = {}
+    if (record.receiverIdCard) {
+      const { encrypted, hash } = reEncryptField(record.receiverIdCard, oldCtx.sm4Key, newCtx)
+      updateData.receiverIdCard = encrypted
+      updateData.receiverIdCardHash = hash
+    }
+    if (record.receiverPhone && record.receiverPhone.includes(':')) {
+      const { encrypted, hash } = reEncryptField(record.receiverPhone, oldCtx.sm4Key, newCtx)
+      updateData.receiverPhone = encrypted
+      updateData.receiverPhoneHash = hash
+    }
+    return { id: record.id, data: updateData }
+  })
+
+  // 分批执行更新
+  for (let i = 0; i < receiveUpdates.length; i += BATCH_SIZE) {
+    const batch = receiveUpdates.slice(i, i + BATCH_SIZE)
+    await Promise.all(
+      batch.map((update) =>
+        prisma.zjdReceiveRecord
+          .update({ where: { id: update.id }, data: update.data })
+          .catch((error) => {
+            console.error(`Failed to re-encrypt ZjdReceiveRecord ${update.id}:`, error)
+          }),
+      ),
+    )
   }
 }
 
 /**
  * 重新生成 MASTER_KEY 哈希索引的数据
+ * 使用批量更新 + 并发控制优化性能
  */
 async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Promise<void> {
   const oldCtx = { sm4Key: (await getActiveKey('SM4_DATA')).keyData, masterKey: oldKey.keyData }
   const newCtx = { sm4Key: (await getActiveKey('SM4_DATA')).keyData, masterKey: newKey.keyData }
 
-  // SysUser: idCardHash, phoneHash
+  // 并发控制：每批处理 50 条记录
+  const BATCH_SIZE = 50
+
+  // SysUser: idCardHash, phoneHash - 批量查询
   const users = await prisma.sysUser.findMany({
     where: {
       OR: [{ idCardHash: { not: null } }, { phoneHash: { not: null } }],
@@ -421,9 +435,10 @@ async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Pro
     select: { id: true, idCard: true, phone: true },
   })
 
-  for (const user of users) {
+  // 批量准备更新数据
+  const userUpdates = users.map((user) => {
+    const updateData: Record<string, string> = {}
     try {
-      const updateData: Record<string, string> = {}
       if (user.idCard) {
         const [iv, ciphertext] = user.idCard.split(':')
         const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : user.idCard
@@ -434,15 +449,29 @@ async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Pro
         const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : user.phone
         updateData.phoneHash = sm3Hmac(plaintext, newCtx.masterKey)
       }
-      if (Object.keys(updateData).length > 0) {
-        await prisma.sysUser.update({ where: { id: user.id }, data: updateData })
-      }
     } catch (error) {
-      console.error(`Failed to re-generate hash for SysUser ${user.id}:`, error)
+      console.error(`Failed to prepare hash for SysUser ${user.id}:`, error)
     }
+    return { id: user.id, data: updateData }
+  })
+
+  // 分批执行更新
+  for (let i = 0; i < userUpdates.length; i += BATCH_SIZE) {
+    const batch = userUpdates.slice(i, i + BATCH_SIZE)
+    await Promise.all(
+      batch.map((update) =>
+        Object.keys(update.data).length > 0
+          ? prisma.sysUser
+              .update({ where: { id: update.id }, data: update.data })
+              .catch((error) => {
+                console.error(`Failed to update SysUser ${update.id}:`, error)
+              })
+          : Promise.resolve(),
+      ),
+    )
   }
 
-  // CollectiveCert: similar fields
+  // CollectiveCert: 批量查询
   const certs = await prisma.collectiveCert.findMany({
     where: {
       OR: [{ idCardHash: { not: null } }, { phoneHash: { not: null } }],
@@ -450,9 +479,10 @@ async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Pro
     select: { id: true, idCard: true, phone: true },
   })
 
-  for (const cert of certs) {
+  // 批量准备更新数据
+  const certUpdates = certs.map((cert) => {
+    const updateData: Record<string, string> = {}
     try {
-      const updateData: Record<string, string> = {}
       if (cert.idCard) {
         const [iv, ciphertext] = cert.idCard.split(':')
         const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : cert.idCard
@@ -463,12 +493,26 @@ async function reEncryptMasterKeyData(oldKey: KeyRecord, newKey: KeyRecord): Pro
         const plaintext = iv && ciphertext ? sm4Decrypt(ciphertext, oldCtx.sm4Key, iv) : cert.phone
         updateData.phoneHash = sm3Hmac(plaintext, newCtx.masterKey)
       }
-      if (Object.keys(updateData).length > 0) {
-        await prisma.collectiveCert.update({ where: { id: cert.id }, data: updateData })
-      }
     } catch (error) {
-      console.error(`Failed to re-generate hash for CollectiveCert ${cert.id}:`, error)
+      console.error(`Failed to prepare hash for CollectiveCert ${cert.id}:`, error)
     }
+    return { id: cert.id, data: updateData }
+  })
+
+  // 分批执行更新
+  for (let i = 0; i < certUpdates.length; i += BATCH_SIZE) {
+    const batch = certUpdates.slice(i, i + BATCH_SIZE)
+    await Promise.all(
+      batch.map((update) =>
+        Object.keys(update.data).length > 0
+          ? prisma.collectiveCert
+              .update({ where: { id: update.id }, data: update.data })
+              .catch((error) => {
+                console.error(`Failed to update CollectiveCert ${update.id}:`, error)
+              })
+          : Promise.resolve(),
+      ),
+    )
   }
 }
 

@@ -1,9 +1,11 @@
 /**
  * 速率限制模块
  * 基于 IP 和用户名实现速率限制，防止暴力破解和 DoS 攻击
+ * 支持内存存储（单实例）和 Redis 存储（多实例/serverless）
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getRedisStore, RedisRateLimitStore } from './rate-limit-redis'
 
 interface RateLimitStore {
   [key: string]: {
@@ -21,13 +23,13 @@ interface AccountLockoutStore {
   }
 }
 
-// 内存存储（生产环境建议使用 Redis）
+// 内存存储（单实例部署使用）
 // 注意：内存存储在 serverless或多实例部署时不生效，限流可被绕过
-// TODO(生产环境): 替换为 Redis 存储，使用原子操作保证限流准确性
-const store: RateLimitStore = {}
+// 生产环境建议配置 REDIS_URL 使用 Redis 存储
+const memoryStore: RateLimitStore = {}
 
 // 账户锁定存储（独立管理）
-const lockoutStore: AccountLockoutStore = {}
+const memoryLockoutStore: AccountLockoutStore = {}
 
 // 账户锁定配置
 const ACCOUNT_LOCKOUT_CONFIG = {
@@ -36,8 +38,26 @@ const ACCOUNT_LOCKOUT_CONFIG = {
   resetFailedAttemptsAfterMs: 30 * 60 * 1000, // 30 分钟无失败后重置计数
 }
 
-// 清理过期记录的间隔（毫秒）
-const CLEANUP_INTERVAL = 60 * 1000 // 1 分钟
+// Redis 存储实例（懒加载）
+let redisStoreInstance: RedisRateLimitStore | null = null
+
+/**
+ * 获取存储实例（优先 Redis）
+ */
+async function getStore(): Promise<{
+  type: 'redis' | 'memory'
+  store: RedisRateLimitStore | null
+}> {
+  if (process.env.REDIS_URL && !redisStoreInstance) {
+    redisStoreInstance = await getRedisStore()
+  }
+
+  if (redisStoreInstance && redisStoreInstance.isConnected()) {
+    return { type: 'redis', store: redisStoreInstance }
+  }
+
+  return { type: 'memory', store: null }
+}
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -68,8 +88,11 @@ function generateKey(identifier: string, type: string): string {
   return `${type}:${identifier}`
 }
 
+// 清理过期记录的间隔（毫秒）
+const CLEANUP_INTERVAL = 60 * 1000 // 1 分钟
+
 /**
- * 检查并更新速率限制
+ * 检查并更新速率限制（同步版本，使用内存存储）
  * @param identifier - 标识符（IP 地址或用户名）
  * @param type - 速率限制类型
  * @returns 是否允许请求
@@ -82,18 +105,18 @@ export function checkRateLimit(
   const key = generateKey(identifier, type)
   const now = Date.now()
 
-  const record = store[key]
+  const record = memoryStore[key]
 
   // 没有记录或已过期，创建新记录
   if (!record || now > record.resetTime) {
-    store[key] = {
+    memoryStore[key] = {
       count: 1,
       resetTime: now + config.windowMs,
     }
     return {
       allowed: true,
       remaining: config.maxAttempts - 1,
-      resetTime: store[key].resetTime,
+      resetTime: memoryStore[key].resetTime,
     }
   }
 
@@ -113,6 +136,33 @@ export function checkRateLimit(
     remaining: config.maxAttempts - record.count,
     resetTime: record.resetTime,
   }
+}
+
+/**
+ * 检查并更新速率限制（异步版本，优先使用 Redis）
+ * @param identifier - 标识符（IP 地址或用户名）
+ * @param type - 速率限制类型
+ * @returns 是否允许请求
+ */
+export async function checkRateLimitAsync(
+  identifier: string,
+  type: keyof typeof DEFAULT_CONFIG = 'GENERAL',
+): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
+  const { type: storeType, store } = await getStore()
+
+  // Redis 存储
+  if (storeType === 'redis' && store) {
+    const config = DEFAULT_CONFIG[type]
+    const result = await store.increment(identifier, config.maxAttempts, config.windowMs)
+    return {
+      allowed: result.allowed,
+      remaining: Math.max(0, config.maxAttempts - result.count),
+      resetTime: result.resetTime,
+    }
+  }
+
+  // 内存存储（后备）
+  return checkRateLimit(identifier, type)
 }
 
 /**
@@ -150,7 +200,8 @@ export function withRateLimit(
   ): (request: NextRequest) => Promise<NextResponse> {
     return async function (request: NextRequest): Promise<NextResponse> {
       const identifier = getIdentifier ? getIdentifier(request) : getClientIdentifier(request)
-      const result = checkRateLimit(identifier, type)
+      // 使用异步版本（优先 Redis）
+      const result = await checkRateLimitAsync(identifier, type)
 
       if (!result.allowed) {
         const config = DEFAULT_CONFIG[type]
@@ -187,13 +238,13 @@ export function withRateLimit(
 }
 
 /**
- * 清理过期记录
+ * 清理过期记录（内存存储）
  */
 function cleanupExpiredRecords() {
   const now = Date.now()
-  for (const key in store) {
-    if (store[key].resetTime < now) {
-      delete store[key]
+  for (const key in memoryStore) {
+    if (memoryStore[key].resetTime < now) {
+      delete memoryStore[key]
     }
   }
 }
@@ -206,9 +257,19 @@ if (typeof global !== 'undefined') {
 /**
  * 重置指定标识符的速率限制（用于登录成功后）
  */
-export function resetRateLimit(identifier: string, type: keyof typeof DEFAULT_CONFIG = 'LOGIN') {
+export async function resetRateLimit(
+  identifier: string,
+  type: keyof typeof DEFAULT_CONFIG = 'LOGIN',
+) {
+  // 重置 Redis 存储
+  const { store } = await getStore()
+  if (store) {
+    await store.reset(identifier)
+  }
+
+  // 同时重置内存存储
   const key = generateKey(identifier, type)
-  delete store[key]
+  delete memoryStore[key]
 }
 
 /**
@@ -216,16 +277,33 @@ export function resetRateLimit(identifier: string, type: keyof typeof DEFAULT_CO
  * @param username - 用户名
  * @returns 是否被锁定及锁定截止时间
  */
-export function isAccountLocked(username: string): { locked: boolean; lockedUntil: number | null } {
-  const record = lockoutStore[username]
+export async function isAccountLocked(
+  username: string,
+): Promise<{ locked: boolean; lockedUntil: number | null }> {
+  // 优先检查 Redis
+  const { store } = await getStore()
+  if (store) {
+    const record = await store.getLockout(username)
+    if (!record) {
+      return { locked: false, lockedUntil: null }
+    }
+
+    if (record.lockedUntil && Date.now() > record.lockedUntil) {
+      await store.deleteLockout(username)
+      return { locked: false, lockedUntil: null }
+    }
+
+    return { locked: !!record.lockedUntil, lockedUntil: record.lockedUntil }
+  }
+
+  // 内存存储（后备）
+  const record = memoryLockoutStore[username]
   if (!record) {
     return { locked: false, lockedUntil: null }
   }
 
-  // 检查是否已过锁定时间
   if (record.lockedUntil && Date.now() > record.lockedUntil) {
-    // 锁定已过期，清除记录
-    delete lockoutStore[username]
+    delete memoryLockoutStore[username]
     return { locked: false, lockedUntil: null }
   }
 
@@ -236,12 +314,63 @@ export function isAccountLocked(username: string): { locked: boolean; lockedUnti
  * 记录登录失败
  * @param username - 用户名
  */
-export function recordLoginFailure(username: string): void {
+export async function recordLoginFailure(username: string): Promise<void> {
   const now = Date.now()
-  const record = lockoutStore[username]
+
+  // Redis 存储
+  const { store } = await getStore()
+  if (store) {
+    const existing = await store.getLockout(username)
+    if (!existing) {
+      await store.setLockout(
+        username,
+        {
+          failedAttempts: 1,
+          lockedUntil: null,
+          lastFailedAt: now,
+        },
+        ACCOUNT_LOCKOUT_CONFIG.resetFailedAttemptsAfterMs,
+      )
+      return
+    }
+
+    // 检查是否需要重置失败计数
+    if (now - existing.lastFailedAt > ACCOUNT_LOCKOUT_CONFIG.resetFailedAttemptsAfterMs) {
+      await store.setLockout(
+        username,
+        {
+          failedAttempts: 1,
+          lockedUntil: null,
+          lastFailedAt: now,
+        },
+        ACCOUNT_LOCKOUT_CONFIG.resetFailedAttemptsAfterMs,
+      )
+      return
+    }
+
+    const newFailedAttempts = existing.failedAttempts + 1
+    const lockedUntil =
+      newFailedAttempts >= ACCOUNT_LOCKOUT_CONFIG.maxFailedAttempts
+        ? now + ACCOUNT_LOCKOUT_CONFIG.lockoutDurationMs
+        : null
+
+    await store.setLockout(
+      username,
+      {
+        failedAttempts: newFailedAttempts,
+        lockedUntil,
+        lastFailedAt: now,
+      },
+      ACCOUNT_LOCKOUT_CONFIG.lockoutDurationMs,
+    )
+    return
+  }
+
+  // 内存存储（后备）
+  const record = memoryLockoutStore[username]
 
   if (!record) {
-    lockoutStore[username] = {
+    memoryLockoutStore[username] = {
       failedAttempts: 1,
       lockedUntil: null,
       lastFailedAt: now,
@@ -249,7 +378,6 @@ export function recordLoginFailure(username: string): void {
     return
   }
 
-  // 检查是否需要重置失败计数（30分钟无失败）
   if (now - record.lastFailedAt > ACCOUNT_LOCKOUT_CONFIG.resetFailedAttemptsAfterMs) {
     record.failedAttempts = 1
     record.lastFailedAt = now
@@ -260,7 +388,6 @@ export function recordLoginFailure(username: string): void {
   record.failedAttempts++
   record.lastFailedAt = now
 
-  // 检查是否需要锁定账户
   if (record.failedAttempts >= ACCOUNT_LOCKOUT_CONFIG.maxFailedAttempts) {
     record.lockedUntil = now + ACCOUNT_LOCKOUT_CONFIG.lockoutDurationMs
   }
@@ -270,22 +397,61 @@ export function recordLoginFailure(username: string): void {
  * 清除登录失败记录（登录成功后调用）
  * @param username - 用户名
  */
-export function clearLoginFailure(username: string): void {
-  delete lockoutStore[username]
-}
+export async function clearLoginFailure(username: string): Promise<void> {
+  // 清除 Redis 存储
+  const { store } = await getStore()
+  if (store) {
+    await store.deleteLockout(username)
+  }
 
+  // 清除内存存储
+  delete memoryLockoutStore[username]
+}
 /**
  * 获取账户锁定状态
  * @param username - 用户名
  * @returns 锁定状态信息
  */
-export function getAccountLockoutStatus(username: string): {
+export async function getAccountLockoutStatus(username: string): Promise<{
   failedAttempts: number
   isLocked: boolean
   lockedUntil: number | null
   remainingLockTimeMs: number | null
-} {
-  const record = lockoutStore[username]
+}> {
+  // 优先 Redis
+  const { store } = await getStore()
+  if (store) {
+    const record = await store.getLockout(username)
+    if (!record) {
+      return {
+        failedAttempts: 0,
+        isLocked: false,
+        lockedUntil: null,
+        remainingLockTimeMs: null,
+      }
+    }
+
+    const now = Date.now()
+    if (record.lockedUntil && now > record.lockedUntil) {
+      await store.deleteLockout(username)
+      return {
+        failedAttempts: 0,
+        isLocked: false,
+        lockedUntil: null,
+        remainingLockTimeMs: null,
+      }
+    }
+
+    return {
+      failedAttempts: record.failedAttempts,
+      isLocked: !!record.lockedUntil,
+      lockedUntil: record.lockedUntil,
+      remainingLockTimeMs: record.lockedUntil ? record.lockedUntil - now : null,
+    }
+  }
+
+  // 内存存储（后备）
+  const record = memoryLockoutStore[username]
   if (!record) {
     return {
       failedAttempts: 0,
@@ -301,8 +467,7 @@ export function getAccountLockoutStatus(username: string): {
 
   if (record.lockedUntil) {
     if (now > record.lockedUntil) {
-      // 锁定已过期
-      delete lockoutStore[username]
+      delete memoryLockoutStore[username]
       return {
         failedAttempts: 0,
         isLocked: false,

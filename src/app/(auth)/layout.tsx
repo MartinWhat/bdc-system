@@ -169,36 +169,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
-  // 从 Cookie 加载用户信息（同步）
+  // 监听认证过期事件
   useEffect(() => {
-    const originalFetch = window.fetch
-
-    window.fetch = async function (...args) {
-      const response = await originalFetch.apply(this, args)
-
-      if (response.status === 401) {
-        const url = typeof args[0] === 'string' ? args[0] : ''
-        const isAuthRequest =
-          url.includes('/login') || url.includes('/token/refresh') || url.includes('/logout')
-
-        if (!isAuthRequest) {
-          clearAuth()
-          setReLoginModalVisible(true)
-        }
-      }
-
-      return response
-    }
-
     const unsubscribe = onAuthExpiry(() => {
       clearAuth()
       setReLoginModalVisible(true)
     })
 
-    return () => {
-      window.fetch = originalFetch
-      unsubscribe()
-    }
+    return unsubscribe
   }, [clearAuth])
 
   // 通过 API 加载用户信息（从 httpOnly JWT cookie 获取）
@@ -210,12 +188,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         })
 
         if (!response.ok) {
-          if (response.status === 401) {
-            // 未登录，跳转登录页
-            router.push('/login')
-            setLoading(false)
-            return
-          }
           clearAuth()
           router.push('/login')
           setLoading(false)
@@ -234,25 +206,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         // 设置用户信息到 store（来自服务端验证的数据）
         setAuth(userData)
-
-        // 检查上次登录时间
-        const lastLoginAt = userData.lastLoginAt
-        if (lastLoginAt) {
-          const now = Date.now()
-          const oneDayMs = 24 * 60 * 60 * 1000 // 24 小时
-          const lastLoginTime = new Date(lastLoginAt).getTime()
-
-          // 如果超过 24 小时未登录，静默跳转登录页
-          if (now - lastLoginTime > oneDayMs) {
-            clearAuth()
-            router.push('/login')
-            setLoading(false)
-            return
-          }
-        }
       } catch (error) {
-        console.error('[DEBUG layout] failed to fetch /api/auth/me:', error)
-        // 如果 API 调用失败，为了安全起见，跳转登录页
+        console.error('Failed to fetch user info:', error)
         clearAuth()
         router.push('/login')
         setLoading(false)
@@ -267,18 +222,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   // 启动主动刷新定时器
   useEffect(() => {
-    console.log('[DEBUG layout] token refresh effect running, user:', user)
-    if (!user) {
-      console.log('[DEBUG layout] user is null, NOT starting timer')
-      return
-    }
+    if (!user) return
 
-    console.log('[DEBUG layout] user found, importing token-expiry...')
     import('@/lib/token-expiry').then(({ startTokenExpiryTimer, initTokenExpirySync }) => {
-      console.log('[DEBUG layout] token-expiry loaded, starting timer')
       startTokenExpiryTimer()
-      const cleanup = initTokenExpirySync()
-      return cleanup
+      return initTokenExpirySync()
     })
   }, [user])
 

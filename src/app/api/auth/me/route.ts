@@ -26,7 +26,6 @@ async function getCurrentUserInfoHandler(request: NextRequest) {
         realName: true,
         email: true,
         avatar: true,
-        phone: true,
         twoFactorEnabled: true,
         status: true,
         lastLoginAt: true,

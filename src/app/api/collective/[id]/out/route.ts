@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentUserId } from '@/lib/auth/middleware'
 import { z } from 'zod'
 
 const outApplySchema = z.object({
@@ -34,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const { outReason, expectedReturnDate } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(
@@ -132,7 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { action, remark } = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(

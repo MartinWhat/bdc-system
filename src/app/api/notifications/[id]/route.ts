@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { sanitizeHtml } from '@/lib/utils/sanitize'
 import { z } from 'zod'
 
 const updateNotificationSchema = z.object({
@@ -126,9 +127,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const updateData: Record<string, unknown> = {}
 
-    if (validationResult.data.title !== undefined) updateData.title = validationResult.data.title
+    if (validationResult.data.title !== undefined)
+      updateData.title = sanitizeHtml(validationResult.data.title)
     if (validationResult.data.content !== undefined)
-      updateData.content = validationResult.data.content
+      updateData.content = sanitizeHtml(validationResult.data.content)
     if (validationResult.data.type !== undefined) updateData.type = validationResult.data.type
     if (validationResult.data.priority !== undefined)
       updateData.priority = validationResult.data.priority

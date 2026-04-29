@@ -6,10 +6,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField, sm4Decrypt } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
-import { maskIdCard, maskPhone } from '@/lib/utils/mask'
-import { getCurrentUserId } from '@/lib/auth/middleware'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { decryptAndMaskRecords } from '@/lib/utils/batch-decrypt'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
@@ -100,51 +98,15 @@ async function getCollectiveListHandler(request: NextRequest) {
       }),
     ])
 
-    // 解密敏感字段并脱敏（性能优化：批量解密）
-    // 收集所有需要解密的值
-    const idCardsToDecrypt = certs.filter((c) => c.idCard).map((c) => c.idCard as string)
-    const phonesToDecrypt = certs.filter((c) => c.phone).map((c) => c.phone as string)
+    // 解密敏感字段并脱敏（使用批量解密工具函数）
+    const sanitizedCerts = await decryptAndMaskRecords(certs, [
+      { field: 'idCard', maskType: 'idCard' },
+      { field: 'phone', maskType: 'phone' },
+    ])
 
-    // 一次性获取密钥并批量解密
-    let decryptedIdCards: string[] = []
-    let decryptedPhones: string[] = []
-
-    if (idCardsToDecrypt.length > 0 || phonesToDecrypt.length > 0) {
-      const sm4KeyRecord = await getActiveKey('SM4_DATA')
-      const sm4Key = sm4KeyRecord.keyData
-
-      // 批量解密身份证
-      decryptedIdCards = idCardsToDecrypt.map((encrypted) => {
-        try {
-          const [iv, ciphertext] = encrypted.split(':')
-          return sm4Decrypt(ciphertext, sm4Key, iv)
-        } catch {
-          throw new Error(`身份证解密失败: ${encrypted.substring(0, 20)}...`)
-        }
-      })
-
-      // 批量解密手机号
-      decryptedPhones = phonesToDecrypt.map((encrypted) => {
-        try {
-          const [iv, ciphertext] = encrypted.split(':')
-          return sm4Decrypt(ciphertext, sm4Key, iv)
-        } catch {
-          throw new Error(`手机号解密失败: ${encrypted.substring(0, 20)}...`)
-        }
-      })
-    }
-
-    // 创建解密值映射
-    const idCardMap = new Map<string, string>()
-    const phoneMap = new Map<string, string>()
-    idCardsToDecrypt.forEach((encrypted, i) => idCardMap.set(encrypted, decryptedIdCards[i]))
-    phonesToDecrypt.forEach((encrypted, i) => phoneMap.set(encrypted, decryptedPhones[i]))
-
-    // 映射回原始数据并脱敏
-    const sanitizedCerts = certs.map((cert) => ({
+    // 移除 hash 字段
+    const finalCerts = sanitizedCerts.map((cert) => ({
       ...cert,
-      idCard: cert.idCard ? maskIdCard(idCardMap.get(cert.idCard) || '解密失败') : null,
-      phone: cert.phone ? maskPhone(phoneMap.get(cert.phone) || '解密失败') : null,
       idCardHash: undefined,
       phoneHash: undefined,
     }))
@@ -152,7 +114,7 @@ async function getCollectiveListHandler(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        list: sanitizedCerts,
+        list: finalCerts,
         total,
         page,
         pageSize,
@@ -182,7 +144,7 @@ async function createCollectiveCertHandler(request: NextRequest) {
     }
 
     const data = validationResult.data
-    const operatorId = await getCurrentUserId(request)
+    const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
       return NextResponse.json(
