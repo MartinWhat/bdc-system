@@ -3,10 +3,9 @@
  * 使用方法：npx tsx scripts/seed-collective.ts
  */
 
-import { PrismaClient } from '@prisma/client'
+import 'dotenv/config'
+import { prisma } from '../src/lib/prisma'
 import { encryptSensitiveField } from '../src/lib/gm-crypto'
-
-const prisma = new PrismaClient()
 
 // 假数据配置
 const TOWNS = [
@@ -52,6 +51,13 @@ const ADDRESSES = [
   'XX 镇 XX 村第 3 村民小组',
   'XX 镇 XX 村村委会大院',
   'XX 镇 XX 村文化中心',
+]
+
+// 示例附件数据（JSON 数组，undefined 表示无附件）
+const SAMPLE_ATTACHMENTS = [
+  [{ name: '权属证明.pdf', url: '/uploads/attachments/sample1.pdf' }],
+  [{ name: '土地使用证.pdf', url: '/uploads/attachments/sample2.pdf' }],
+  undefined, // 无附件
 ]
 
 // 生成随机数
@@ -172,6 +178,7 @@ async function seedCollectiveCerts(count: number = 20) {
         landUseType: randomChoice(LAND_USE_TYPES),
         certIssueDate: generatePastDate(randomInt(100, 1000)),
         certExpiryDate: generateFutureDate(randomInt(100, 1000)),
+        attachments: randomChoice(SAMPLE_ATTACHMENTS),
         status: status as any,
         isFrozen: status === 'FROZEN',
         freezeReason: status === 'FROZEN' ? '权属争议' : null,

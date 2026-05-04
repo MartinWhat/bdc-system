@@ -20,7 +20,7 @@ import { PlusOutlined, EyeOutlined, EditOutlined, SearchOutlined } from '@ant-de
 import type { ColumnsType } from 'antd/es/table'
 import TownVillageCascader from '@/components/TownVillageCascader'
 import PageContainer from '@/components/PageContainer'
-import dayjs from 'dayjs'
+import dayjs, { Dayjs } from 'dayjs'
 import { authFetch } from '@/lib/api-fetch'
 
 interface Village {
@@ -47,6 +47,21 @@ interface Bdc {
   remark?: string
   createdAt: string
   village: Village
+  // 业务字段
+  receiveId?: string
+  businessTitle?: string
+  applicant?: string
+  acceptorName?: string
+  acceptDate?: string
+  businessNo?: string
+  certNos?: string
+  recorder?: string
+  receiverName?: string
+  receiveTime?: string
+  issuerName?: string
+  isRejected?: boolean
+  rejectReason?: string
+  originalAddress?: string
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -55,6 +70,7 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
   ISSUED: { text: '已发放', color: 'geekblue' },
   COMPLETED: { text: '已完成', color: 'green' },
   CANCELLED: { text: '已注销', color: 'red' },
+  RETURNED: { text: '已退件', color: 'volcano' },
 }
 
 const LAND_USE_TYPES = ['宅基地', '农用地', '建设用地', '未利用地']
@@ -71,29 +87,69 @@ export default function BdcPage() {
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+  const [towns, setTowns] = useState<{ id: string; name: string }[]>([])
+  const [villages, setVillages] = useState<{ id: string; name: string; townId: string }[]>([])
+  const [selectedTownId, setSelectedTownId] = useState<string>('')
 
-  const loadBdcs = useCallback(async (page = 1, size = 10, keyword = '') => {
-    setLoading(true)
-    try {
-      const res = await authFetch(`/api/bdc?page=${page}&pageSize=${size}&keyword=${keyword}`)
-      const data = await res.json()
-      if (data.success) {
-        setBdcs(data.data.list)
-        setTotal(data.data.total)
-      } else {
-        message.error(data.error || '加载失败')
+  const loadBdcs = useCallback(
+    async (page = 1, size = 10) => {
+      setLoading(true)
+      try {
+        const url = new URL(`/api/bdc`, window.location.origin)
+        url.searchParams.set('page', String(page))
+        url.searchParams.set('pageSize', String(size))
+        // 附加查询条件
+        const formValues = queryForm.getFieldsValue()
+        if (formValues.keyword) url.searchParams.set('keyword', formValues.keyword)
+        if (formValues.status) url.searchParams.set('status', formValues.status)
+        if (formValues.townId) url.searchParams.set('townId', formValues.townId)
+        if (formValues.villageId) url.searchParams.set('villageId', formValues.villageId)
+        if (formValues.acceptDateRange) {
+          url.searchParams.set('acceptDateFrom', formValues.acceptDateRange[0].format('YYYY-MM-DD'))
+          url.searchParams.set('acceptDateTo', formValues.acceptDateRange[1].format('YYYY-MM-DD'))
+        }
+        const res = await authFetch(url.toString())
+        const data = await res.json()
+        if (data.success) {
+          setBdcs(data.data.list)
+          setTotal(data.data.total)
+        } else {
+          message.error(data.error || '加载失败')
+        }
+      } catch (error) {
+        console.error('Load bdcs error:', error)
+        message.error('加载宅基地列表失败')
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error('Load bdcs error:', error)
-      message.error('加载宅基地列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+    },
+    [queryForm],
+  )
 
   useEffect(() => {
     loadBdcs()
-  }, [])
+    // 加载镇街列表
+    authFetch('/api/towns')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setTowns(data.data)
+      })
+      .catch(console.error)
+  }, [loadBdcs])
+
+  // 镇街变化时，重新加载村居列表
+  useEffect(() => {
+    if (!selectedTownId) {
+      setVillages([])
+      return
+    }
+    authFetch(`/api/villages?townId=${selectedTownId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setVillages(data.data)
+      })
+      .catch(console.error)
+  }, [selectedTownId])
 
   const handleSubmit = async (values: {
     certNo: string
@@ -169,24 +225,17 @@ export default function BdcPage() {
     }
   }
 
-  const handleQuery = async (values: { idCard?: string; phone?: string }) => {
-    try {
-      const params = new URLSearchParams()
-      if (values.idCard) params.append('idCard', values.idCard)
-      if (values.phone) params.append('phone', values.phone)
-
-      const res = await authFetch(`/api/bdc/query?${params}`)
-      const data = await res.json()
-      if (data.success) {
-        setBdcs(data.data)
-        setTotal(data.data.length)
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Query error:', error)
-      message.error('查询失败')
-    }
+  const handleQuery = async (values: {
+    idCard?: string
+    phone?: string
+    keyword?: string
+    status?: string
+    townId?: string
+    villageId?: string
+    acceptDateRange?: [string, string]
+  }) => {
+    setCurrentPage(1)
+    loadBdcs(1, pageSize)
   }
 
   const columns: ColumnsType<Bdc> = [
@@ -226,8 +275,62 @@ export default function BdcPage() {
       width: 100,
       render: (status: string) => {
         const config = STATUS_MAP[status]
-        return <Tag color={config.color}>{config.text}</Tag>
+        return config ? <Tag color={config.color}>{config.text}</Tag> : <Tag>{status}</Tag>
       },
+    },
+    {
+      title: '业务标题',
+      dataIndex: 'businessTitle',
+      key: 'businessTitle',
+      width: 180,
+      ellipsis: true,
+    },
+    {
+      title: '受理日期',
+      dataIndex: 'acceptDate',
+      key: 'acceptDate',
+      width: 100,
+      render: (val: string) => (val ? val.slice(0, 10) : '-'),
+    },
+    {
+      title: '受理人',
+      dataIndex: 'acceptorName',
+      key: 'acceptorName',
+      width: 80,
+    },
+    {
+      title: '不动产权证书号',
+      dataIndex: 'certNos',
+      key: 'certNos',
+      width: 200,
+      ellipsis: true,
+    },
+    {
+      title: '退件原因',
+      dataIndex: 'rejectReason',
+      key: 'rejectReason',
+      width: 150,
+      ellipsis: true,
+    },
+    {
+      title: '领证人',
+      dataIndex: 'receiverName',
+      key: 'receiverName',
+      width: 100,
+      ellipsis: true,
+    },
+    {
+      title: '领证时间',
+      dataIndex: 'receiveTime',
+      key: 'receiveTime',
+      width: 100,
+      render: (val: string) => (val ? val.slice(0, 10) : '-'),
+    },
+    {
+      title: '发证人',
+      dataIndex: 'issuerName',
+      key: 'issuerName',
+      width: 80,
     },
     {
       title: '操作',
@@ -256,26 +359,6 @@ export default function BdcPage() {
           >
             编辑
           </Button>
-          {record.status !== 'CANCELLED' && (
-            <Popconfirm
-              title="确认注销"
-              description="注销后该档案将被标记为已注销状态"
-              onConfirm={() => handleStatusChange(record.id, 'CANCELLED')}
-            >
-              <Button size="small" danger>
-                注销
-              </Button>
-            </Popconfirm>
-          )}
-          {record.status === 'PENDING' && (
-            <Button
-              size="small"
-              type="primary"
-              onClick={() => handleStatusChange(record.id, 'APPROVED')}
-            >
-              审核
-            </Button>
-          )}
         </Space>
       ),
     },
@@ -303,11 +386,45 @@ export default function BdcPage() {
       emptyDescription="暂无宅基地档案"
     >
       <Form form={queryForm} layout="inline" onFinish={handleQuery} style={{ marginBottom: 16 }}>
-        <Form.Item name="idCard" label="身份证号">
-          <Input placeholder="输入身份证号查询" />
+        <Form.Item name="keyword" label="关键字">
+          <Input placeholder="姓名/证书/地址" style={{ width: 140 }} />
         </Form.Item>
-        <Form.Item name="phone" label="手机号">
-          <Input placeholder="输入手机号查询" />
+        <Form.Item name="status" label="状态">
+          <Select placeholder="全部" allowClear style={{ width: 120 }}>
+            <Select.Option value="PENDING">待审核</Select.Option>
+            <Select.Option value="ISSUED">已发放</Select.Option>
+            <Select.Option value="RETURNED">已退件</Select.Option>
+            <Select.Option value="CANCELLED">已注销</Select.Option>
+          </Select>
+        </Form.Item>
+        <Form.Item name="townId" label="镇街">
+          <Select
+            placeholder="全部"
+            allowClear
+            style={{ width: 140 }}
+            onChange={(val) => {
+              setSelectedTownId(val || '')
+              queryForm.setFieldValue('villageId', undefined)
+            }}
+          >
+            {towns.map((t) => (
+              <Select.Option key={t.id} value={t.id}>
+                {t.name}
+              </Select.Option>
+            ))}
+          </Select>
+        </Form.Item>
+        <Form.Item name="villageId" label="村居">
+          <Select placeholder="全部" allowClear style={{ width: 140 }} disabled={!selectedTownId}>
+            {villages.map((v) => (
+              <Select.Option key={v.id} value={v.id}>
+                {v.name}
+              </Select.Option>
+            ))}
+          </Select>
+        </Form.Item>
+        <Form.Item name="acceptDateRange" label="受理日期">
+          <DatePicker.RangePicker style={{ width: 220 }} />
         </Form.Item>
         <Form.Item>
           <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
@@ -317,6 +434,7 @@ export default function BdcPage() {
             style={{ marginLeft: 8 }}
             onClick={() => {
               queryForm.resetFields()
+              setSelectedTownId('')
               loadBdcs()
             }}
           >
@@ -330,6 +448,7 @@ export default function BdcPage() {
         dataSource={bdcs}
         rowKey="id"
         loading={loading}
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: currentPage,
           pageSize,
@@ -475,8 +594,8 @@ export default function BdcPage() {
             <Descriptions.Item label="所属镇街">{detailBdc.village.town.name}</Descriptions.Item>
             <Descriptions.Item label="所属村居">{detailBdc.village.name}</Descriptions.Item>
             <Descriptions.Item label="状态">
-              <Tag color={STATUS_MAP[detailBdc.status].color}>
-                {STATUS_MAP[detailBdc.status].text}
+              <Tag color={STATUS_MAP[detailBdc.status]?.color}>
+                {STATUS_MAP[detailBdc.status]?.text}
               </Tag>
             </Descriptions.Item>
             <Descriptions.Item label="批准面积">
@@ -492,6 +611,39 @@ export default function BdcPage() {
             </Descriptions.Item>
             <Descriptions.Item label="备注" span={2}>
               {detailBdc.remark || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="收件编号">{detailBdc.receiveId || '-'}</Descriptions.Item>
+            <Descriptions.Item label="业务标题" span={2}>
+              {detailBdc.businessTitle || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="申请人">{detailBdc.applicant || '-'}</Descriptions.Item>
+            <Descriptions.Item label="受理人">{detailBdc.acceptorName || '-'}</Descriptions.Item>
+            <Descriptions.Item label="受理日期">
+              {detailBdc.acceptDate ? new Date(detailBdc.acceptDate).toLocaleDateString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="业务受理号">{detailBdc.businessNo || '-'}</Descriptions.Item>
+            <Descriptions.Item label="不动产权证书号" span={2}>
+              {detailBdc.certNos || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="登簿人">{detailBdc.recorder || '-'}</Descriptions.Item>
+            <Descriptions.Item label="登记时间">
+              {detailBdc.certIssuedDate
+                ? new Date(detailBdc.certIssuedDate).toLocaleDateString()
+                : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="领证人">{detailBdc.receiverName || '-'}</Descriptions.Item>
+            <Descriptions.Item label="领证时间">
+              {detailBdc.receiveTime ? new Date(detailBdc.receiveTime).toLocaleDateString() : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="发证人">{detailBdc.issuerName || '-'}</Descriptions.Item>
+            <Descriptions.Item label="是否退件">
+              {detailBdc.isRejected ? <Tag color="red">是</Tag> : '否'}
+            </Descriptions.Item>
+            <Descriptions.Item label="退件原因" span={2}>
+              {detailBdc.rejectReason || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="原坐落" span={2}>
+              {detailBdc.originalAddress || '-'}
             </Descriptions.Item>
           </Descriptions>
         )}

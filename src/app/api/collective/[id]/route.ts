@@ -154,7 +154,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         landUseType: data.landUseType,
         certIssueDate: data.certIssueDate ? new Date(data.certIssueDate) : undefined,
         certExpiryDate: data.certExpiryDate ? new Date(data.certExpiryDate) : undefined,
-        attachments: data.attachments ? JSON.stringify(data.attachments) : undefined,
+        attachments: data.attachments || undefined,
         remark: data.remark,
       },
       include: {

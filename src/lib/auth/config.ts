@@ -14,7 +14,7 @@ export const AUTH_CONFIG = {
    * Refresh Token 过期时间（天）
    * 用于 Session 记录和 Cookie 设置
    */
-  REFRESH_TOKEN_EXPIRES_IN_DAYS: 7,
+  REFRESH_TOKEN_EXPIRES_IN_DAYS: 1, // 1 天
 
   /**
    * Session 中 Access Token 过期时间（小时）
@@ -26,7 +26,7 @@ export const AUTH_CONFIG = {
    * 用户信息 Cookie 过期时间（天）
    * 与 Refresh Token 保持一致
    */
-  USER_INFO_COOKIE_DAYS: 7,
+  USER_INFO_COOKIE_DAYS: 1, // 1 天
 } as const
 
 /**

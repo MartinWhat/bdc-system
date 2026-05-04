@@ -36,6 +36,9 @@ async function getBdcListHandler(request: NextRequest) {
     const keyword = searchParams.get('keyword') || ''
     const status = searchParams.get('status')
     const villageId = searchParams.get('villageId')
+    const townId = searchParams.get('townId')
+    const acceptDateFrom = searchParams.get('acceptDateFrom')
+    const acceptDateTo = searchParams.get('acceptDateTo')
 
     // 构建基础查询条件
     const where: Record<string, unknown> = {}
@@ -55,6 +58,19 @@ async function getBdcListHandler(request: NextRequest) {
         { certNo: { contains: keyword } },
         { address: { contains: keyword } },
       ]
+    }
+
+    // 受理日期范围
+    if (acceptDateFrom || acceptDateTo) {
+      where.acceptDate = {}
+      if (acceptDateFrom)
+        (where.acceptDate as Record<string, unknown>).gte = new Date(acceptDateFrom)
+      if (acceptDateTo) (where.acceptDate as Record<string, unknown>).lte = new Date(acceptDateTo)
+    }
+
+    // 镇街筛选（通过 village 的 townId）
+    if (townId) {
+      where.village = { townId }
     }
 
     // 应用数据权限过滤

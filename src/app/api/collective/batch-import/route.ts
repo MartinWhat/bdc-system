@@ -1,12 +1,18 @@
 /**
  * 批量入库 API
  * POST /api/collective/batch-import - 批量导入证书
+ *
+ * 支持两种导入方式：
+ * 1. JSON 数据：{ items: [...] }
+ * 2. Excel 文件：multipart/form-data，文件字段名 "file"
+ *
  * 性能优化：一次性获取密钥，批量加密
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createEncryptionContext, encryptWithContext } from '@/lib/gm-crypto'
+import { parseExcelBuffer } from '@/lib/excel-parser'
 import { z } from 'zod'
 
 const batchImportSchema = z.object({
@@ -34,19 +40,107 @@ const batchImportSchema = z.object({
     .max(100, '最多支持 100 条数据'),
 })
 
+/**
+ * 解析请求数据（支持 JSON 和 Excel 文件）
+ */
+async function parseRequestData(
+  request: NextRequest,
+): Promise<
+  | { success: true; items: z.infer<typeof batchImportSchema>['items'] }
+  | { success: false; error: string; details?: string }
+> {
+  const contentType = request.headers.get('content-type') || ''
+
+  // JSON 请求
+  if (contentType.includes('application/json')) {
+    try {
+      const body = await request.json()
+      const validationResult = batchImportSchema.safeParse(body)
+
+      if (!validationResult.success) {
+        return {
+          success: false,
+          error: '请求参数错误',
+          details: validationResult.error.message,
+        }
+      }
+
+      return { success: true, items: validationResult.data.items }
+    } catch {
+      return { success: false, error: 'JSON 解析失败' }
+    }
+  }
+
+  // Excel 文件上传（multipart/form-data）
+  if (contentType.includes('multipart/form-data')) {
+    try {
+      const formData = await request.formData()
+      const file = formData.get('file')
+
+      if (!file || !(file instanceof File)) {
+        return { success: false, error: '未找到上传的文件' }
+      }
+
+      // 检查文件类型
+      const filename = file.name.toLowerCase()
+      if (!filename.endsWith('.xlsx') && !filename.endsWith('.xls')) {
+        return { success: false, error: '仅支持 .xlsx 或 .xls 格式的 Excel 文件' }
+      }
+
+      // 解析 Excel
+      const buffer = await file.arrayBuffer()
+      const rawData = parseExcelBuffer(buffer)
+
+      // 转换数据格式并验证
+      const items = rawData.map((row) => ({
+        certNo: String(row.certNo || ''),
+        ownerName: String(row.ownerName || ''),
+        ownerType: row.ownerType === 'TOWN_COLLECTIVE' ? 'TOWN_COLLECTIVE' : 'VILLAGE_COLLECTIVE',
+        villageId: String(row.villageId || ''),
+        idCard: row.idCard ? String(row.idCard) : undefined,
+        phone: row.phone ? String(row.phone) : undefined,
+        address: String(row.address || ''),
+        area: Number(row.area) || 0,
+        landUseType: row.landUseType ? String(row.landUseType) : undefined,
+        certIssueDate: row.certIssueDate ? String(row.certIssueDate) : undefined,
+        certExpiryDate: row.certExpiryDate ? String(row.certExpiryDate) : undefined,
+        remark: row.remark ? String(row.remark) : undefined,
+      }))
+
+      // 验证数据
+      const validationResult = batchImportSchema.safeParse({ items })
+
+      if (!validationResult.success) {
+        return {
+          success: false,
+          error: 'Excel 数据格式错误',
+          details: validationResult.error.message,
+        }
+      }
+
+      return { success: true, items: validationResult.data.items }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Excel 解析失败'
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  return { success: false, error: '不支持的内容类型，请使用 JSON 或 Excel 文件上传' }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const validationResult = batchImportSchema.safeParse(body)
+    // 解析请求（支持 JSON 和 Excel）
+    const parseResult = await parseRequestData(request)
 
-    if (!validationResult.success) {
+    if (!parseResult.success) {
       return NextResponse.json(
-        { error: '请求参数错误', details: validationResult.error.message },
+        { error: parseResult.error, details: parseResult.details },
         { status: 400 },
       )
     }
 
-    const { items } = validationResult.data
+    const { items } = parseResult
     const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {

@@ -161,11 +161,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (!user) return
 
-    import('@/lib/token-expiry').then(({ startTokenExpiryTimer, initTokenExpirySync }) => {
-      startTokenExpiryTimer()
-      const cleanup = initTokenExpirySync()
-      return cleanup
-    })
+    import('@/lib/token-expiry').then(
+      ({ startTokenExpiryTimer, initTokenExpirySync, initActivityTracker }) => {
+        startTokenExpiryTimer()
+        const cleanupSync = initTokenExpirySync()
+        const cleanupActivity = initActivityTracker()
+        return () => {
+          cleanupSync()
+          cleanupActivity()
+        }
+      },
+    )
   }, [user])
 
   const handleLogout = async () => {

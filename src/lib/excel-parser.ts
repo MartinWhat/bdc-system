@@ -1,6 +1,10 @@
 /**
  * Excel 文件解析工具
  * 支持 .xlsx 和 .xls 格式，自动处理中文列名映射
+ *
+ * 提供两种解析方式：
+ * - parseExcelFile: 浏览器端使用，接收 File 对象
+ * - parseExcelBuffer: 服务端使用，接收 Buffer/ArrayBuffer
  */
 
 import * as XLSX from 'xlsx'
@@ -48,54 +52,71 @@ export const REVERSE_COLUMN_MAPPING: Record<string, string> = Object.entries(COL
 )
 
 /**
- * 解析 Excel 文件
- * @param file File 对象或 ArrayBuffer
+ * 处理中文列名映射（内部函数）
+ */
+function mapColumnNames(rawData: unknown[]): Record<string, unknown>[] {
+  // 处理中文列名映射
+  const mappedData = rawData.map((row) => {
+    const newRow: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
+      const mappedKey = COLUMN_MAPPING[key] || key
+      newRow[mappedKey] = value
+    }
+    return newRow
+  })
+
+  // 过滤空行
+  return mappedData.filter((row) =>
+    Object.values(row).some((val) => val !== '' && val !== null && val !== undefined),
+  )
+}
+
+/**
+ * 服务端 Excel 解析函数
+ * @param buffer Buffer 或 ArrayBuffer（来自 FormData 或文件上传）
  * @returns 解析后的数据数组
  */
-export async function parseExcelFile(file: File | ArrayBuffer): Promise<Record<string, unknown>[]> {
+export function parseExcelBuffer(buffer: Buffer | ArrayBuffer): Record<string, unknown>[] {
+  try {
+    const workbook = XLSX.read(buffer, { type: 'buffer' })
+
+    // 读取第一个工作表
+    const sheetName = workbook.SheetNames[0]
+    if (!sheetName) {
+      throw new Error('Excel 文件中没有工作表')
+    }
+
+    const worksheet = workbook.Sheets[sheetName]
+
+    // 解析为 JSON，第一行作为表头
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
+
+    if (rawData.length === 0) {
+      throw new Error('Excel 文件中没有数据')
+    }
+
+    return mapColumnNames(rawData)
+  } catch (error) {
+    throw new Error('Excel 文件解析失败: ' + (error instanceof Error ? error.message : '未知错误'))
+  }
+}
+
+/**
+ * 浏览器端 Excel 解析函数
+ * @param file File 对象（浏览器端）
+ * @returns 解析后的数据数组
+ */
+export async function parseExcelFile(file: File): Promise<Record<string, unknown>[]> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
 
     reader.onload = (e) => {
       try {
-        const data = e.target?.result
-        const workbook = XLSX.read(data, { type: 'array' })
-
-        // 读取第一个工作表
-        const sheetName = workbook.SheetNames[0]
-        if (!sheetName) {
-          reject(new Error('Excel 文件中没有工作表'))
-          return
-        }
-
-        const worksheet = workbook.Sheets[sheetName]
-
-        // 解析为 JSON，第一行作为表头
-        const rawData = XLSX.utils.sheet_to_json(worksheet, { defval: '' })
-
-        if (rawData.length === 0) {
-          reject(new Error('Excel 文件中没有数据'))
-          return
-        }
-
-        // 处理中文列名映射
-        const mappedData = rawData.map((row) => {
-          const newRow: Record<string, unknown> = {}
-          for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
-            const mappedKey = COLUMN_MAPPING[key] || key
-            newRow[mappedKey] = value
-          }
-          return newRow
-        })
-
-        // 过滤空行
-        const filteredData = mappedData.filter((row) =>
-          Object.values(row).some((val) => val !== '' && val !== null && val !== undefined),
-        )
-
-        resolve(filteredData)
+        const data = e.target?.result as ArrayBuffer
+        const result = parseExcelBuffer(data)
+        resolve(result)
       } catch (error) {
-        reject(new Error('Excel 文件解析失败: ' + (error instanceof Error ? error.message : '')))
+        reject(error)
       }
     }
 
@@ -103,12 +124,7 @@ export async function parseExcelFile(file: File | ArrayBuffer): Promise<Record<s
       reject(new Error('文件读取失败'))
     }
 
-    if (file instanceof File) {
-      reader.readAsArrayBuffer(file)
-    } else {
-      // 如果已经是 ArrayBuffer，直接触发 onload
-      reader.onload({ target: { result: file } } as ProgressEvent<FileReader>)
-    }
+    reader.readAsArrayBuffer(file)
   })
 }
 

@@ -214,31 +214,57 @@ model SysVillage {
 }
 
 model ZjdBdc {
+  // === Excel 对应字段 ===
   id             String             @id @default(cuid())
-  villageId      String
-  certNo         String             @unique
-  ownerName      String
-  idCard         String
-  idCardHash     String
-  phone          String?
-  phoneHash      String?
-  address        String
-  area           Float
-  landUseType    String
-  status         String             @default("PENDING")
-  approvedArea   Float?
-  approvedDate   DateTime?
-  certIssuedDate DateTime?
-  remark         String?
+  villageId      String             // Excel无直接对应，通过坐落地址匹配SysVillage
+  certNo         String             @unique // 不动产单元号（无则用 PENDING-收件编号）
+  ownerName      String             // 权利人
+  idCard         String             // 权利人证件号
+  idCardHash     String             // 证件号哈希（预留）
+  phone          String?            // Excel无对应
+  phoneHash      String?            // 电话哈希（预留）
+  address        String             // 不动产坐落
+  area           Float              // 面积（平方米）
+  landUseType    String             @default("宅基地") // Excel无对应，默认宅基地
+  status         String             @default("PENDING") // 权属状态: 现势→ISSUED, 历史→CANCELLED, 其他→PENDING
+  approvedArea   Float?             // Excel无对应
+  approvedDate   DateTime?          // Excel无对应
+  certIssuedDate DateTime?          // 登记时间
+  remark         String?            // 兼容保留（现由下面独立字段替代）
+  recorder       String?            // 登簿人
+  certNos        String?            // 不动产权证书号（多个用英文逗号分隔）
+  originalAddress String?           // 原坐落（Excel坐落列，与address不同时记录）
+  rejectReason   String?            // 退件原因（是否退件=已退件时写入）
+  receiveId      String?            // 收件编号
+  // === 业务字段 ===
+  applicant      String?            // 申请人
+  receiverName   String?            // 领证人
+  receiveTime    DateTime?          // 领证时间
+  issuerName     String?            // 发证人
+  acceptorName   String?            // 受理人
+  acceptDate     DateTime?          // 受理日期
+  businessNo     String?            // 业务受理号（业务受理号列）
+  businessTitle  String?            // 业务标题
+  isRejected     Boolean?           @default(false) // 是否退件
+  isOneWindow    Boolean?           @default(false) // 是否一窗业务
+  rejectorName   String?            // 退件人
+  rejectTime     DateTime?          // 退件时间
+  jobbaseJid     String?            // JOBBASE表JID
+  jobbaseBcode   String?            // JOBBASE表BCODE
+
+  // === 系统字段 ===
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   createdBy      String
+  deletedAt      DateTime?          // 软删除标记
   operationLogs  OperationLog[]
   village        SysVillage         @relation(fields: [villageId], references: [id])
   receiveRecords ZjdReceiveRecord[]
 
   @@index([villageId])
   @@index([status])
+  @@index([deletedAt])
+  @@index([ownerName])
   @@map("zjd_bdc")
 }
 
@@ -263,12 +289,14 @@ model ZjdReceiveRecord {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   createdBy          String
+  deletedAt          DateTime? // 软删除标记
   objections         Objection[]
   processNodes       ProcessNode[]
   bdc                ZjdBdc        @relation(fields: [bdcId], references: [id], onDelete: Cascade)
 
   @@index([bdcId])
   @@index([status])
+  @@index([deletedAt])
   @@map("zjd_receive_record")
 }
 
@@ -304,11 +332,13 @@ model Objection {
   currentStepOrder  Int      @default(1)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  deletedAt       DateTime? // 软删除标记
   receiveRecord   ZjdReceiveRecord @relation(fields: [receiveRecordId], references: [id], onDelete: Cascade)
   tasks           ObjectionTask[]
 
   @@index([receiveRecordId])
   @@index([status])
+  @@index([deletedAt])
   @@map("zjd_objection")
 }
 
@@ -382,6 +412,8 @@ model OperationLog {
 
   @@index([userId])
   @@index([bdcId])
+  @@index([action])
+  @@index([createdAt])
   @@map("sys_operation_log")
 }
 
@@ -431,11 +463,12 @@ model CollectiveCert {
   cancelAt           DateTime?
   cancelReason       String?
   // 附件
-  attachments        String? // JSON 格式存储附件列表
+  attachments        Json? // JSON 类型存储附件列表
   remark             String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   createdBy          String
+  deletedAt          DateTime? // 软删除标记
   village            SysVillage           @relation(fields: [villageId], references: [id])
   operations         CertOperation[]
 
@@ -443,6 +476,8 @@ model CollectiveCert {
   @@index([status])
   @@index([ownerType])
   @@index([certNo])
+  @@index([deletedAt])
+  @@index([ownerName])
   @@map("collective_cert")
 }
 
@@ -506,10 +541,12 @@ model Notification {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   publishedAt  DateTime?
+  deletedAt    DateTime? // 软删除标记
   readRecords  NotificationRead[]
 
   @@index([type, status])
   @@index([isPopup, popupStartAt, popupEndAt])
+  @@index([deletedAt])
   @@map("notification")
 }
 
