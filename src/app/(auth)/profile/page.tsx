@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons'
 import { authFetch } from '@/lib/api-fetch'
 import PageContainer from '@/components/PageContainer'
+import PasskeySettings from '@/components/profile/passkey-settings'
 import TwoFactorSettings from '@/components/profile/two-factor-settings'
 
 interface UserProfile {
@@ -220,6 +221,10 @@ export default function ProfilePage() {
 
       <div style={{ marginTop: 24 }}>
         <TwoFactorSettings enabled={profile?.twoFactorEnabled ?? false} onChanged={loadProfile} />
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <PasskeySettings />
       </div>
 
       {/* 编辑资料弹窗 */}

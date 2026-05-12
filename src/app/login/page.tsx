@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
   Button,
   Checkbox,
+  Divider,
   Form,
   Input,
   Radio,
@@ -21,6 +22,8 @@ import {
   SecurityScanFilled,
   BulbOutlined,
   BulbFilled,
+  KeyOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -40,6 +43,7 @@ interface LoginFields {
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
   const [verificationLoading, setVerificationLoading] = useState(false)
   const [verificationMode, setVerificationMode] = useState<'totp' | 'backup'>('totp')
   const [verificationCode, setVerificationCode] = useState('')
@@ -67,14 +71,14 @@ export default function LoginPage() {
     }
   }, [challengeActive])
 
-  const resetTwoFactorState = () => {
+  const resetTwoFactorState = useCallback(() => {
     clearTwoFactorLoginChallenge()
     setVerificationCode('')
     setVerificationMode('totp')
     setTrustDevice(false)
-  }
+  }, [])
 
-  const finalizeLogin = async () => {
+  const finalizeLogin = useCallback(async () => {
     const sessionResponse = await authFetch('/api/auth/me', {
       credentials: 'include',
     })
@@ -94,6 +98,81 @@ export default function LoginPage() {
     message.success('登录成功')
     router.push('/')
     return true
+  }, [router, setAuth])
+
+  useEffect(() => {
+    if (challengeActive) {
+      return
+    }
+
+    const publicKeyCredential = globalThis.PublicKeyCredential
+    const isConditionalMediationAvailable = publicKeyCredential?.isConditionalMediationAvailable
+    if (!publicKeyCredential || typeof isConditionalMediationAvailable !== 'function') {
+      return
+    }
+
+    let cancelled = false
+
+    const preloadPasskey = async () => {
+      try {
+        const available = await isConditionalMediationAvailable.call(publicKeyCredential)
+        if (!available || cancelled) {
+          return
+        }
+
+        const result = await authClient.signIn.passkey(
+          {
+            autoFill: true,
+          },
+          {
+            credentials: 'include',
+          },
+        )
+
+        if (cancelled || result.error) {
+          return
+        }
+
+        await finalizeLogin()
+      } catch (error) {
+        console.debug('Passkey autofill skipped:', error)
+      }
+    }
+
+    void preloadPasskey()
+
+    return () => {
+      cancelled = true
+    }
+  }, [challengeActive, finalizeLogin])
+
+  const handlePasskeyLogin = async () => {
+    if (challengeActive) {
+      message.info('请先完成当前的 2FA 验证')
+      return
+    }
+
+    setPasskeyLoading(true)
+    try {
+      const result = await authClient.signIn.passkey(
+        {},
+        {
+          credentials: 'include',
+        },
+      )
+
+      if (result.error) {
+        message.error(result.error.message || 'Passkey 登录失败')
+        return
+      }
+
+      await finalizeLogin()
+    } catch (error) {
+      console.error('Passkey login error:', error)
+      message.error('Passkey 登录失败，请稍后重试')
+    } finally {
+      setPasskeyLoading(false)
+    }
   }
 
   const onFinish = async (values: LoginFields) => {
@@ -269,7 +348,7 @@ export default function LoginPage() {
               <Title level={1} className="brand-title">
                 不动产登记管理系统
               </Title>
-              <Text className="brand-subtitle">宅基地信息综合管理平台</Text>
+              <Text className="brand-subtitle">宅基地信息、集体所有权综合管理平台</Text>
             </div>
 
             <motion.div
@@ -420,6 +499,7 @@ export default function LoginPage() {
                         prefix={<UserOutlined />}
                         placeholder="请输入用户名"
                         className="custom-input"
+                        autoComplete="username webauthn"
                       />
                     </Form.Item>
                   </motion.div>
@@ -441,6 +521,7 @@ export default function LoginPage() {
                         prefix={<LockOutlined />}
                         placeholder="请输入密码"
                         className="custom-input"
+                        autoComplete="current-password webauthn"
                       />
                     </Form.Item>
                   </motion.div>
@@ -450,19 +531,48 @@ export default function LoginPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.8 }}
                   >
-                    <Form.Item className="form-action">
-                      <motion.div whileHover="hover" whileTap="tap" variants={BUTTON_VARIANTS}>
-                        <Button
-                          type="primary"
-                          htmlType="submit"
-                          loading={loading}
-                          className="login-btn"
-                          block
-                        >
-                          登 录
-                        </Button>
-                      </motion.div>
-                    </Form.Item>
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                      <Form.Item className="form-action" style={{ marginBottom: 0 }}>
+                        <motion.div whileHover="hover" whileTap="tap" variants={BUTTON_VARIANTS}>
+                          <Button
+                            type="primary"
+                            htmlType="submit"
+                            loading={loading}
+                            className="login-btn"
+                            block
+                          >
+                            登 录
+                          </Button>
+                        </motion.div>
+                      </Form.Item>
+
+                      <Divider plain style={{ margin: '4px 0 0' }}>
+                        其他登录方式
+                      </Divider>
+
+                      <Button
+                        block
+                        size="large"
+                        className="social-login-btn"
+                        icon={<KeyOutlined />}
+                        loading={passkeyLoading}
+                        onClick={handlePasskeyLogin}
+                      >
+                        使用 Passkey 登录
+                      </Button>
+
+                      <Button
+                        block
+                        size="large"
+                        className="social-login-btn"
+                        icon={<GlobalOutlined />}
+                        onClick={() => {
+                          message.info('该功能正在开发中')
+                        }}
+                      >
+                        使用粤政易登录
+                      </Button>
+                    </Space>
                   </motion.div>
                 </Form>
               )}
@@ -481,7 +591,7 @@ export default function LoginPage() {
                 transition={{ duration: 0.4, delay: 1.0 }}
               >
                 <CheckCircleFilled className="feature-icon" />
-                <Text className="feature-text">依法登记 规范高效</Text>
+                <Text className="feature-text">请勿在此平台分享敏感信息、国家机密</Text>
               </motion.div>
               <motion.div
                 className="feature-item"
@@ -490,7 +600,7 @@ export default function LoginPage() {
                 transition={{ duration: 0.4, delay: 1.1 }}
               >
                 <SecurityScanFilled className="feature-icon" />
-                <Text className="feature-text">权责清晰 管理规范</Text>
+                <Text className="feature-text">严格遵守信息安全规定</Text>
               </motion.div>
             </motion.div>
 
@@ -511,7 +621,7 @@ export default function LoginPage() {
             transition={{ duration: 0.5, delay: 1.3 }}
           >
             <Text className="copyright-text">
-              © 2024 不动产登记管理系统 版权所有 | 技术支持：XX 市信息中心
+              © 2026 不动产登记管理系统 版权所有 | 技术支持：沥林自然资源所
             </Text>
           </motion.div>
         </div>
@@ -839,6 +949,29 @@ export default function LoginPage() {
 
         .login-btn:active {
           background: #002875 !important;
+        }
+
+        .social-login-btn {
+          height: 40px !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          border-radius: 3px !important;
+          border: 1px solid #d9d9d9 !important;
+          background: rgba(255, 255, 255, 0.92) !important;
+          color: rgba(0, 0, 0, 0.88) !important;
+          box-shadow: none !important;
+        }
+
+        .social-login-btn:hover {
+          border-color: #0052d9 !important;
+          color: #0052d9 !important;
+          background: rgba(240, 247, 255, 0.95) !important;
+        }
+
+        .social-login-btn:active {
+          border-color: #002875 !important;
+          color: #002875 !important;
+          background: rgba(230, 240, 255, 0.98) !important;
         }
 
         .features-section {

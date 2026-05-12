@@ -76,6 +76,7 @@ model SysUser {
   authAccounts     AuthAccount[]
   authSessions     AuthSession[]
   twoFactor        TwoFactor?
+  passkeys         Passkey[]
   roles            UserRole[]
   notifications    Notification[]
   readRecords      NotificationRead[]
@@ -227,6 +228,26 @@ model TwoFactor {
 
   @@index([secret])
   @@map("two_factor")
+}
+
+model Passkey {
+  id           String   @id @default(cuid())
+  name         String?
+  publicKey    String
+  userId       String
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime? @default(now())
+  aaguid       String?
+
+  user SysUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
 }
 
 model SysTown {
