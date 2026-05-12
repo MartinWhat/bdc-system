@@ -78,6 +78,7 @@ model SysKeyVersion {
 model SysUser {
   id               String             @id @default(cuid())
   username         String             @unique
+  displayUsername  String?
   passwordHash     String
   realName         String
   idCard           String?
@@ -86,16 +87,19 @@ model SysUser {
   phoneHash        String?
   email            String?
   avatar           String?
+  emailVerified    Boolean            @default(false)
   status           String             @default("ACTIVE")
   twoFactorEnabled Boolean            @default(false)
   lastLoginAt      DateTime?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
-  createdBy        String?
+  createdBy        String?            @default("system")
   villageId        String? // 所属村居 ID
   village          SysVillage?        @relation(fields: [villageId], references: [id])
   createdRecords   OperationLog[]     @relation("UserCreatedRecords")
   sessions         SysSession[]
+  authAccounts     AuthAccount[]
+  authSessions     AuthSession[]
   roles            UserRole[]
   notifications    Notification[]
   readRecords      NotificationRead[]
@@ -180,6 +184,55 @@ model SysSession {
   @@index([refreshTokenHash])
   @@index([isRevoked])
   @@map("sys_session")
+}
+
+model AuthAccount {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  password              String?   @db.Text
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  SysUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("auth_account")
+}
+
+model AuthSession {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       SysUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("auth_session")
+}
+
+model AuthVerification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+  @@map("auth_verification")
 }
 
 model SysTown {

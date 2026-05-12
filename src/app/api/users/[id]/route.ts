@@ -7,7 +7,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { updateUserSchema } from '../schema'
 import { getUserFromRequest, isAdmin } from '@/lib/middleware/auth'
@@ -89,7 +88,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updateData: Record<string, unknown> = {}
 
     if (realName !== undefined) updateData.realName = realName
-    if (email !== undefined) updateData.email = email
+    if (email !== undefined) updateData.email = email || `${existingUser.username}@system.local`
     if (status !== undefined) updateData.status = status
     if (twoFactorEnabled !== undefined) updateData.twoFactorEnabled = twoFactorEnabled
 
@@ -107,8 +106,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // 使用事务更新用户信息和角色关联
-    const user = await prisma.$transaction(async (tx) => {
-      const updated = await tx.sysUser.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.sysUser.update({
         where: { id },
         data: updateData,
       })
@@ -128,8 +127,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           })
         }
       }
-
-      return updated
     })
 
     // 重新查询用户及其角色

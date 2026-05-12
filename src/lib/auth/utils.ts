@@ -31,17 +31,6 @@ export function passwordNeedsRehash(storedHash: string): boolean {
 }
 
 /**
- * 生成会话令牌
- */
-export function generateSessionToken(): string {
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return Array.from(array)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-/**
  * 权限检查辅助函数
  */
 export function hasPermission(userPermissions: string[], requiredPermission: string): boolean {

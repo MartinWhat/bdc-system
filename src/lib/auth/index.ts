@@ -2,14 +2,7 @@
  * 认证模块统一导出
  */
 
-export { signJWT, verifyJWT, extractTokenFromHeader } from './jwt'
-export {
-  hashUserPassword,
-  validateUserPassword,
-  generateSessionToken,
-  hasPermission,
-  hasRole,
-} from './utils'
+export { hashUserPassword, validateUserPassword, hasPermission, hasRole } from './utils'
 export { passwordNeedsRehash } from './utils'
 export {
   createUser,

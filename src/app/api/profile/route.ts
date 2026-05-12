@@ -7,9 +7,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { getCurrentUser } from '@/lib/auth/middleware'
+import { auth } from '@/lib/auth/better-auth'
+import { isAPIError } from 'better-auth/api'
 import { z } from 'zod'
 
 // 更新用户信息验证
@@ -84,6 +85,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: '未认证', code: 'UNAUTHORIZED' }, { status: 401 })
     }
 
+    const currentUser = await prisma.sysUser.findUnique({
+      where: { id: user.userId },
+      select: {
+        username: true,
+      },
+    })
+
+    if (!currentUser) {
+      return NextResponse.json({ error: '用户不存在', code: 'USER_NOT_FOUND' }, { status: 404 })
+    }
+
     const body = await request.json()
     const validationResult = updateProfileSchema.safeParse(body)
 
@@ -102,7 +114,7 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, string> = {}
 
     if (realName) updateData.realName = realName
-    if (email !== undefined) updateData.email = email || ''
+    if (email !== undefined) updateData.email = email || `${currentUser.username}@system.local`
 
     // 加密手机号
     if (phone) {
@@ -163,37 +175,22 @@ export async function PATCH(request: NextRequest) {
 
     const { oldPassword, newPassword } = validationResult.data
 
-    // 获取当前用户（含密码哈希）
-    const currentUser = await prisma.sysUser.findUnique({
-      where: { id: user.userId },
-      select: {
-        id: true,
-        passwordHash: true,
-      },
-    })
+    try {
+      await auth.api.changePassword({
+        body: {
+          currentPassword: oldPassword,
+          newPassword,
+          revokeOtherSessions: true,
+        },
+        headers: request.headers,
+      })
+    } catch (error) {
+      if (isAPIError(error)) {
+        return NextResponse.json({ error: '原密码错误', code: 'INVALID_PASSWORD' }, { status: 400 })
+      }
 
-    if (!currentUser) {
-      return NextResponse.json({ error: '用户不存在', code: 'USER_NOT_FOUND' }, { status: 404 })
+      throw error
     }
-
-    // 验证原密码
-    const { validateUserPassword } = await import('@/lib/auth')
-    const isPasswordValid = await validateUserPassword(oldPassword, currentUser.passwordHash)
-
-    if (!isPasswordValid) {
-      return NextResponse.json({ error: '原密码错误', code: 'INVALID_PASSWORD' }, { status: 400 })
-    }
-
-    // 加密新密码（bcrypt）
-    const newHash = await hashUserPassword(newPassword)
-
-    // 更新密码
-    await prisma.sysUser.update({
-      where: { id: user.userId },
-      data: {
-        passwordHash: newHash,
-      },
-    })
 
     return NextResponse.json({
       success: true,

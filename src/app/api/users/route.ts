@@ -26,17 +26,6 @@ const createUserSchema = z.object({
   roleIds: z.array(z.string()).optional(),
 })
 
-// 更新用户验证
-const updateUserSchema = z.object({
-  realName: z.string().optional(),
-  idCard: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal('')),
-  status: z.enum(['ACTIVE', 'DISABLED']).optional(),
-  twoFactorEnabled: z.boolean().optional(),
-  roleIds: z.array(z.string()).optional(),
-})
-
 // GET - 获取用户列表
 async function getUsersHandler(request: NextRequest) {
   try {
@@ -130,15 +119,13 @@ async function createUserHandler(request: NextRequest) {
       return NextResponse.json({ error: '用户名已存在', code: 'USERNAME_EXISTS' }, { status: 409 })
     }
 
-    // 密码加密（bcrypt）
-    const passwordHash = await hashUserPassword(password)
-
     // 构建创建数据
     const createData = {
       username,
-      passwordHash,
+      displayUsername: realName,
+      passwordHash: await hashUserPassword(password),
       realName,
-      email: email || null,
+      email: email || `${username}@system.local`,
       status: 'ACTIVE',
       createdBy: request.headers.get('x-user-id') || 'system',
       idCard: null as string | null,
@@ -160,31 +147,49 @@ async function createUserHandler(request: NextRequest) {
       createData.phoneHash = result.hash
     }
 
-    // 创建用户
-    const user = await prisma.sysUser.create({
-      data: createData,
-      include: {
-        roles: {
-          include: {
-            role: true,
+    // 创建用户并同步 Better Auth credential account
+    const user = await prisma.$transaction(async (tx) => {
+      const createdUser = await tx.sysUser.create({
+        data: createData,
+        include: {
+          roles: {
+            include: {
+              role: true,
+            },
           },
         },
-      },
-    })
+      })
 
-    // 分配角色
-    if (roleIds && roleIds.length > 0) {
-      await Promise.all(
-        roleIds.map((roleId) =>
-          prisma.userRole.create({
-            data: {
-              userId: user.id,
-              roleId,
-            },
-          }),
-        ),
-      )
-    }
+      await tx.authAccount.upsert({
+        where: {
+          providerId_accountId: {
+            providerId: 'credential',
+            accountId: createdUser.id,
+          },
+        },
+        create: {
+          userId: createdUser.id,
+          accountId: createdUser.id,
+          providerId: 'credential',
+          password: createData.passwordHash,
+        },
+        update: {
+          password: createData.passwordHash,
+        },
+      })
+
+      // 分配角色
+      if (roleIds && roleIds.length > 0) {
+        await tx.userRole.createMany({
+          data: roleIds.map((roleId) => ({
+            userId: createdUser.id,
+            roleId,
+          })),
+        })
+      }
+
+      return createdUser
+    })
 
     // 记录日志
     await logOperation({

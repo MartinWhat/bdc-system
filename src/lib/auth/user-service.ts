@@ -6,7 +6,6 @@
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword, validateUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
-import type { SysUser } from '@prisma/client'
 
 export interface CreateUserInput {
   username: string
@@ -31,6 +30,7 @@ export async function createUser(input: CreateUserInput) {
     username: string
     passwordHash: string
     realName: string
+    displayUsername: string
     email?: string | null
     createdBy: string
     status: string
@@ -40,9 +40,10 @@ export async function createUser(input: CreateUserInput) {
     username: input.username,
     passwordHash,
     realName: input.realName,
-    email: input.email,
+    email: input.email || `${input.username}@system.local`,
     createdBy: input.createdBy || 'system',
     status: 'ACTIVE',
+    displayUsername: input.realName,
   }
 
   // 加密身份证号
@@ -57,19 +58,41 @@ export async function createUser(input: CreateUserInput) {
     createData.phone = phoneResult.encrypted
   }
 
-  const user = await prisma.sysUser.create({
-    data: createData,
-    select: {
-      id: true,
-      username: true,
-      realName: true,
-      email: true,
-      avatar: true,
-      status: true,
-      twoFactorEnabled: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.sysUser.create({
+      data: createData,
+      select: {
+        id: true,
+        username: true,
+        realName: true,
+        email: true,
+        avatar: true,
+        status: true,
+        twoFactorEnabled: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    await tx.authAccount.upsert({
+      where: {
+        providerId_accountId: {
+          providerId: 'credential',
+          accountId: created.id,
+        },
+      },
+      create: {
+        userId: created.id,
+        accountId: created.id,
+        providerId: 'credential',
+        password: passwordHash,
+      },
+      update: {
+        password: passwordHash,
+      },
+    })
+
+    return created
   })
 
   return user

@@ -1,18 +1,17 @@
-/**
- * JWT 认证中间件
- * 验证请求中的 JWT 令牌并注入用户信息到请求头
- */
-
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyJWT } from '@/lib/auth'
-import { getAccessToken, extractTokenFromHeader } from '@/lib/auth/cookies'
+import { getSessionCookie } from 'better-auth/cookies'
+import { auth } from '@/lib/auth/better-auth'
 
-interface JWTPayload {
-  sub: string
-  username: string
+interface AuthSessionPayload {
+  user?: {
+    id?: string
+    username?: string
+    realName?: string
+    status?: string
+    twoFactorEnabled?: boolean
+  }
   roles?: string[]
   permissions?: string[]
-  exp?: number
 }
 
 /**
@@ -23,7 +22,7 @@ const PROTECTED_PATHS = ['/api/']
 /**
  * 不需要认证的路径（白名单）
  */
-const PUBLIC_PATHS = ['/api/login', '/api/token/refresh']
+const PUBLIC_PATHS = ['/api/auth']
 
 /**
  * 路由级角色拦截映射表
@@ -47,9 +46,6 @@ const ROUTE_ROLE_MAP: Record<string, string[]> = {
   '/api/permissions': ['ADMIN'],
 }
 
-/**
- * JWT 认证中间件
- */
 export async function authMiddleware(request: NextRequest): Promise<NextResponse | null> {
   const pathname = request.nextUrl.pathname
 
@@ -65,70 +61,76 @@ export async function authMiddleware(request: NextRequest): Promise<NextResponse
     return null // 不需要认证，继续处理
   }
 
-  // 提取令牌（优先 Cookie，其次 Header）
-  let token = getAccessToken(request)
-
-  if (!token) {
-    // 从 Authorization Header 获取（向后兼容）
-    const authHeader = request.headers.get('authorization')
-    token = extractTokenFromHeader(authHeader || undefined)
-  }
-
-  if (!token) {
+  // 仅通过 Better Auth session cookie 鉴权
+  const betterAuthSessionCookie = getSessionCookie(request)
+  if (!betterAuthSessionCookie) {
     console.log('[Middleware] No token provided for:', pathname)
     return NextResponse.json({ error: '未提供认证令牌', code: 'UNAUTHORIZED' }, { status: 401 })
   }
 
-  // 使用环境变量中的 JWT 密钥（避免在 Middleware 中使用 Prisma）
-  const jwtKey = process.env.JWT_SECRET_KEY
-  if (!jwtKey) {
-    throw new Error('JWT_SECRET_KEY environment variable is required')
-  }
-
-  let payload: JWTPayload | null
   try {
-    // 验证 token
-    payload = await verifyJWT(token, jwtKey)
+    const session = (await auth.api.getSession({
+      headers: request.headers,
+    })) as AuthSessionPayload | null
 
-    if (!payload) {
+    let payload: {
+      sub: string
+      username: string
+      roles: string[]
+      permissions: string[]
+      status?: string
+    } | null = null
+
+    if (session?.user?.id) {
+      payload = {
+        sub: session.user.id,
+        username: session.user.username || '',
+        roles: session.roles || [],
+        permissions: session.permissions || [],
+        status: session.user.status,
+      }
+    }
+
+    if (!payload?.sub) {
       return NextResponse.json({ error: '无效的认证令牌', code: 'INVALID_TOKEN' }, { status: 401 })
     }
+    if (payload.status && payload.status !== 'ACTIVE') {
+      return NextResponse.json({ error: '用户已被禁用', code: 'USER_DISABLED' }, { status: 403 })
+    }
+
+    // 路由级角色拦截检查
+    for (const [routePrefix, allowedRoles] of Object.entries(ROUTE_ROLE_MAP)) {
+      if (pathname.startsWith(routePrefix)) {
+        const userRoles = payload.roles || []
+        const hasRole = userRoles.some((role: string) => allowedRoles.includes(role))
+        if (!hasRole) {
+          console.log(
+            `[Middleware] Role check failed for ${pathname}: required ${allowedRoles}, got ${userRoles}`,
+          )
+          return NextResponse.json(
+            { error: '权限不足：需要管理员权限', code: 'FORBIDDEN' },
+            { status: 403 },
+          )
+        }
+        break
+      }
+    }
+
+    // 将用户信息注入到下游请求头，供 API Route 读取
+    const requestHeaders = new Headers(request.headers)
+    requestHeaders.set('x-user-id', payload.sub || '')
+    requestHeaders.set('x-username', encodeURIComponent(payload.username || ''))
+    requestHeaders.set('x-user-roles', encodeURIComponent(JSON.stringify(payload.roles || [])))
+    requestHeaders.set(
+      'x-user-permissions',
+      encodeURIComponent(JSON.stringify(payload.permissions || [])),
+    )
+
+    return NextResponse.next({ request: { headers: requestHeaders } })
   } catch (error) {
     console.error('[Middleware] Auth service error:', error)
     return NextResponse.json({ error: '认证服务错误', code: 'AUTH_ERROR' }, { status: 500 })
   }
-
-  // 设置用户信息到响应头（API Route 可通过 headers.get 读取）
-  const response = NextResponse.next()
-  response.headers.set('x-user-id', payload.sub || '')
-  response.headers.set('x-username', encodeURIComponent(payload.username || ''))
-  response.headers.set('x-user-roles', encodeURIComponent(JSON.stringify(payload.roles || [])))
-  response.headers.set(
-    'x-user-permissions',
-    encodeURIComponent(JSON.stringify(payload.permissions || [])),
-  )
-
-  // 路由级角色拦截检查
-  for (const [routePrefix, allowedRoles] of Object.entries(ROUTE_ROLE_MAP)) {
-    if (pathname.startsWith(routePrefix)) {
-      const userRoles = payload.roles || []
-      const hasRole = userRoles.some((role: string) => allowedRoles.includes(role))
-      if (!hasRole) {
-        console.log(
-          `[Middleware] Role check failed for ${pathname}: required ${allowedRoles}, got ${userRoles}`,
-        )
-        return NextResponse.json(
-          { error: '权限不足：需要管理员权限', code: 'FORBIDDEN' },
-          { status: 403 },
-        )
-      }
-      // 匹配到第一个规则后即退出（假设规则不重叠或按顺序优先级）
-      break
-    }
-  }
-
-  // 创建响应并继续处理请求
-  return response
 }
 
 /**

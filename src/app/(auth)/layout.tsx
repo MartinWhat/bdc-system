@@ -179,7 +179,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
     return unsubscribe
   }, [clearAuth])
 
-  // 通过 API 加载用户信息（从 httpOnly JWT cookie 获取）
+  // 通过 API 加载用户信息（Better Auth session）
   useEffect(() => {
     const loadUserInfo = async () => {
       try {
@@ -219,23 +219,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
     loadUserInfo()
   }, [router, setAuth, clearAuth])
-
-  // 启动主动刷新定时器
-  useEffect(() => {
-    if (!user) return
-
-    import('@/lib/token-expiry').then(
-      ({ startTokenExpiryTimer, initTokenExpirySync, initActivityTracker }) => {
-        startTokenExpiryTimer()
-        const cleanupSync = initTokenExpirySync()
-        const cleanupActivity = initActivityTracker()
-        return () => {
-          cleanupSync()
-          cleanupActivity()
-        }
-      },
-    )
-  }, [user])
 
   const handleReLoginConfirm = useCallback(() => {
     setReLoginModalVisible(false)

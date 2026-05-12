@@ -15,8 +15,10 @@ import {
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
+import { authClient } from '@/lib/auth/auth-client'
+import { authFetch } from '@/lib/api-fetch'
 import { motion } from 'framer-motion'
-import { SLIDE_UP, SLIDE_DOWN, STAGGER_CONTAINER, BUTTON_VARIANTS } from '@/config/motion'
+import { SLIDE_UP, STAGGER_CONTAINER, BUTTON_VARIANTS } from '@/config/motion'
 
 const { Title, Text } = Typography
 
@@ -39,37 +41,43 @@ export default function LoginPage() {
   const onFinish = async (values: LoginFields) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const loginResult = await authClient.signIn.username(
+        {
+          username: values.username,
+          password: values.password,
+          rememberMe: true,
         },
-        body: JSON.stringify(values),
-        credentials: 'include', // 包含 Cookie
+        {
+          credentials: 'include',
+        },
+      )
+
+      if (loginResult.error) {
+        message.error(loginResult.error.message || '登录失败')
+        return
+      }
+
+      const sessionResponse = await authFetch('/api/auth/me', {
+        credentials: 'include',
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        message.error(data.error || '登录失败')
+      if (!sessionResponse.ok) {
+        message.error('登录成功，但获取用户信息失败')
         return
       }
 
-      if (data.requiresTwoFactor) {
-        message.info('需要双因素认证')
+      const sessionData = await sessionResponse.json()
+      if (!sessionData?.data) {
+        message.error('登录成功，但用户信息缺失')
         return
       }
 
-      // Cookie 模式下，Token 已自动存储在 Cookie 中
-      // 只需保存用户信息到 Zustand store
-      setAuth(data.data.user)
+      setAuth(sessionData.data)
       message.success('登录成功')
 
-      // 等待 Cookie 设置完成再跳转
-      setTimeout(() => {
-        router.push('/')
-      }, 300)
+      router.push('/')
     } catch (error) {
+      console.error('Login error:', error)
       message.error('登录失败，请检查网络连接')
     } finally {
       setLoading(false)

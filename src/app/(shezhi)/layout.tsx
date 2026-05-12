@@ -14,7 +14,6 @@ import {
   SafetyOutlined,
   HistoryOutlined,
   KeyOutlined,
-  SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons'
@@ -102,7 +101,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isDark } = useThemeStore()
   const { token } = theme.useToken()
 
-  // 通过 API 加载用户信息（从 httpOnly JWT cookie 获取）
+  // 通过 API 加载用户信息（Better Auth session）
   useEffect(() => {
     const loadUserInfo = async () => {
       try {
@@ -131,21 +130,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         // 设置用户信息到 store（来自服务端验证的数据）
         setAuth(userData)
-
-        // 检查上次登录时间
-        const lastLoginAt = userData.lastLoginAt
-        if (lastLoginAt) {
-          const now = Date.now()
-          const oneDayMs = 24 * 60 * 60 * 1000 // 24 小时
-          const lastLoginTime = new Date(lastLoginAt).getTime()
-
-          // 如果超过 24 小时未登录，静默跳转登录页
-          if (now - lastLoginTime > oneDayMs) {
-            clearAuth()
-            router.push('/login')
-            return
-          }
-        }
       } catch (error) {
         console.error('Failed to fetch /api/auth/me:', error)
         clearAuth()
@@ -156,23 +140,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
     loadUserInfo()
   }, [router, setAuth, clearAuth])
-
-  // 启动主动刷新定时器
-  useEffect(() => {
-    if (!user) return
-
-    import('@/lib/token-expiry').then(
-      ({ startTokenExpiryTimer, initTokenExpirySync, initActivityTracker }) => {
-        startTokenExpiryTimer()
-        const cleanupSync = initTokenExpirySync()
-        const cleanupActivity = initActivityTracker()
-        return () => {
-          cleanupSync()
-          cleanupActivity()
-        }
-      },
-    )
-  }, [user])
 
   const handleLogout = async () => {
     try {

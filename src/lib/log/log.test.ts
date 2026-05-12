@@ -166,7 +166,7 @@ describe('日志中间件', () => {
     const middleware = LogMiddleware.auth
 
     await expect(
-      middleware(testUserId, 'POST', '/api/login', 'SUCCESS', '用户登录'),
+      middleware(testUserId, 'POST', '/api/auth/sign-in', 'SUCCESS', '用户登录'),
     ).resolves.not.toThrow()
   })
 })

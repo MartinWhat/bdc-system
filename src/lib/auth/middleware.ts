@@ -1,14 +1,11 @@
 /**
- * API 认证中间件（已废弃）
+ * API 认证中间件兼容层
  *
- * @deprecated 此文件中的函数已废弃，请使用以下替代方案：
+ * 这里保留旧接口，方便现有路由继续调用：
  * - getUserFromRequest(request) 从 '@/lib/middleware/auth' 导入
  * - withPermission() HOF 从 '@/lib/api/withPermission' 导入
  *
- * Middleware 层已统一处理 JWT 验证并注入用户信息到请求头，
- * API Route 层无需再次验证 JWT。
- *
- * 保留此文件仅用于向后兼容，新代码请勿使用。
+ * 当前认证已切换到 Better Auth session，API Route 层只读取中间件注入的信息。
  */
 
 import { NextRequest, NextResponse } from 'next/server'

@@ -5,9 +5,10 @@
 
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField, sm3Hash, generateSM4Key } from '@/lib/gm-crypto'
+import { encryptSensitiveField, sm3Hash, generateSM4Key, sm4Encrypt } from '@/lib/gm-crypto'
 import { getActiveKey } from '@/lib/kms'
 import { sm3Hmac } from '@/lib/gm-crypto'
+import { upsertCredentialAccount } from '@/lib/auth/accounts'
 
 // 假数据配置
 const TOWNS = [
@@ -103,7 +104,6 @@ async function initKmsKeys() {
       encryptedValue = sm3Hash(keyValue)
     } else {
       // 使用 fallback 密钥加密
-      const { sm4Encrypt } = require('@/lib/gm-crypto')
       const iv = Array.from({ length: 16 }, () =>
         Math.floor(Math.random() * 256)
           .toString(16)
@@ -148,6 +148,19 @@ async function createTestUsers() {
     })
 
     if (existing) {
+      if (!existing.email || !existing.displayUsername) {
+        await prisma.sysUser.update({
+          where: { id: existing.id },
+          data: {
+            email: existing.email || `${user.username}@system.local`,
+            displayUsername: existing.displayUsername || user.realName,
+          },
+        })
+      }
+      const existingPasswordHash = existing.passwordHash
+      if (existingPasswordHash) {
+        await upsertCredentialAccount(existing.id, existingPasswordHash)
+      }
       console.log(`  跳过已存在用户：${user.username}`)
       continue
     }
@@ -156,8 +169,10 @@ async function createTestUsers() {
     const created = await prisma.sysUser.create({
       data: {
         username: user.username,
+        displayUsername: user.realName,
         passwordHash,
         realName: user.realName,
+        email: `${user.username}@system.local`,
         status: 'ACTIVE',
       },
     })
@@ -176,6 +191,8 @@ async function createTestUsers() {
         },
       })
     }
+
+    await upsertCredentialAccount(created.id, passwordHash)
 
     console.log(`  ✓ 创建用户：${user.username} (密码：password123)`)
   }
@@ -333,7 +350,7 @@ async function createReceiveRecords() {
     const statusOptions = ['PENDING', 'ISSUED', 'COMPLETED'] as const
     const status = statusOptions[i % 3]
 
-    const record = await prisma.zjdReceiveRecord.create({
+    await prisma.zjdReceiveRecord.create({
       data: {
         bdcId: bdc.id,
         status,
@@ -374,7 +391,7 @@ async function createObjectionRecords() {
   for (let i = 0; i < issuedRecords.length; i++) {
     const record = issuedRecords[i]
 
-    const objection = await prisma.objection.create({
+    await prisma.objection.create({
       data: {
         receiveRecordId: record.id,
         objectionType: 'OTHER',

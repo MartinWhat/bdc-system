@@ -1,30 +1,14 @@
 /**
- * API 请求拦截器（双 Token 机制 - Cookie 安全版）
- * 使用 httpOnly Cookie 自动发送 Token，防止 XSS 攻击
+ * API 请求拦截器
+ * 直接依赖 Better Auth 会话 Cookie，不再处理 token 刷新
  */
 
-import { refreshAccessToken, clearTokens } from '@/lib/token-manager'
 import { triggerAuthExpiry } from '@/lib/auth-event'
 import { message } from 'antd'
 
-// 正在刷新 Token 的 Promise（用于防止并发刷新）
-let refreshPromise: Promise<boolean> | null = null
-
 /**
- * 获取刷新 Promise
- */
-function getRefreshPromise(): Promise<boolean> {
-  if (!refreshPromise) {
-    refreshPromise = refreshAccessToken().finally(() => {
-      refreshPromise = null
-    })
-  }
-  return refreshPromise
-}
-
-/**
- * 增强的 fetch 函数（Cookie 安全版）
- * 自动处理 Access Token 刷新和重试
+ * 增强的 fetch 函数
+ * 自动处理 401 / 403 反馈
  */
 export async function authFetch(
   url: string,
@@ -32,8 +16,8 @@ export async function authFetch(
 ): Promise<Response> {
   const { skipAuth, ...fetchOptions } = options
 
-  // 跳过认证的请求（如登录、刷新 Token）
-  if (skipAuth || url.includes('/login') || url.includes('/token/refresh')) {
+  // 跳过认证的请求（如登录）
+  if (skipAuth || url.includes('/login')) {
     return fetch(url, {
       ...fetchOptions,
       credentials: 'include', // 始终包含 Cookie
@@ -59,29 +43,11 @@ export async function authFetch(
 
   // 处理 401 错误 - 尝试刷新 Token
   if (response.status === 401) {
-    const errorData = await response.json().catch(() => ({}))
-
-    // 如果是 Token 无效/过期，尝试刷新
-    if (
-      errorData.code === 'INVALID_TOKEN' ||
-      errorData.code === 'UNAUTHORIZED' ||
-      errorData.code === 'TOKEN_EXPIRED'
-    ) {
-      const success = await getRefreshPromise()
-
-      if (success) {
-        // 刷新成功，重试原请求
-        return authFetch(url, options)
-      } else {
-        // 刷新失败，清除状态并触发登出
-        clearTokens()
-        triggerAuthExpiry()
-      }
-    } else {
-      // 其他 401 错误（如 Token 轮换失败），直接清除状态
-      clearTokens()
-      triggerAuthExpiry()
-    }
+    await response
+      .clone()
+      .json()
+      .catch(() => ({}))
+    triggerAuthExpiry()
   }
 
   return response

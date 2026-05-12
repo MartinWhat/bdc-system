@@ -5,7 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { upsertCredentialAccount } from '@/lib/auth/accounts'
 
 /**
  * 初始化系统角色和权限
@@ -162,6 +162,19 @@ async function seedDefaultAdmin() {
   })
 
   if (existingUser) {
+    if (!existingUser.email) {
+      await prisma.sysUser.update({
+        where: { id: existingUser.id },
+        data: { email: 'admin@system.local' },
+      })
+    }
+    if (!existingUser.displayUsername) {
+      await prisma.sysUser.update({
+        where: { id: existingUser.id },
+        data: { displayUsername: '系统管理员' },
+      })
+    }
+
     // 确保已有用户分配了 ADMIN 角色
     const adminRole = await prisma.sysRole.findUnique({
       where: { code: 'ADMIN' },
@@ -185,6 +198,10 @@ async function seedDefaultAdmin() {
         console.log('  ✓ 为已有管理员用户补充分配角色')
       }
     }
+    if (existingUser.passwordHash) {
+      await upsertCredentialAccount(existingUser.id, existingUser.passwordHash)
+      console.log('  ✓ 为已有管理员用户补充 Better Auth credential account')
+    }
     console.log('  管理员用户已存在，跳过创建')
     return
   }
@@ -196,8 +213,10 @@ async function seedDefaultAdmin() {
   const adminUser = await prisma.sysUser.create({
     data: {
       username: 'admin',
+      displayUsername: '系统管理员',
       passwordHash,
       realName: '系统管理员',
+      email: 'admin@system.local',
       status: 'ACTIVE',
     },
   })
@@ -215,6 +234,7 @@ async function seedDefaultAdmin() {
         roleId: adminRole.id,
       },
     })
+    await upsertCredentialAccount(adminUser.id, passwordHash)
     console.log('  ✓ 创建管理员用户并分配角色')
   }
 
