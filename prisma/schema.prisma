@@ -105,6 +105,7 @@ model SysUser {
   readRecords      NotificationRead[]
 
   @@index([villageId])
+  @@index([status, createdAt])
   @@map("sys_user")
 }
 
@@ -245,6 +246,7 @@ model SysTown {
   updatedAt DateTime     @updatedAt
   villages  SysVillage[]
 
+  @@index([status, sortOrder, createdAt])
   @@map("sys_town")
 }
 
@@ -263,6 +265,8 @@ model SysVillage {
   collectiveCerts CollectiveCert[]
 
   @@index([townId])
+  @@index([status, sortOrder, createdAt])
+  @@index([townId, status, sortOrder, createdAt])
   @@map("sys_village")
 }
 
@@ -318,6 +322,10 @@ model ZjdBdc {
   @@index([status])
   @@index([deletedAt])
   @@index([ownerName])
+  @@index([status, createdAt])
+  @@index([villageId, status, createdAt])
+  @@index([acceptDate])
+  @@index([status, certIssuedDate])
   @@map("zjd_bdc")
 }
 
@@ -350,6 +358,8 @@ model ZjdReceiveRecord {
   @@index([bdcId])
   @@index([status])
   @@index([deletedAt])
+  @@index([bdcId, status])
+  @@index([status, createdAt])
   @@map("zjd_receive_record")
 }
 
@@ -366,6 +376,7 @@ model ProcessNode {
   receiveRecord   ZjdReceiveRecord @relation(fields: [receiveRecordId], references: [id], onDelete: Cascade)
 
   @@index([receiveRecordId])
+  @@index([receiveRecordId, createdAt])
   @@map("zjd_process_node")
 }
 
@@ -392,6 +403,9 @@ model Objection {
   @@index([receiveRecordId])
   @@index([status])
   @@index([deletedAt])
+  @@index([receiveRecordId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([currentWorkflowId])
   @@map("zjd_objection")
 }
 
@@ -404,6 +418,8 @@ model ObjectionWorkflow {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   steps       ObjectionWorkflowStep[]
+
+  @@index([isActive, createdAt])
   @@map("objection_workflow")
 }
 
@@ -418,7 +434,9 @@ model ObjectionWorkflowStep {
   isRequired  Boolean  @default(true)
   createdAt   DateTime @default(now())
   workflow    ObjectionWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
   @@index([workflowId])
+  @@unique([workflowId, stepOrder])
   @@map("objection_workflow_step")
 }
 
@@ -438,8 +456,10 @@ model ObjectionTask {
   approveRemark String?
   createdAt     DateTime  @default(now())
   objection     Objection @relation(fields: [objectionId], references: [id], onDelete: Cascade)
+
   @@index([objectionId])
   @@index([status])
+  @@index([objectionId, stepOrder])
   @@map("objection_task")
 }
 
@@ -467,6 +487,9 @@ model OperationLog {
   @@index([bdcId])
   @@index([action])
   @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
+  @@index([status, createdAt])
   @@map("sys_operation_log")
 }
 
@@ -531,6 +554,9 @@ model CollectiveCert {
   @@index([certNo])
   @@index([deletedAt])
   @@index([ownerName])
+  @@index([status, createdAt])
+  @@index([villageId, status, createdAt])
+  @@index([ownerType, createdAt])
   @@map("collective_cert")
 }
 
@@ -600,6 +626,8 @@ model Notification {
   @@index([type, status])
   @@index([isPopup, popupStartAt, popupEndAt])
   @@index([deletedAt])
+  @@index([status, isPinned, publishedAt])
+  @@index([status, isPopup, popupStartAt, popupEndAt, publishedAt])
   @@map("notification")
 }
 
@@ -630,5 +658,7 @@ model Attachment {
 
   @@index([fileType])
   @@index([uploadedBy])
+  @@index([fileType, createdAt])
+  @@index([uploadedBy, createdAt])
   @@map("attachment")
 }
