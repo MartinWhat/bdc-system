@@ -6,18 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getActiveKey } from '@/lib/kms'
-import { sm3Hmac } from '@/lib/gm-crypto'
 import { maskIdCard, maskPhone } from '@/lib/utils/mask'
 import { withPermission } from '@/lib/api/withPermission'
 import { getUserFromRequest } from '@/lib/middleware/auth'
 import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
-import { z } from 'zod'
-
-const querySchema = z.object({
-  idCard: z.string().optional(),
-  phone: z.string().optional(),
-})
 
 async function getBdcQueryHandler(request: NextRequest) {
   try {
@@ -34,19 +26,14 @@ async function getBdcQueryHandler(request: NextRequest) {
 
     const where: Record<string, unknown> = {}
 
-    // 获取主密钥用于生成哈希
-    const masterKeyRecord = await getActiveKey('MASTER_KEY')
-
     // 通过身份证号查询
     if (idCard) {
-      const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyData)
-      where.idCardHash = idCardHash
+      where.idCard = idCard
     }
 
     // 通过手机号查询
     if (phone) {
-      const phoneHash = sm3Hmac(phone, masterKeyRecord.keyData)
-      where.phoneHash = phoneHash
+      where.phone = phone
     }
 
     // 应用数据权限过滤

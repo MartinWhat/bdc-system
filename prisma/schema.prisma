@@ -52,29 +52,6 @@ enum CertOperationType {
   CANCEL // 注销
 }
 
-model SysKeyVersion {
-  id        String   @id @default(cuid())
-  keyType   String
-  version   Int
-  keyData   String   @db.Text
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  expiresAt DateTime
-
-  // 密钥元数据（密钥轮换增强）
-  createdBy          String
-  encryptedDataCount Int?      @default(0) // 使用该密钥加密的数据数量
-  migratedToKeyId    String? // 迁移目标密钥 ID（如果已迁移）
-  isArchived         Boolean   @default(false) // 是否已归档
-  archivedAt         DateTime?
-  deletedAt          DateTime?
-
-  @@index([keyType, isActive, isArchived])
-  @@index([keyType, expiresAt])
-  @@map("sys_key_version")
-}
-
 model SysUser {
   id               String             @id @default(cuid())
   username         String             @unique
@@ -82,9 +59,7 @@ model SysUser {
   passwordHash     String
   realName         String
   idCard           String?
-  idCardHash       String?
   phone            String?
-  phoneHash        String?
   email            String?
   avatar           String?
   emailVerified    Boolean            @default(false)
@@ -106,6 +81,8 @@ model SysUser {
 
   @@index([villageId])
   @@index([status, createdAt])
+  @@index([idCard])
+  @@index([phone])
   @@map("sys_user")
 }
 
@@ -277,9 +254,7 @@ model ZjdBdc {
   certNo         String             @unique // 不动产单元号（无则用 PENDING-收件编号）
   ownerName      String             // 权利人
   idCard         String             // 权利人证件号
-  idCardHash     String             // 证件号哈希（预留）
   phone          String?            // Excel无对应
-  phoneHash      String?            // 电话哈希（预留）
   address        String             // 不动产坐落
   area           Float              // 面积（平方米）
   landUseType    String             @default("宅基地") // Excel无对应，默认宅基地
@@ -326,6 +301,8 @@ model ZjdBdc {
   @@index([villageId, status, createdAt])
   @@index([acceptDate])
   @@index([status, certIssuedDate])
+  @@index([idCard])
+  @@index([phone])
   @@map("zjd_bdc")
 }
 
@@ -334,9 +311,7 @@ model ZjdReceiveRecord {
   bdcId              String
   receiverName       String?
   receiverIdCard     String?
-  receiverIdCardHash String?
   receiverPhone      String?
-  receiverPhoneHash  String?
   idCardFrontPhoto   String?
   idCardBackPhoto    String?
   scenePhoto         String?
@@ -456,7 +431,6 @@ model ObjectionTask {
   approveRemark String?
   createdAt     DateTime  @default(now())
   objection     Objection @relation(fields: [objectionId], references: [id], onDelete: Cascade)
-
   @@index([objectionId])
   @@index([status])
   @@index([objectionId, stepOrder])
@@ -501,9 +475,7 @@ model CollectiveCert {
   ownerType          String               @default("VILLAGE_COLLECTIVE") // VILLAGE_COLLECTIVE, TOWN_COLLECTIVE
   villageId          String
   idCard             String?
-  idCardHash         String?
   phone              String?
-  phoneHash          String?
   address            String
   area               Float
   landUseType        String?
@@ -557,6 +529,8 @@ model CollectiveCert {
   @@index([status, createdAt])
   @@index([villageId, status, createdAt])
   @@index([ownerType, createdAt])
+  @@index([idCard])
+  @@index([phone])
   @@map("collective_cert")
 }
 
@@ -626,8 +600,8 @@ model Notification {
   @@index([type, status])
   @@index([isPopup, popupStartAt, popupEndAt])
   @@index([deletedAt])
-  @@index([status, isPinned, publishedAt])
-  @@index([status, isPopup, popupStartAt, popupEndAt, publishedAt])
+  @@index([status, isPinned, publishedAt], map: "notification_status_pinned_pub_idx")
+  @@index([status, isPopup, popupStartAt, popupEndAt, publishedAt], map: "notification_status_popup_window_pub_idx")
   @@map("notification")
 }
 

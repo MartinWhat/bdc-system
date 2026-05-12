@@ -5,8 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sm4Encrypt } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
@@ -77,22 +75,6 @@ async function uploadFileHandler(request: NextRequest) {
       )
     }
 
-    // 获取加密密钥
-    const sm4KeyRecord = await getActiveKey('SM4_DATA')
-
-    // 生成随机 IV
-    const array = new Uint8Array(16)
-    crypto.getRandomValues(array)
-    const iv = Array.from(array)
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    // 加密文件数据
-    const encryptedData = sm4Encrypt(base64Data, sm4KeyRecord.keyData, iv)
-
-    // 存储格式：iv:encryptedBase64
-    const storedData = `${iv}:${encryptedData.ciphertext}`
-
     // 根据文件类别更新记录
     const updateField = {
       ID_CARD_FRONT: 'idCardFrontPhoto',
@@ -102,7 +84,7 @@ async function uploadFileHandler(request: NextRequest) {
 
     await prisma.zjdReceiveRecord.update({
       where: { id: recordId },
-      data: { [updateField]: storedData },
+      data: { [updateField]: base64Data },
     })
 
     return NextResponse.json({

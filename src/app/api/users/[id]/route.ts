@@ -96,13 +96,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (idCard !== undefined) {
       const result = await encryptSensitiveField(idCard)
       updateData.idCard = result.encrypted
-      updateData.idCardHash = result.hash
     }
 
     if (phone !== undefined) {
       const result = await encryptSensitiveField(phone)
       updateData.phone = result.encrypted
-      updateData.phoneHash = result.hash
     }
 
     // 使用事务更新用户信息和角色关联

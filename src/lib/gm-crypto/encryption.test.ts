@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import {
-  encryptSensitiveField,
-  decryptSensitiveField,
-  SENSITIVE_FIELDS,
-} from '@/lib/gm-crypto/encryption'
+import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto/encryption'
 import { generateQueryHash } from '@/lib/gm-crypto/query'
 import { maskIdCard, maskPhone, maskName, maskAddress } from '@/lib/utils/mask'
 import { seedTestKeys } from '@/test/helpers'
@@ -13,13 +9,14 @@ describe('敏感数据加密', () => {
     await seedTestKeys()
   })
 
-  it('应该加密敏感字段并生成哈希', async () => {
+  it('应该保留敏感字段原值并生成兼容查询值', async () => {
     const result = await encryptSensitiveField('110101199001011234')
     expect(result.encrypted).toBeDefined()
-    expect(result.hash).toHaveLength(64)
+    expect(result.encrypted).toBe('110101199001011234')
+    expect(result.hash).toBe('110101199001011234')
   })
 
-  it('相同输入应该生成相同的哈希', async () => {
+  it('相同输入应该生成相同的查询值', async () => {
     const hash1 = await generateQueryHash('test')
     const hash2 = await generateQueryHash('test')
     expect(hash1).toBe(hash2)
@@ -38,7 +35,7 @@ describe('加密中间件', () => {
     await seedTestKeys()
   })
 
-  it('应该加密配置的字段', async () => {
+  it('应该兼容保留配置字段', async () => {
     const data = {
       idCard: '110101199001011234',
       phone: '13800138000',
@@ -57,9 +54,9 @@ describe('加密中间件', () => {
       phoneHash: phoneResult.hash,
     }
 
-    expect(encrypted.idCard).toBeDefined()
-    expect(encrypted.idCardHash).toBeDefined()
-    expect(encrypted.phoneHash).toBeDefined()
+    expect(encrypted.idCard).toBe(data.idCard)
+    expect(encrypted.idCardHash).toBe(data.idCard)
+    expect(encrypted.phoneHash).toBe(data.phone)
     expect(encrypted.name).toBe('张三') // 非敏感字段不变
   })
 

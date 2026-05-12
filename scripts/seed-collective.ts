@@ -4,6 +4,7 @@
  */
 
 import 'dotenv/config'
+import type { CollectiveCertStatus } from '@prisma/client'
 import { prisma } from '../src/lib/prisma'
 import { encryptSensitiveField } from '../src/lib/gm-crypto'
 
@@ -29,11 +30,17 @@ const VILLAGES = [
   { code: 'VILLAGE010', name: '红旗村村民委员会', townIndex: 4 },
 ]
 
-const OWNER_TYPES = ['VILLAGE_COLLECTIVE', 'TOWN_COLLECTIVE']
+const OWNER_TYPES = ['VILLAGE_COLLECTIVE', 'TOWN_COLLECTIVE'] as const
 
 const LAND_USE_TYPES = ['集体建设用地', '农用地', '林地', '草地', '农田水利用地', '养殖水面']
 
-const STATUSES = ['IN_STOCK', 'OUT_STOCK', 'PENDING_APPROVE', 'RETURNED', 'FROZEN'] as const
+const STATUSES: readonly CollectiveCertStatus[] = [
+  'IN_STOCK',
+  'OUT_STOCK',
+  'PENDING_APPROVE',
+  'RETURNED',
+  'FROZEN',
+]
 
 const ID_CARDS = [
   '110101199001011234',
@@ -142,7 +149,7 @@ async function seedCollectiveCerts(count: number = 20) {
 
   // 创建证书
   console.log(`\n📜 创建 ${count} 条村集体证书数据...`)
-  const statusDistribution = {
+  const statusDistribution: Record<CollectiveCertStatus, number> = {
     IN_STOCK: Math.floor(count * 0.5), // 50% 在库
     OUT_STOCK: Math.floor(count * 0.2), // 20% 已出库
     PENDING_APPROVE: Math.floor(count * 0.15), // 15% 待审核
@@ -151,7 +158,8 @@ async function seedCollectiveCerts(count: number = 20) {
   }
 
   let certIndex = 1
-  for (const [status, statusCount] of Object.entries(statusDistribution)) {
+  for (const status of STATUSES) {
+    const statusCount = statusDistribution[status]
     for (let i = 0; i < statusCount; i++) {
       const village = randomChoice(createdVillages)
       const ownerType = randomChoice(OWNER_TYPES)
@@ -170,16 +178,14 @@ async function seedCollectiveCerts(count: number = 20) {
         ownerType,
         villageId: village.id,
         idCard: idCardResult.encrypted,
-        idCardHash: idCardResult.hash,
         phone: phoneResult.encrypted,
-        phoneHash: phoneResult.hash,
         address: randomChoice(ADDRESSES),
         area: randomInt(1000, 10000) + Math.random() * 100,
         landUseType: randomChoice(LAND_USE_TYPES),
         certIssueDate: generatePastDate(randomInt(100, 1000)),
         certExpiryDate: generateFutureDate(randomInt(100, 1000)),
         attachments: randomChoice(SAMPLE_ATTACHMENTS),
-        status: status as any,
+        status,
         isFrozen: status === 'FROZEN',
         freezeReason: status === 'FROZEN' ? '权属争议' : null,
         freezeBy: status === 'FROZEN' ? userId : null,
@@ -241,11 +247,11 @@ async function seedCollectiveCerts(count: number = 20) {
 
   console.log(`  总计：${total} 条`)
   console.log('  按状态:')
-  byStatus.forEach((s: any) => {
+  byStatus.forEach((s) => {
     console.log(`    - ${s.status}: ${s._count} 条`)
   })
   console.log('  按类型:')
-  byOwnerType.forEach((t: any) => {
+  byOwnerType.forEach((t) => {
     console.log(`    - ${t.ownerType}: ${t._count} 条`)
   })
 

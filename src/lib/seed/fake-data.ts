@@ -5,9 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField, sm3Hash, generateSM4Key, sm4Encrypt } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
-import { sm3Hmac } from '@/lib/gm-crypto'
+import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { upsertCredentialAccount } from '@/lib/auth/accounts'
 
 // 假数据配置
@@ -66,69 +64,6 @@ function generateFakePhone(index: number): string {
   const prefix = '13'
   const middle = String(5000000 + index * 12345).slice(-8)
   return `${prefix}${middle}`
-}
-
-/**
- * 初始化 KMS 密钥
- */
-async function initKmsKeys() {
-  console.log('初始化 KMS 密钥...')
-
-  const keyTypes: Array<'MASTER_KEY' | 'SM4_DATA' | 'SM2_SIGN' | 'JWT_SECRET'> = [
-    'MASTER_KEY',
-    'SM4_DATA',
-    'SM2_SIGN',
-    'JWT_SECRET',
-  ]
-
-  // 使用固定的 fallback 密钥（与.env 配置一致）
-  const fallbackKey = process.env.KMS_FALLBACK_KEY || '0123456789abcdef0123456789abcdef'
-
-  for (const keyType of keyTypes) {
-    // 检查是否已有活跃密钥
-    const existing = await prisma.sysKeyVersion.findFirst({
-      where: { keyType, isActive: true },
-    })
-
-    if (existing) {
-      console.log(`  密钥 ${keyType} 已存在，跳过`)
-      continue
-    }
-
-    // 生成密钥明文
-    const keyValue = generateSM4Key()
-
-    // MASTER_KEY 使用 SM3 哈希，其他使用 SM4 加密存储
-    let encryptedValue: string
-    if (keyType === 'MASTER_KEY') {
-      encryptedValue = sm3Hash(keyValue)
-    } else {
-      // 使用 fallback 密钥加密
-      const iv = Array.from({ length: 16 }, () =>
-        Math.floor(Math.random() * 256)
-          .toString(16)
-          .padStart(2, '0'),
-      ).join('')
-      const encrypted = sm4Encrypt(keyValue, fallbackKey, iv)
-      encryptedValue = `${iv}:${encrypted.ciphertext}`
-    }
-
-    // 创建并激活密钥
-    await prisma.sysKeyVersion.create({
-      data: {
-        keyType,
-        version: 1,
-        keyData: encryptedValue,
-        isActive: true,
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        createdBy: 'system',
-      },
-    })
-
-    console.log(`  ✓ 初始化密钥：${keyType}`)
-  }
-
-  console.log('KMS 密钥初始化完成!\n')
 }
 
 /**
@@ -284,11 +219,6 @@ async function createBdcRecords() {
     const idCardResult = await encryptSensitiveField(idCard)
     const phoneResult = await encryptSensitiveField(phone)
 
-    // 生成哈希索引
-    const masterKeyRecord = await getActiveKey('MASTER_KEY')
-    const idCardHash = sm3Hmac(idCard, masterKeyRecord.keyData)
-    const phoneHash = sm3Hmac(phone, masterKeyRecord.keyData)
-
     const statusOptions = ['PENDING', 'APPROVED', 'ISSUED'] as const
     const status = statusOptions[i % 3]
 
@@ -298,9 +228,7 @@ async function createBdcRecords() {
         certNo,
         ownerName,
         idCard: idCardResult.encrypted,
-        idCardHash,
         phone: phoneResult.encrypted,
-        phoneHash,
         address: `${village.town.name}${village.name}${i + 1}号`,
         area: 80 + (i % 50) * 2,
         landUseType: '宅基地',
@@ -421,7 +349,6 @@ export async function seedFakeData() {
   console.log('=== 开始生成假数据 ===\n')
 
   try {
-    await initKmsKeys()
     await createTestUsers()
     await createTownsAndVillages()
     await createBdcRecords()

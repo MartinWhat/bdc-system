@@ -31,7 +31,6 @@ const PUBLIC_PATHS = ['/api/auth']
 const ROUTE_ROLE_MAP: Record<string, string[]> = {
   '/api/users': ['ADMIN'],
   '/api/roles': ['ADMIN'],
-  '/api/kms': ['ADMIN'],
   '/api/towns': ['ADMIN', 'TOWN_ADMIN'],
   '/api/villages': ['ADMIN', 'TOWN_ADMIN', 'VILLAGE_ADMIN'],
   '/api/notifications/manage': ['ADMIN'],

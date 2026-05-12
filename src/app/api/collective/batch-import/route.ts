@@ -6,7 +6,7 @@
  * 1. JSON 数据：{ items: [...] }
  * 2. Excel 文件：multipart/form-data，文件字段名 "file"
  *
- * 性能优化：一次性获取密钥，批量加密
+ * 性能优化：批量预处理敏感字段
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
 
     const existingCertNos = new Set(existingCerts.map((c) => c.certNo))
 
-    // 性能优化：一次性创建加密上下文，避免重复获取密钥
+    // 性能优化：统一创建处理上下文
     const encryptionContext = await createEncryptionContext()
 
     // 预处理所有需要加密的数据
@@ -234,9 +234,7 @@ export async function POST(request: NextRequest) {
               ownerType: processedItem.ownerType || 'VILLAGE_COLLECTIVE',
               villageId: processedItem.villageId,
               idCard: processedItem.encryptedIdCard?.encrypted,
-              idCardHash: processedItem.encryptedIdCard?.hash,
               phone: processedItem.encryptedPhone?.encrypted,
-              phoneHash: processedItem.encryptedPhone?.hash,
               address: processedItem.address,
               area: processedItem.area,
               landUseType: processedItem.landUseType,

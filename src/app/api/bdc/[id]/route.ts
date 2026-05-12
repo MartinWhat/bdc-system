@@ -175,13 +175,11 @@ async function updateBdcHandler(
     if (body.idCard !== undefined) {
       const result = await encryptSensitiveField(body.idCard)
       updateData.idCard = result.encrypted
-      updateData.idCardHash = result.hash
     }
 
     if (body.phone !== undefined) {
       const result = await encryptSensitiveField(body.phone)
       updateData.phone = result.encrypted
-      updateData.phoneHash = result.hash
     }
 
     const bdc = await prisma.zjdBdc.update({

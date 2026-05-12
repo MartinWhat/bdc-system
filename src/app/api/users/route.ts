@@ -129,22 +129,18 @@ async function createUserHandler(request: NextRequest) {
       status: 'ACTIVE',
       createdBy: request.headers.get('x-user-id') || 'system',
       idCard: null as string | null,
-      idCardHash: null as string | null,
       phone: null as string | null,
-      phoneHash: null as string | null,
     }
 
     // 加密敏感字段
     if (idCard) {
       const result = await encryptSensitiveField(idCard)
       createData.idCard = result.encrypted
-      createData.idCardHash = result.hash
     }
 
     if (phone) {
       const result = await encryptSensitiveField(phone)
       createData.phone = result.encrypted
-      createData.phoneHash = result.hash
     }
 
     // 创建用户并同步 Better Auth credential account

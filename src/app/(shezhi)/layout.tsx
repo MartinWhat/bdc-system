@@ -13,7 +13,6 @@ import {
   EnvironmentOutlined,
   SafetyOutlined,
   HistoryOutlined,
-  KeyOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
 } from '@ant-design/icons'
@@ -78,11 +77,6 @@ const menuItems: MenuProps['items'] = [
         key: '/villages',
         icon: <EnvironmentOutlined />,
         label: '村居管理',
-      },
-      {
-        key: '/kms',
-        icon: <KeyOutlined />,
-        label: '密钥管理',
       },
       {
         key: '/logs',

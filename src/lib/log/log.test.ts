@@ -50,7 +50,6 @@ describe('操作日志服务', () => {
         certNo: `CERT_LOG_${Date.now()}`,
         ownerName: '日志测试',
         idCard: 'test_encrypted',
-        idCardHash: 'test_hash',
         address: '测试地址',
         area: 100,
         landUseType: '宅基地',

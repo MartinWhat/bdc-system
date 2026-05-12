@@ -1,10 +1,8 @@
 /**
- * 加密查询辅助函数
- * 用于通过哈希索引查询加密字段
+ * 明文查询辅助函数
+ * 当前项目已切回明文存储，兼容原有接口命名。
  */
 
-import { sm3Hmac } from '@/lib/gm-crypto'
-import { getActiveKey } from '@/lib/kms'
 import { prisma } from '@/lib/prisma'
 import { generateQueryHash as generateQueryHashBase } from '@/lib/gm-crypto/encryption'
 
@@ -14,8 +12,7 @@ import { generateQueryHash as generateQueryHashBase } from '@/lib/gm-crypto/encr
  * @returns 哈希值
  */
 export async function generateQueryHash(value: string): Promise<string> {
-  const masterKeyRecord = await getActiveKey('MASTER_KEY')
-  return generateQueryHashBase(value, masterKeyRecord.keyData)
+  return generateQueryHashBase(value)
 }
 
 /**
@@ -24,10 +21,8 @@ export async function generateQueryHash(value: string): Promise<string> {
  * @returns 宅基地记录或 null
  */
 export async function findBdcByIdCard(idCard: string) {
-  const idCardHash = await generateQueryHash(idCard)
-
   return prisma.zjdBdc.findFirst({
-    where: { idCardHash },
+    where: { idCard },
     include: { village: true },
   })
 }
@@ -38,10 +33,8 @@ export async function findBdcByIdCard(idCard: string) {
  * @returns 用户记录或 null
  */
 export async function findUserByPhone(phone: string) {
-  const phoneHash = await generateQueryHash(phone)
-
   return prisma.sysUser.findFirst({
-    where: { phoneHash },
+    where: { phone },
   })
 }
 
@@ -51,16 +44,14 @@ export async function findUserByPhone(phone: string) {
  * @returns 用户记录或 null
  */
 export async function findUserByIdCard(idCard: string) {
-  const idCardHash = await generateQueryHash(idCard)
-
   return prisma.sysUser.findFirst({
-    where: { idCardHash },
+    where: { idCard },
   })
 }
 
 /**
  * 构建加密字段查询条件
- * @param fieldName - 字段名（如 idCardHash, phoneHash）
+ * @param fieldName - 字段名（如 idCard, phone）
  * @param plainValue - 明文值
  * @returns Prisma 查询条件
  */

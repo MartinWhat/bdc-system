@@ -176,9 +176,7 @@ async function createBdcHandler(request: NextRequest) {
       status: 'PENDING',
       createdBy: userId || 'system',
       idCard: '',
-      idCardHash: '',
       phone: null as string | null,
-      phoneHash: null as string | null,
       approvedArea: approvedArea ?? null,
       approvedDate: approvedDate ? new Date(approvedDate) : null,
       remark: remark ?? null,
@@ -187,13 +185,11 @@ async function createBdcHandler(request: NextRequest) {
     // 加密身份证号
     const idCardResult = await encryptSensitiveField(idCard)
     createData.idCard = idCardResult.encrypted
-    createData.idCardHash = idCardResult.hash
 
     // 加密手机号（如果有）
     if (phone) {
       const phoneResult = await encryptSensitiveField(phone)
       createData.phone = phoneResult.encrypted
-      createData.phoneHash = phoneResult.hash
     }
 
     const bdc = await prisma.zjdBdc.create({

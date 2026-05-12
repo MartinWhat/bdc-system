@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
-import { generateQueryHash } from '@/lib/gm-crypto/query'
 import { seedTestKeys } from '@/test/helpers'
 
 describe('村集体所有权证书管理', () => {
@@ -46,9 +45,7 @@ describe('村集体所有权证书管理', () => {
         ownerType: 'VILLAGE_COLLECTIVE',
         villageId,
         idCard: idCardResult.encrypted,
-        idCardHash: idCardResult.hash,
         phone: phoneResult.encrypted,
-        phoneHash: phoneResult.hash,
         address: '测试村集体土地',
         area: 5000.0,
         landUseType: '集体建设用地',
@@ -264,11 +261,9 @@ describe('村集体所有权证书管理', () => {
     expect(validTransitions[cert!.status]).toHaveLength(0)
   })
 
-  it('应该通过哈希索引查询证书', async () => {
-    const idCardHash = await generateQueryHash('110101199001011234')
-
+  it('应该通过身份证号查询证书', async () => {
     const certs = await prisma.collectiveCert.findMany({
-      where: { idCardHash },
+      where: { idCard: '110101199001011234' },
     })
 
     expect(certs.length).toBeGreaterThan(0)

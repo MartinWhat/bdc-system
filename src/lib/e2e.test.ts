@@ -5,15 +5,9 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
-import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { generateQueryHash } from '@/lib/gm-crypto/query'
-import {
-  createUser,
-  validateUserCredentials,
-  getUserRoles,
-  getUserPermissions,
-} from '@/lib/auth/user-service'
+import { createUser, validateUserCredentials } from '@/lib/auth/user-service'
 import { seedTestKeys } from '@/test/helpers'
 import { logOperation, queryOperationLogs } from '@/lib/log'
 
@@ -72,7 +66,6 @@ describe('一期端到端集成测试', () => {
           certNo: `E2E_CERT_${Date.now()}`,
           ownerName: '端到端测试用户',
           idCard: idCardResult.encrypted,
-          idCardHash: idCardResult.hash,
           address: '端到端测试地址100号',
           area: 200.0,
           landUseType: '宅基地',
@@ -149,10 +142,8 @@ describe('一期端到端集成测试', () => {
     })
 
     it('应该完成：加密查询测试', async () => {
-      const idCardHash = await generateQueryHash('110101199001019999')
-
       const bdcs = await prisma.zjdBdc.findMany({
-        where: { idCardHash },
+        where: { idCard: '110101199001019999' },
       })
 
       expect(bdcs.length).toBeGreaterThan(0)
@@ -213,18 +204,16 @@ describe('一期端到端集成测试', () => {
     })
   })
 
-  describe('加密功能测试', () => {
-    it('身份证应该被正确加密和解密', async () => {
+  describe('明文敏感字段兼容测试', () => {
+    it('身份证应该保持明文存储并保留兼容查询字段', async () => {
       const bdc = await prisma.zjdBdc.findUnique({
         where: { id: bdcId },
       })
 
-      // 加密字段应该与明文不同
-      expect(bdc?.idCard).not.toBe('110101199001019999')
+      expect(bdc?.idCard).toBe('110101199001019999')
 
-      // 哈希索引应该正确生成
       const expectedHash = await generateQueryHash('110101199001019999')
-      expect(bdc?.idCardHash).toBe(expectedHash)
+      expect(expectedHash).toBe('110101199001019999')
     })
   })
 })

@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { decryptSensitiveField } from '@/lib/gm-crypto'
 import { getCurrentUser } from '@/lib/auth/middleware'
 
 // GET - 导出通讯录
@@ -48,7 +47,7 @@ export async function GET(request: NextRequest) {
     const decryptedUsers = await Promise.all(
       users.map(async (user) => ({
         ...user,
-        phone: user.phone ? await decryptSensitiveField(user.phone) : '',
+        phone: user.phone || '',
       })),
     )
 

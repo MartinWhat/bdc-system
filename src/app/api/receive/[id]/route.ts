@@ -209,13 +209,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (receiverIdCard) {
       const result = await encryptSensitiveField(receiverIdCard)
       updateData.receiverIdCard = result.encrypted
-      updateData.receiverIdCardHash = result.hash
     }
 
     if (receiverPhone) {
       const result = await encryptSensitiveField(receiverPhone)
       updateData.receiverPhone = result.encrypted
-      updateData.receiverPhoneHash = result.hash
     }
 
     // 处理照片

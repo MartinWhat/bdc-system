@@ -69,8 +69,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ...cert,
         idCard,
         phone,
-        idCardHash: undefined,
-        phoneHash: undefined,
       },
     })
   } catch (error) {
@@ -122,20 +120,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // 加密敏感字段
     let encryptedIdCard: string | undefined
-    let idCardHash: string | undefined
     let encryptedPhone: string | undefined
-    let phoneHash: string | undefined
 
     if (data.idCard) {
       const encrypted = await encryptSensitiveField(data.idCard)
       encryptedIdCard = encrypted.encrypted
-      idCardHash = encrypted.hash
     }
 
     if (data.phone) {
       const encrypted = await encryptSensitiveField(data.phone)
       encryptedPhone = encrypted.encrypted
-      phoneHash = encrypted.hash
     }
 
     // 更新证书
@@ -146,9 +140,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         ownerType: data.ownerType,
         villageId: data.villageId,
         idCard: encryptedIdCard,
-        idCardHash,
         phone: encryptedPhone,
-        phoneHash,
         address: data.address,
         area: data.area,
         landUseType: data.landUseType,

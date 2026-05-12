@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField } from '@/lib/gm-crypto'
-import { generateQueryHash } from '@/lib/gm-crypto/query'
 import { seedTestKeys } from '@/test/helpers'
 
 describe('宅基地管理核心', () => {
@@ -45,9 +44,7 @@ describe('宅基地管理核心', () => {
         certNo: `CERT${Date.now()}`,
         ownerName: '张三',
         idCard: idCardResult.encrypted,
-        idCardHash: idCardResult.hash,
         phone: phoneResult.encrypted,
-        phoneHash: phoneResult.hash,
         address: '测试村居100号',
         area: 120.5,
         landUseType: '宅基地',
@@ -62,12 +59,10 @@ describe('宅基地管理核心', () => {
     bdcId = bdc.id
   })
 
-  it('应该通过哈希索引查询宅基地', async () => {
-    const idCardHash = await generateQueryHash('110101199001011234')
-
+  it('应该通过身份证号查询宅基地', async () => {
     const bdcs = await prisma.zjdBdc.findMany({
       where: {
-        idCardHash: { equals: idCardHash },
+        idCard: { equals: '110101199001011234' },
       },
     })
 

@@ -6,7 +6,6 @@
 import 'dotenv/config'
 import { PrismaMariaDb } from '@prisma/adapter-mariadb'
 import { PrismaClient } from '@prisma/client'
-import { createPool } from 'mariadb'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -82,7 +81,6 @@ async function main() {
           certNo: row.certNo,
           ownerName: row.ownerName,
           idCard: row.idCard,
-          idCardHash: '',
           address: row.address,
           area: row.area,
           landUseType: '宅基地',

@@ -85,10 +85,10 @@ CREATE INDEX `collective_cert_ownerType_createdAt_idx`
   ON `collective_cert`(`ownerType`, `createdAt`);
 
 -- === Notification ===
-CREATE INDEX `notification_status_isPinned_publishedAt_idx`
+CREATE INDEX `notification_status_pinned_pub_idx`
   ON `notification`(`status`, `isPinned`, `publishedAt`);
 
-CREATE INDEX `notification_status_isPopup_popupStartAt_popupEndAt_publishedAt_idx`
+CREATE INDEX `notification_status_popup_window_pub_idx`
   ON `notification`(`status`, `isPopup`, `popupStartAt`, `popupEndAt`, `publishedAt`);
 
 -- === Attachment ===

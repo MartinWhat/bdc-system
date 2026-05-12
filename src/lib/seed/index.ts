@@ -42,7 +42,6 @@ async function seedRolesAndPermissions() {
     { code: 'notification:create', name: '创建通知', type: 'BUTTON' },
     { code: 'notification:manage', name: '通知管理', type: 'MENU' },
     { code: 'log:view', name: '查看日志', type: 'MENU' },
-    { code: 'kms:manage', name: '密钥管理', type: 'MENU' },
   ]
 
   for (const perm of permissions) {

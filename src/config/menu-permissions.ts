@@ -33,8 +33,6 @@ export const MENU_PERMISSIONS: Record<string, string[]> = {
   '/villages': ['village:manage'],
   '/notifications/manage': ['notification:manage'],
   '/logs': ['log:view'],
-  '/kms': ['kms:manage'],
-  '/kms/migrate': ['kms:manage'],
 }
 
 /**

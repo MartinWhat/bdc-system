@@ -104,17 +104,10 @@ async function getCollectiveListHandler(request: NextRequest) {
       { field: 'phone', maskType: 'phone' },
     ])
 
-    // 移除 hash 字段
-    const finalCerts = sanitizedCerts.map((cert) => ({
-      ...cert,
-      idCardHash: undefined,
-      phoneHash: undefined,
-    }))
-
     return NextResponse.json({
       success: true,
       data: {
-        list: finalCerts,
+        list: sanitizedCerts,
         total,
         page,
         pageSize,
@@ -173,20 +166,16 @@ async function createCollectiveCertHandler(request: NextRequest) {
 
     // 加密敏感字段
     let encryptedIdCard: string | undefined
-    let idCardHash: string | undefined
     let encryptedPhone: string | undefined
-    let phoneHash: string | undefined
 
     if (data.idCard) {
       const encrypted = await encryptSensitiveField(data.idCard)
       encryptedIdCard = encrypted.encrypted
-      idCardHash = encrypted.hash
     }
 
     if (data.phone) {
       const encrypted = await encryptSensitiveField(data.phone)
       encryptedPhone = encrypted.encrypted
-      phoneHash = encrypted.hash
     }
 
     // 创建证书
@@ -197,9 +186,7 @@ async function createCollectiveCertHandler(request: NextRequest) {
         ownerType: data.ownerType,
         villageId: data.villageId,
         idCard: encryptedIdCard,
-        idCardHash,
         phone: encryptedPhone,
-        phoneHash,
         address: data.address,
         area: data.area,
         landUseType: data.landUseType,
