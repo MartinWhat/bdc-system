@@ -15,7 +15,6 @@ import { z } from 'zod'
 
 // 更新用户信息验证
 const updateProfileSchema = z.object({
-  realName: z.string().min(1, '真实姓名不能为空').optional(),
   email: z.string().email().optional().or(z.literal('')).optional(),
   phone: z.string().optional(),
 })
@@ -97,6 +96,12 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
+    if (body.realName !== undefined) {
+      return NextResponse.json(
+        { error: '真实姓名不可修改', code: 'REALNAME_IMMUTABLE' },
+        { status: 400 },
+      )
+    }
     const validationResult = updateProfileSchema.safeParse(body)
 
     if (!validationResult.success) {
@@ -109,11 +114,10 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    const { realName, email, phone } = validationResult.data
+    const { email, phone } = validationResult.data
 
     const updateData: Record<string, string> = {}
 
-    if (realName) updateData.realName = realName
     if (email !== undefined) updateData.email = email || `${currentUser.username}@system.local`
 
     // 加密手机号

@@ -1,8 +1,18 @@
 'use client'
 
-import { useState } from 'react'
-import { Form, Input, Button, message, Typography, theme } from 'antd'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Form,
+  Input,
+  Radio,
+  Space,
+  message,
+  Typography,
+  theme,
+} from 'antd'
 import {
   UserOutlined,
   LockOutlined,
@@ -17,6 +27,7 @@ import { useAuthStore } from '@/lib/store/auth'
 import { useThemeStore } from '@/lib/store/theme'
 import { authClient } from '@/lib/auth/auth-client'
 import { authFetch } from '@/lib/api-fetch'
+import { clearTwoFactorLoginChallenge, useTwoFactorLoginStore } from '@/lib/store/two-factor-login'
 import { motion } from 'framer-motion'
 import { SLIDE_UP, STAGGER_CONTAINER, BUTTON_VARIANTS } from '@/config/motion'
 
@@ -29,18 +40,66 @@ interface LoginFields {
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false)
+  const [verificationLoading, setVerificationLoading] = useState(false)
+  const [verificationMode, setVerificationMode] = useState<'totp' | 'backup'>('totp')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [trustDevice, setTrustDevice] = useState(false)
   const router = useRouter()
   const { setAuth } = useAuthStore()
   const { isDark, loadFromStorage } = useThemeStore()
   const { token } = theme.useToken()
+  const challengeActive = useTwoFactorLoginStore((state) => state.challengeActive)
+  const challengeMethods = useTwoFactorLoginStore((state) => state.methods)
 
   useEffect(() => {
     loadFromStorage()
+    clearTwoFactorLoginChallenge()
+    return () => {
+      clearTwoFactorLoginChallenge()
+    }
   }, [loadFromStorage])
+
+  useEffect(() => {
+    if (challengeActive) {
+      setVerificationCode('')
+      setVerificationMode('totp')
+      setTrustDevice(false)
+    }
+  }, [challengeActive])
+
+  const resetTwoFactorState = () => {
+    clearTwoFactorLoginChallenge()
+    setVerificationCode('')
+    setVerificationMode('totp')
+    setTrustDevice(false)
+  }
+
+  const finalizeLogin = async () => {
+    const sessionResponse = await authFetch('/api/auth/me', {
+      credentials: 'include',
+    })
+
+    if (!sessionResponse.ok) {
+      message.error('登录成功，但获取用户信息失败')
+      return false
+    }
+
+    const sessionData = await sessionResponse.json()
+    if (!sessionData?.data) {
+      message.error('登录成功，但用户信息缺失')
+      return false
+    }
+
+    setAuth(sessionData.data)
+    message.success('登录成功')
+    router.push('/')
+    return true
+  }
 
   const onFinish = async (values: LoginFields) => {
     setLoading(true)
     try {
+      resetTwoFactorState()
       const loginResult = await authClient.signIn.username(
         {
           username: values.username,
@@ -57,30 +116,66 @@ export default function LoginPage() {
         return
       }
 
-      const sessionResponse = await authFetch('/api/auth/me', {
-        credentials: 'include',
-      })
+      const loginData = loginResult.data as { twoFactorRedirect?: boolean } | undefined
+      const requiresTwoFactor =
+        loginData?.twoFactorRedirect || useTwoFactorLoginStore.getState().challengeActive
 
-      if (!sessionResponse.ok) {
-        message.error('登录成功，但获取用户信息失败')
+      if (requiresTwoFactor) {
+        message.info('账号已启用 2FA，请继续完成验证')
         return
       }
 
-      const sessionData = await sessionResponse.json()
-      if (!sessionData?.data) {
-        message.error('登录成功，但用户信息缺失')
-        return
-      }
-
-      setAuth(sessionData.data)
-      message.success('登录成功')
-
-      router.push('/')
+      await finalizeLogin()
     } catch (error) {
       console.error('Login error:', error)
       message.error('登录失败，请检查网络连接')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleTwoFactorVerify = async () => {
+    const code = verificationCode.trim()
+    if (!code) {
+      message.error('请输入验证码')
+      return
+    }
+
+    setVerificationLoading(true)
+    try {
+      const result =
+        verificationMode === 'backup'
+          ? await authClient.twoFactor.verifyBackupCode(
+              {
+                code,
+                trustDevice,
+              },
+              {
+                credentials: 'include',
+              },
+            )
+          : await authClient.twoFactor.verifyTotp(
+              {
+                code,
+                trustDevice,
+              },
+              {
+                credentials: 'include',
+              },
+            )
+
+      if (result.error) {
+        message.error(result.error.message || '验证失败')
+        return
+      }
+
+      resetTwoFactorState()
+      await finalizeLogin()
+    } catch (error) {
+      console.error('Two-factor verify error:', error)
+      message.error('二次验证失败，请稍后重试')
+    } finally {
+      setVerificationLoading(false)
     }
   }
 
@@ -229,9 +324,11 @@ export default function LoginPage() {
               transition={{ duration: 0.4, delay: 0.4 }}
             >
               <Title level={3} className="welcome-title">
-                欢迎登录
+                {challengeActive ? '二次验证' : '欢迎登录'}
               </Title>
-              <Text className="welcome-subtitle">请输入您的账号信息进行登录</Text>
+              <Text className="welcome-subtitle">
+                {challengeActive ? '账号已启用 2FA，请继续完成验证' : '请输入您的账号信息进行登录'}
+              </Text>
             </motion.div>
 
             <motion.div
@@ -240,75 +337,135 @@ export default function LoginPage() {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.5, delay: 0.5 }}
             >
-              <Form
-                name="login"
-                onFinish={onFinish}
-                autoComplete="off"
-                size="large"
-                layout="vertical"
-              >
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 0.6 }}
-                >
-                  <Form.Item
-                    name="username"
-                    label="用户名"
-                    rules={[
-                      { required: true, message: '请输入用户名' },
-                      { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
-                    ]}
-                  >
-                    <Input
-                      prefix={<UserOutlined />}
-                      placeholder="请输入用户名"
-                      className="custom-input"
-                    />
-                  </Form.Item>
-                </motion.div>
+              {challengeActive ? (
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="已触发二次验证"
+                    description="请输入验证码器生成的动态码，或者切换到备份码完成登录。"
+                  />
 
-                <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.4, delay: 0.7 }}
-                >
-                  <Form.Item
-                    name="password"
-                    label="密码"
-                    rules={[
-                      { required: true, message: '请输入密码' },
-                      { min: 6, message: '密码至少 6 位' },
-                    ]}
-                  >
-                    <Input.Password
-                      prefix={<LockOutlined />}
-                      placeholder="请输入密码"
-                      className="custom-input"
-                    />
-                  </Form.Item>
-                </motion.div>
+                  {challengeMethods.length > 0 && (
+                    <Text type="secondary">当前账号可用方式：{challengeMethods.join(' / ')}</Text>
+                  )}
 
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.8 }}
+                  <Radio.Group
+                    value={verificationMode}
+                    onChange={(e) => setVerificationMode(e.target.value)}
+                    buttonStyle="solid"
+                  >
+                    <Radio.Button value="totp">验证码</Radio.Button>
+                    <Radio.Button value="backup">备份码</Radio.Button>
+                  </Radio.Group>
+
+                  <Input
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    placeholder={
+                      verificationMode === 'backup' ? '请输入备份码' : '请输入 6 位验证码'
+                    }
+                    prefix={<SecurityScanFilled />}
+                    className="custom-input"
+                    autoComplete="one-time-code"
+                  />
+
+                  <Checkbox
+                    checked={trustDevice}
+                    onChange={(e) => setTrustDevice(e.target.checked)}
+                  >
+                    信任此设备，减少后续验证
+                  </Checkbox>
+
+                  <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
+                    <Button
+                      onClick={() => {
+                        resetTwoFactorState()
+                        message.info('已返回登录')
+                      }}
+                    >
+                      返回登录
+                    </Button>
+                    <Button
+                      type="primary"
+                      loading={verificationLoading}
+                      onClick={handleTwoFactorVerify}
+                    >
+                      验证并登录
+                    </Button>
+                  </Space>
+                </Space>
+              ) : (
+                <Form
+                  name="login"
+                  onFinish={onFinish}
+                  autoComplete="off"
+                  size="large"
+                  layout="vertical"
                 >
-                  <Form.Item className="form-action">
-                    <motion.div whileHover="hover" whileTap="tap" variants={BUTTON_VARIANTS}>
-                      <Button
-                        type="primary"
-                        htmlType="submit"
-                        loading={loading}
-                        className="login-btn"
-                        block
-                      >
-                        登 录
-                      </Button>
-                    </motion.div>
-                  </Form.Item>
-                </motion.div>
-              </Form>
+                  <motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.6 }}
+                  >
+                    <Form.Item
+                      name="username"
+                      label="用户名"
+                      rules={[
+                        { required: true, message: '请输入用户名' },
+                        { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
+                      ]}
+                    >
+                      <Input
+                        prefix={<UserOutlined />}
+                        placeholder="请输入用户名"
+                        className="custom-input"
+                      />
+                    </Form.Item>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.4, delay: 0.7 }}
+                  >
+                    <Form.Item
+                      name="password"
+                      label="密码"
+                      rules={[
+                        { required: true, message: '请输入密码' },
+                        { min: 6, message: '密码至少 6 位' },
+                      ]}
+                    >
+                      <Input.Password
+                        prefix={<LockOutlined />}
+                        placeholder="请输入密码"
+                        className="custom-input"
+                      />
+                    </Form.Item>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4, delay: 0.8 }}
+                  >
+                    <Form.Item className="form-action">
+                      <motion.div whileHover="hover" whileTap="tap" variants={BUTTON_VARIANTS}>
+                        <Button
+                          type="primary"
+                          htmlType="submit"
+                          loading={loading}
+                          className="login-btn"
+                          block
+                        >
+                          登 录
+                        </Button>
+                      </motion.div>
+                    </Form.Item>
+                  </motion.div>
+                </Form>
+              )}
             </motion.div>
 
             <motion.div

@@ -75,6 +75,7 @@ model SysUser {
   sessions         SysSession[]
   authAccounts     AuthAccount[]
   authSessions     AuthSession[]
+  twoFactor        TwoFactor?
   roles            UserRole[]
   notifications    Notification[]
   readRecords      NotificationRead[]
@@ -211,6 +212,21 @@ model AuthVerification {
   @@index([identifier])
   @@index([expiresAt])
   @@map("auth_verification")
+}
+
+model TwoFactor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  secret      String
+  backupCodes String
+  verified    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user SysUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([secret])
+  @@map("two_factor")
 }
 
 model SysTown {

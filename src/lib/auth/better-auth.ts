@@ -1,7 +1,7 @@
 import { prismaAdapter } from '@better-auth/prisma-adapter'
 import { betterAuth } from 'better-auth'
 import { nextCookies } from 'better-auth/next-js'
-import { customSession, username } from 'better-auth/plugins'
+import { customSession, twoFactor, username } from 'better-auth/plugins'
 import { prisma } from '@/lib/prisma'
 import { hashPassword, verifyPassword } from './password'
 
@@ -141,6 +141,15 @@ export const auth = betterAuth({
     username({
       usernameNormalization: (value) => value.trim().toLowerCase(),
       displayUsernameNormalization: false,
+    }),
+    twoFactor({
+      issuer: '不动产登记管理系统',
+      twoFactorTable: 'TwoFactor',
+      trustDeviceMaxAge: 60 * 60 * 24 * 30,
+      backupCodeOptions: {
+        amount: 10,
+        length: 10,
+      },
     }),
     customSession(async ({ user, session }) => {
       const context = await loadAuthContext(user.id)

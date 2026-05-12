@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { App as AntdApp } from 'antd'
 import { AntdRegistry } from '@ant-design/nextjs-registry'
 import ThemeProvider from './theme-provider'
 import './globals.css'
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="zh-CN" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <AntdRegistry>
-          <ThemeProvider>{children}</ThemeProvider>
+          <AntdApp>
+            <ThemeProvider>{children}</ThemeProvider>
+          </AntdApp>
         </AntdRegistry>
       </body>
     </html>

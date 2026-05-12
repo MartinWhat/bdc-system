@@ -420,6 +420,9 @@ export default function UsersPage() {
               {ur.role.name}
             </Tag>
           ))}
+          <Tag color={record.twoFactorEnabled ? 'green' : 'default'}>
+            2FA {record.twoFactorEnabled ? '已开启' : '未开启'}
+          </Tag>
         </Space>
         <Text type="secondary" style={{ fontSize: 12 }}>
           最后登录：
@@ -478,6 +481,14 @@ export default function UsersPage() {
         <Tag color={status === 'ACTIVE' ? 'green' : 'red'}>
           {status === 'ACTIVE' ? '启用' : '禁用'}
         </Tag>
+      ),
+    },
+    {
+      title: '2FA',
+      dataIndex: 'twoFactorEnabled',
+      key: 'twoFactorEnabled',
+      render: (enabled: boolean) => (
+        <Tag color={enabled ? 'green' : 'default'}>{enabled ? '已开启' : '未开启'}</Tag>
       ),
     },
     {

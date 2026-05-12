@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons'
 import { authFetch } from '@/lib/api-fetch'
 import PageContainer from '@/components/PageContainer'
+import TwoFactorSettings from '@/components/profile/two-factor-settings'
 
 interface UserProfile {
   id: string
@@ -63,11 +64,7 @@ export default function ProfilePage() {
     loadProfile()
   }, [loadProfile])
 
-  const handleUpdateProfile = async (values: {
-    realName: string
-    email?: string
-    phone?: string
-  }) => {
+  const handleUpdateProfile = async (values: { email?: string; phone?: string }) => {
     setEditLoading(true)
     try {
       const res = await authFetch('/api/profile', {
@@ -130,7 +127,6 @@ export default function ProfilePage() {
 
   const openEditModal = () => {
     editForm.setFieldsValue({
-      realName: profile?.realName,
       email: profile?.email,
       phone: profile?.phone,
     })
@@ -222,6 +218,10 @@ export default function ProfilePage() {
         </Descriptions>
       </Card>
 
+      <div style={{ marginTop: 24 }}>
+        <TwoFactorSettings enabled={profile?.twoFactorEnabled ?? false} onChanged={loadProfile} />
+      </div>
+
       {/* 编辑资料弹窗 */}
       <Modal
         title="编辑个人资料"
@@ -237,12 +237,8 @@ export default function ProfilePage() {
             <Input value={profile?.username} disabled />
           </Form.Item>
 
-          <Form.Item
-            name="realName"
-            label="真实姓名"
-            rules={[{ required: true, message: '请输入真实姓名' }]}
-          >
-            <Input placeholder="请输入真实姓名" />
+          <Form.Item label="真实姓名">
+            <Input value={profile?.realName || '-'} disabled />
           </Form.Item>
 
           <Form.Item
