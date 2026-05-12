@@ -82,6 +82,9 @@ async function getBdcDetailHandler(
         receiveRecords: {
           orderBy: { createdAt: 'desc' },
         },
+        attachments: {
+          orderBy: { createdAt: 'desc' },
+        },
       },
     })
 

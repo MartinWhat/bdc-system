@@ -292,6 +292,7 @@ model ZjdBdc {
   operationLogs  OperationLog[]
   village        SysVillage         @relation(fields: [villageId], references: [id])
   receiveRecords ZjdReceiveRecord[]
+  attachments    Attachment[]       @relation("BdcAttachments")
 
   @@index([villageId])
   @@index([status])
@@ -519,6 +520,7 @@ model CollectiveCert {
   deletedAt          DateTime? // 软删除标记
   village            SysVillage           @relation(fields: [villageId], references: [id])
   operations         CertOperation[]
+  certAttachments    Attachment[]        @relation("CollectiveCertAttachments")
 
   @@index([villageId])
   @@index([status])
@@ -622,17 +624,28 @@ model NotificationRead {
 
 // 附件库
 model Attachment {
-  id         String   @id @default(cuid())
-  name       String   // 原始文件名
-  url        String   // 文件访问 URL
-  fileType   String   // 文件类型：pdf, doc, docx, xls, xlsx 等
-  fileSize   Int?     // 文件大小（字节）
-  uploadedBy String   // 上传人 ID
-  createdAt  DateTime @default(now())
+  id               String          @id @default(cuid())
+  name             String          // 原始文件名
+  url              String          // 文件访问 URL
+  fileType         String          // 文件类型：pdf, doc, docx, xls, xlsx 等
+  fileSize         Int?            // 文件大小（字节）
+  uploadedBy       String          // 上传人 ID
+  collectiveCertId String?
+  bdcId            String?
+  certificateFamily String?        // COLLECTIVE / BDC
+  pageType         String?         // CERT_INFO / MAP / MANAGEMENT / FULL_PDF
+  source           String?         // camera / gallery / pdf / web
+  processed        Boolean         @default(false)
+  mimeType         String?
+  createdAt        DateTime        @default(now())
+  collectiveCert   CollectiveCert? @relation("CollectiveCertAttachments", fields: [collectiveCertId], references: [id], onDelete: SetNull)
+  bdc              ZjdBdc?         @relation("BdcAttachments", fields: [bdcId], references: [id], onDelete: SetNull)
 
   @@index([fileType])
   @@index([uploadedBy])
   @@index([fileType, createdAt])
   @@index([uploadedBy, createdAt])
+  @@index([collectiveCertId])
+  @@index([bdcId])
   @@map("attachment")
 }

@@ -32,6 +32,11 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get('pageSize') || '20')
     const fileType = searchParams.get('fileType') || ''
     const keyword = searchParams.get('keyword') || ''
+    const collectiveCertId = searchParams.get('collectiveCertId') || ''
+    const bdcId = searchParams.get('bdcId') || ''
+    const certificateFamily = searchParams.get('certificateFamily') || ''
+    const pageType = searchParams.get('pageType') || ''
+    const source = searchParams.get('source') || ''
 
     const where: Record<string, unknown> = {}
 
@@ -41,6 +46,26 @@ export async function GET(request: NextRequest) {
 
     if (keyword) {
       where.name = { contains: keyword }
+    }
+
+    if (collectiveCertId) {
+      where.collectiveCertId = collectiveCertId
+    }
+
+    if (bdcId) {
+      where.bdcId = bdcId
+    }
+
+    if (certificateFamily) {
+      where.certificateFamily = certificateFamily
+    }
+
+    if (pageType) {
+      where.pageType = pageType
+    }
+
+    if (source) {
+      where.source = source
     }
 
     const [total, attachments] = await Promise.all([
@@ -78,9 +103,46 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const collectiveCertId = (formData.get('collectiveCertId') as string) || ''
+    const bdcId = (formData.get('bdcId') as string) || ''
+    const certificateFamily =
+      (formData.get('certificateFamily') as string) ||
+      (collectiveCertId ? 'COLLECTIVE' : bdcId ? 'BDC' : '')
+    const source = (formData.get('source') as string) || 'web'
+    const processed = String(formData.get('processed') || 'false') === 'true'
 
     if (!file) {
       return NextResponse.json({ error: '未选择文件', code: 'MISSING_FILE' }, { status: 400 })
+    }
+
+    const pageType =
+      (formData.get('pageType') as string) ||
+      (file.type === 'application/pdf' ? 'FULL_PDF' : 'CERT_INFO')
+
+    if (collectiveCertId) {
+      const cert = await prisma.collectiveCert.findUnique({
+        where: { id: collectiveCertId },
+        select: { id: true },
+      })
+      if (!cert) {
+        return NextResponse.json(
+          { error: '关联的证书不存在', code: 'CERT_NOT_FOUND' },
+          { status: 404 },
+        )
+      }
+    }
+
+    if (bdcId) {
+      const cert = await prisma.zjdBdc.findUnique({
+        where: { id: bdcId },
+        select: { id: true },
+      })
+      if (!cert) {
+        return NextResponse.json(
+          { error: '关联的不动产权证不存在', code: 'BDC_NOT_FOUND' },
+          { status: 404 },
+        )
+      }
     }
 
     // 验证文件类型
@@ -133,6 +195,13 @@ export async function POST(request: NextRequest) {
         fileType,
         fileSize: file.size,
         uploadedBy: authorId,
+        collectiveCertId: collectiveCertId || undefined,
+        bdcId: bdcId || undefined,
+        certificateFamily: certificateFamily || undefined,
+        pageType: pageType || undefined,
+        source,
+        processed,
+        mimeType: file.type,
       },
     })
 

@@ -12,15 +12,16 @@ import {
   message,
   Space,
   Tag,
-  Popconfirm,
   Descriptions,
   DatePicker,
+  Tabs,
 } from 'antd'
 import { PlusOutlined, EyeOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
-import TownVillageCascader from '@/components/TownVillageCascader'
 import PageContainer from '@/components/PageContainer'
-import dayjs, { Dayjs } from 'dayjs'
+import CollectiveAttachmentManager, {
+  type CollectiveAttachment,
+} from '@/components/collective/CollectiveAttachmentManager'
 import { authFetch } from '@/lib/api-fetch'
 
 interface Village {
@@ -62,6 +63,7 @@ interface Bdc {
   isRejected?: boolean
   rejectReason?: string
   originalAddress?: string
+  attachments?: CollectiveAttachment[]
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -189,51 +191,23 @@ export default function BdcPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
+  const loadBdcDetail = useCallback(async (id: string) => {
     try {
-      const res = await authFetch(`/api/bdc/${id}`, {
-        method: 'DELETE',
-      })
+      const res = await authFetch(`/api/bdc/${id}`)
       const data = await res.json()
       if (data.success) {
-        message.success('删除成功')
-        loadBdcs()
+        setDetailBdc(data.data)
+        setDetailVisible(true)
       } else {
-        message.error(data.error)
+        message.error(data.error || '加载详情失败')
       }
     } catch (error) {
-      message.error('删除失败')
+      console.error('Load BDC detail error:', error)
+      message.error('加载宅基地详情失败')
     }
-  }
+  }, [])
 
-  const handleStatusChange = async (id: string, status: string) => {
-    try {
-      const res = await authFetch(`/api/bdc/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      const data = await res.json()
-      if (data.success) {
-        message.success('状态已更新')
-        loadBdcs()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      message.error('状态更新失败')
-    }
-  }
-
-  const handleQuery = async (values: {
-    idCard?: string
-    phone?: string
-    keyword?: string
-    status?: string
-    townId?: string
-    villageId?: string
-    acceptDateRange?: [string, string]
-  }) => {
+  const handleQuery = async () => {
     setCurrentPage(1)
     loadBdcs(1, pageSize)
   }
@@ -342,8 +316,7 @@ export default function BdcPage() {
             size="small"
             icon={<EyeOutlined />}
             onClick={() => {
-              setDetailBdc(record)
-              setDetailVisible(true)
+              loadBdcDetail(record.id)
             }}
           >
             详情
@@ -576,76 +549,126 @@ export default function BdcPage() {
       <Modal
         title="宅基地档案详情"
         open={detailVisible}
-        onCancel={() => setDetailVisible(false)}
+        onCancel={() => {
+          setDetailVisible(false)
+          setDetailBdc(null)
+        }}
         footer={null}
-        width={800}
+        width={1000}
       >
         {detailBdc && (
-          <Descriptions bordered column={2}>
-            <Descriptions.Item label="证书编号">{detailBdc.certNo}</Descriptions.Item>
-            <Descriptions.Item label="使用权人">{detailBdc.ownerName}</Descriptions.Item>
-            <Descriptions.Item label="身份证号">{detailBdc.idCard}</Descriptions.Item>
-            <Descriptions.Item label="手机号">{detailBdc.phone || '-'}</Descriptions.Item>
-            <Descriptions.Item label="地址" span={2}>
-              {detailBdc.address}
-            </Descriptions.Item>
-            <Descriptions.Item label="面积">{detailBdc.area} ㎡</Descriptions.Item>
-            <Descriptions.Item label="土地用途">{detailBdc.landUseType}</Descriptions.Item>
-            <Descriptions.Item label="所属镇街">{detailBdc.village.town.name}</Descriptions.Item>
-            <Descriptions.Item label="所属村居">{detailBdc.village.name}</Descriptions.Item>
-            <Descriptions.Item label="状态">
-              <Tag color={STATUS_MAP[detailBdc.status]?.color}>
-                {STATUS_MAP[detailBdc.status]?.text}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="批准面积">
-              {detailBdc.approvedArea ? `${detailBdc.approvedArea} ㎡` : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="批准日期">
-              {detailBdc.approvedDate ? new Date(detailBdc.approvedDate).toLocaleDateString() : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="发证日期">
-              {detailBdc.certIssuedDate
-                ? new Date(detailBdc.certIssuedDate).toLocaleDateString()
-                : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="备注" span={2}>
-              {detailBdc.remark || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="收件编号">{detailBdc.receiveId || '-'}</Descriptions.Item>
-            <Descriptions.Item label="业务标题" span={2}>
-              {detailBdc.businessTitle || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="申请人">{detailBdc.applicant || '-'}</Descriptions.Item>
-            <Descriptions.Item label="受理人">{detailBdc.acceptorName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="受理日期">
-              {detailBdc.acceptDate ? new Date(detailBdc.acceptDate).toLocaleDateString() : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="业务受理号">{detailBdc.businessNo || '-'}</Descriptions.Item>
-            <Descriptions.Item label="不动产权证书号" span={2}>
-              {detailBdc.certNos || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="登簿人">{detailBdc.recorder || '-'}</Descriptions.Item>
-            <Descriptions.Item label="登记时间">
-              {detailBdc.certIssuedDate
-                ? new Date(detailBdc.certIssuedDate).toLocaleDateString()
-                : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="领证人">{detailBdc.receiverName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="领证时间">
-              {detailBdc.receiveTime ? new Date(detailBdc.receiveTime).toLocaleDateString() : '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="发证人">{detailBdc.issuerName || '-'}</Descriptions.Item>
-            <Descriptions.Item label="是否退件">
-              {detailBdc.isRejected ? <Tag color="red">是</Tag> : '否'}
-            </Descriptions.Item>
-            <Descriptions.Item label="退件原因" span={2}>
-              {detailBdc.rejectReason || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="原坐落" span={2}>
-              {detailBdc.originalAddress || '-'}
-            </Descriptions.Item>
-          </Descriptions>
+          <Tabs
+            defaultActiveKey="info"
+            items={[
+              {
+                key: 'info',
+                label: '档案信息',
+                children: (
+                  <Descriptions bordered column={2}>
+                    <Descriptions.Item label="证书编号">{detailBdc.certNo}</Descriptions.Item>
+                    <Descriptions.Item label="使用权人">{detailBdc.ownerName}</Descriptions.Item>
+                    <Descriptions.Item label="身份证号">{detailBdc.idCard}</Descriptions.Item>
+                    <Descriptions.Item label="手机号">{detailBdc.phone || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="地址" span={2}>
+                      {detailBdc.address}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="面积">{detailBdc.area} ㎡</Descriptions.Item>
+                    <Descriptions.Item label="土地用途">{detailBdc.landUseType}</Descriptions.Item>
+                    <Descriptions.Item label="所属镇街">
+                      {detailBdc.village.town.name}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="所属村居">{detailBdc.village.name}</Descriptions.Item>
+                    <Descriptions.Item label="状态">
+                      <Tag color={STATUS_MAP[detailBdc.status]?.color}>
+                        {STATUS_MAP[detailBdc.status]?.text}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="批准面积">
+                      {detailBdc.approvedArea ? `${detailBdc.approvedArea} ㎡` : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="批准日期">
+                      {detailBdc.approvedDate
+                        ? new Date(detailBdc.approvedDate).toLocaleDateString()
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="发证日期">
+                      {detailBdc.certIssuedDate
+                        ? new Date(detailBdc.certIssuedDate).toLocaleDateString()
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="备注" span={2}>
+                      {detailBdc.remark || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="收件编号">
+                      {detailBdc.receiveId || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="业务标题" span={2}>
+                      {detailBdc.businessTitle || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="申请人">
+                      {detailBdc.applicant || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="受理人">
+                      {detailBdc.acceptorName || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="受理日期">
+                      {detailBdc.acceptDate
+                        ? new Date(detailBdc.acceptDate).toLocaleDateString()
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="业务受理号">
+                      {detailBdc.businessNo || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="不动产权证书号" span={2}>
+                      {detailBdc.certNos || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="登簿人">
+                      {detailBdc.recorder || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="登记时间">
+                      {detailBdc.certIssuedDate
+                        ? new Date(detailBdc.certIssuedDate).toLocaleDateString()
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="领证人">
+                      {detailBdc.receiverName || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="领证时间">
+                      {detailBdc.receiveTime
+                        ? new Date(detailBdc.receiveTime).toLocaleDateString()
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="发证人">
+                      {detailBdc.issuerName || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="是否退件">
+                      {detailBdc.isRejected ? <Tag color="red">是</Tag> : '否'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="退件原因" span={2}>
+                      {detailBdc.rejectReason || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="原坐落" span={2}>
+                      {detailBdc.originalAddress || '-'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                ),
+              },
+              {
+                key: 'attachments',
+                label: `附件管理 (${detailBdc.attachments?.length || 0})`,
+                children: (
+                  <CollectiveAttachmentManager
+                    bdcId={detailBdc.id}
+                    certificateFamily="BDC"
+                    attachments={detailBdc.attachments || []}
+                    onChanged={async () => {
+                      await loadBdcDetail(detailBdc.id)
+                    }}
+                  />
+                ),
+              },
+            ]}
+          />
         )}
       </Modal>
     </PageContainer>

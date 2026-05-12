@@ -44,12 +44,70 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         operations: {
           orderBy: { createdAt: 'desc' },
         },
+        certAttachments: {
+          orderBy: { createdAt: 'desc' },
+        },
       },
     })
 
     if (!cert) {
       return NextResponse.json({ error: '证书不存在', code: 'CERT_NOT_FOUND' }, { status: 404 })
     }
+
+    const legacyAttachments = Array.isArray(cert.attachments)
+      ? cert.attachments
+          .map((item, index) => {
+            let url = ''
+            let name = `附件${index + 1}`
+
+            if (typeof item === 'string') {
+              url = item
+              name = item.split('/').pop() || name
+            } else if (item && typeof item === 'object') {
+              const legacyItem = item as Record<string, unknown>
+              url = typeof legacyItem.url === 'string' ? legacyItem.url : ''
+              name = typeof legacyItem.name === 'string' ? legacyItem.name : name
+            }
+
+            if (!url) return null
+
+            const fileType = (() => {
+              const lowerUrl = url.toLowerCase()
+              if (lowerUrl.endsWith('.pdf')) return 'pdf'
+              if (lowerUrl.endsWith('.png')) return 'png'
+              if (lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg')) return 'jpg'
+              return 'file'
+            })()
+
+            const pageType = (() => {
+              const text = `${name} ${url}`.toLowerCase()
+              if (text.includes('管理')) return 'MANAGEMENT'
+              if (text.includes('附图') || text.includes('map') || text.includes('图')) return 'MAP'
+              if (text.includes('证载') || text.includes('信息')) return 'CERT_INFO'
+              if (fileType === 'pdf') return 'FULL_PDF'
+              return null
+            })()
+
+            return {
+              id: `legacy-${cert.id}-${index}`,
+              name,
+              url,
+              fileType,
+              fileSize: null,
+              uploadedBy: 'legacy',
+              collectiveCertId: cert.id,
+              bdcId: null,
+              certificateFamily: 'COLLECTIVE',
+              pageType,
+              source: 'web',
+              processed: false,
+              mimeType: null,
+              createdAt: cert.createdAt.toISOString(),
+              legacy: true,
+            }
+          })
+          .filter(Boolean)
+      : []
 
     // 解密敏感字段（详情页显示完整信息，但仍需脱敏）
     let idCard = cert.idCard
@@ -69,6 +127,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ...cert,
         idCard,
         phone,
+        certAttachments: [...legacyAttachments, ...(cert.certAttachments || [])],
       },
     })
   } catch (error) {

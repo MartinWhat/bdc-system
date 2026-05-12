@@ -90,8 +90,21 @@ async function loadUsernameById(userId: string): Promise<string | null> {
 const betterAuthSecret =
   process.env.BETTER_AUTH_SECRET ?? process.env.JWT_SECRET_KEY ?? 'bdc-better-auth-test-secret'
 
+function resolveBaseURL() {
+  const configuredURL = process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_BETTER_AUTH_URL
+  if (configuredURL) return configuredURL
+
+  if (process.env.NODE_ENV === 'development') {
+    const devPort = process.env.PORT ?? '3000'
+    return `http://localhost:${devPort}`
+  }
+
+  return undefined
+}
+
 export const auth = betterAuth({
   secret: betterAuthSecret,
+  baseURL: resolveBaseURL(),
   database: prismaAdapter(prisma, {
     provider: 'mysql',
   }),

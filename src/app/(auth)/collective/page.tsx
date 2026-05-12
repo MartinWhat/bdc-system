@@ -14,7 +14,6 @@ import {
   Descriptions,
   Tabs,
   Upload,
-  Divider,
   Alert,
   Typography,
   DatePicker,
@@ -33,7 +32,6 @@ import {
   UnlockOutlined,
   ExportOutlined,
   ImportOutlined,
-  ExclamationCircleOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -41,6 +39,9 @@ import type { UploadFile } from 'antd/es/upload/interface'
 import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
 import TownVillageCascader from '@/components/TownVillageCascader'
+import CollectiveAttachmentManager, {
+  type CollectiveAttachment,
+} from '@/components/collective/CollectiveAttachmentManager'
 import { parseExcelFile, downloadExcelTemplate, validateExcelData } from '@/lib/excel-parser'
 import { authFetch } from '@/lib/api-fetch'
 
@@ -82,6 +83,7 @@ interface CollectiveCert {
   remark?: string
   createdAt: string
   operations?: CertOperation[]
+  certAttachments?: CollectiveAttachment[]
 }
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -228,44 +230,6 @@ export default function CollectivePage() {
     } catch (error) {
       console.error('Add cert error:', error)
       message.error('入库申请失败')
-    }
-  }
-
-  const handleBatchImport = async (values: { items: string; remark?: string }) => {
-    try {
-      // 解析输入的 JSON 数据
-      const items = JSON.parse(values.items)
-
-      const res = await authFetch('/api/collective/batch-import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ items }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
-        }
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-      const data = await res.json()
-      if (data.success) {
-        const { successCount, failedCount, failedItems } = data.data
-        message.success(`导入完成：成功 ${successCount}，失败 ${failedCount}`)
-        if (failedItems.length > 0) {
-          console.warn('失败的条目:', failedItems)
-        }
-        setBatchImportModalVisible(false)
-        batchImportForm.resetFields()
-        loadCerts()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Batch import error:', error)
-      message.error('批量导入失败，请检查数据格式')
     }
   }
 
@@ -468,34 +432,37 @@ export default function CollectivePage() {
     }
   }
 
-  const handleReturn = async (cert: CollectiveCert) => {
-    try {
-      const res = await authFetch(`/api/collective/${cert.id}/return`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
+  const handleReturn = useCallback(
+    async (cert: CollectiveCert) => {
+      try {
+        const res = await authFetch(`/api/collective/${cert.id}/return`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            message.error('认证已过期，请重新登录')
+            return
+          }
+          throw new Error(`HTTP error! status: ${res.status}`)
         }
-        throw new Error(`HTTP error! status: ${res.status}`)
+        const data = await res.json()
+        if (data.success) {
+          message.success('归还成功')
+          loadCerts()
+        } else {
+          message.error(data.error)
+        }
+      } catch (error) {
+        console.error('Return error:', error)
+        message.error('归还操作失败')
       }
-      const data = await res.json()
-      if (data.success) {
-        message.success('归还成功')
-        loadCerts()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Return error:', error)
-      message.error('归还操作失败')
-    }
-  }
+    },
+    [loadCerts],
+  )
 
   const handleFreeze = async (values: { freezeReason: string }) => {
     if (!selectedCert) return
@@ -530,57 +497,63 @@ export default function CollectivePage() {
     }
   }
 
-  const handleUnfreeze = async (cert: CollectiveCert) => {
-    try {
-      const res = await authFetch(`/api/collective/${cert.id}/freeze`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
+  const handleUnfreeze = useCallback(
+    async (cert: CollectiveCert) => {
+      try {
+        const res = await authFetch(`/api/collective/${cert.id}/freeze`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            message.error('认证已过期，请重新登录')
+            return
+          }
+          throw new Error(`HTTP error! status: ${res.status}`)
         }
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-      const data = await res.json()
-      if (data.success) {
-        message.success('解冻成功')
-        loadCerts()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Unfreeze error:', error)
-      message.error('解冻操作失败')
-    }
-  }
-
-  const handleCancel = async (cert: CollectiveCert) => {
-    try {
-      const res = await authFetch(`/api/collective/${cert.id}?reason=管理员注销`, {
-        method: 'DELETE',
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
+        const data = await res.json()
+        if (data.success) {
+          message.success('解冻成功')
+          loadCerts()
+        } else {
+          message.error(data.error)
         }
-        throw new Error(`HTTP error! status: ${res.status}`)
+      } catch (error) {
+        console.error('Unfreeze error:', error)
+        message.error('解冻操作失败')
       }
-      const data = await res.json()
-      if (data.success) {
-        message.success('注销成功')
-        loadCerts()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Cancel error:', error)
-      message.error('注销操作失败')
-    }
-  }
+    },
+    [loadCerts],
+  )
 
-  const loadCertDetail = async (cert: CollectiveCert) => {
+  const handleCancel = useCallback(
+    async (cert: CollectiveCert) => {
+      try {
+        const res = await authFetch(`/api/collective/${cert.id}?reason=管理员注销`, {
+          method: 'DELETE',
+        })
+        if (!res.ok) {
+          if (res.status === 401) {
+            message.error('认证已过期，请重新登录')
+            return
+          }
+          throw new Error(`HTTP error! status: ${res.status}`)
+        }
+        const data = await res.json()
+        if (data.success) {
+          message.success('注销成功')
+          loadCerts()
+        } else {
+          message.error(data.error)
+        }
+      } catch (error) {
+        console.error('Cancel error:', error)
+        message.error('注销操作失败')
+      }
+    },
+    [loadCerts],
+  )
+
+  const loadCertDetail = useCallback(async (cert: CollectiveCert) => {
     try {
       const res = await authFetch(`/api/collective/${cert.id}`)
       if (!res.ok) {
@@ -597,7 +570,7 @@ export default function CollectivePage() {
       console.error('Load cert detail error:', error)
       message.error('加载详情失败')
     }
-  }
+  }, [])
 
   const columns: ColumnsType<CollectiveCert> = useMemo(
     () => [
@@ -718,7 +691,7 @@ export default function CollectivePage() {
         ),
       },
     ],
-    [],
+    [handleCancel, handleReturn, handleUnfreeze, loadCertDetail],
   )
 
   return (
@@ -800,98 +773,132 @@ export default function CollectivePage() {
         width={900}
       >
         {selectedCert && (
-          <>
-            <Descriptions bordered column={2} style={{ marginBottom: 24 }}>
-              <Descriptions.Item label="证书编号">{selectedCert.certNo}</Descriptions.Item>
-              <Descriptions.Item label="所有权人">{selectedCert.ownerName}</Descriptions.Item>
-              <Descriptions.Item label="所有权类型">
-                {OWNER_TYPE_MAP[selectedCert.ownerType]}
-              </Descriptions.Item>
-              <Descriptions.Item label="所属村居">
-                {selectedCert.village.town.name} - {selectedCert.village.name}
-              </Descriptions.Item>
-              <Descriptions.Item label="地址" span={2}>
-                {selectedCert.address}
-              </Descriptions.Item>
-              <Descriptions.Item label="面积">{selectedCert.area} 平方米</Descriptions.Item>
-              <Descriptions.Item label="土地用途">
-                {selectedCert.landUseType || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="身份证号">{selectedCert.idCard || '-'}</Descriptions.Item>
-              <Descriptions.Item label="联系电话">{selectedCert.phone || '-'}</Descriptions.Item>
-              <Descriptions.Item label="发证日期">
-                {selectedCert.certIssueDate
-                  ? dayjs(selectedCert.certIssueDate).format('YYYY-MM-DD')
-                  : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="有效期">
-                {selectedCert.certExpiryDate
-                  ? dayjs(selectedCert.certExpiryDate).format('YYYY-MM-DD')
-                  : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={STATUS_MAP[selectedCert.status].color}>
-                  {STATUS_MAP[selectedCert.status].text}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="是否冻结">
-                {selectedCert.isFrozen ? (
-                  <Tag color="red">已冻结</Tag>
-                ) : (
-                  <Tag color="green">正常</Tag>
-                )}
-              </Descriptions.Item>
-              {selectedCert.freezeReason && (
-                <Descriptions.Item label="冻结原因" span={2}>
-                  {selectedCert.freezeReason}
-                </Descriptions.Item>
-              )}
-              <Descriptions.Item label="入库时间">
-                {selectedCert.stockAt
-                  ? dayjs(selectedCert.stockAt).format('YYYY-MM-DD HH:mm')
-                  : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="出库时间">
-                {selectedCert.outAt ? dayjs(selectedCert.outAt).format('YYYY-MM-DD HH:mm') : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="归还时间">
-                {selectedCert.returnAt
-                  ? dayjs(selectedCert.returnAt).format('YYYY-MM-DD HH:mm')
-                  : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="备注" span={2}>
-                {selectedCert.remark || '-'}
-              </Descriptions.Item>
-            </Descriptions>
-
-            <Divider>操作记录</Divider>
-            {selectedCert.operations && selectedCert.operations.length > 0 ? (
-              <Steps
-                direction="vertical"
-                size="small"
-                items={selectedCert.operations.map((op) => ({
-                  title: OPERATION_TYPE_MAP[op.operationType]?.text || op.operationType,
-                  description: (
-                    <span>
-                      {op.description}
-                      {op.operatorName && ` - ${op.operatorName}`}
-                      <br />
-                      {dayjs(op.createdAt).format('YYYY-MM-DD HH:mm')}
-                    </span>
+          <Tabs
+            defaultActiveKey="info"
+            items={[
+              {
+                key: 'info',
+                label: '证书信息',
+                children: (
+                  <Descriptions bordered column={2}>
+                    <Descriptions.Item label="证书编号">{selectedCert.certNo}</Descriptions.Item>
+                    <Descriptions.Item label="所有权人">{selectedCert.ownerName}</Descriptions.Item>
+                    <Descriptions.Item label="所有权类型">
+                      {OWNER_TYPE_MAP[selectedCert.ownerType]}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="所属村居">
+                      {selectedCert.village.town.name} - {selectedCert.village.name}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="地址" span={2}>
+                      {selectedCert.address}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="面积">{selectedCert.area} 平方米</Descriptions.Item>
+                    <Descriptions.Item label="土地用途">
+                      {selectedCert.landUseType || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="身份证号">
+                      {selectedCert.idCard || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="联系电话">
+                      {selectedCert.phone || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="发证日期">
+                      {selectedCert.certIssueDate
+                        ? dayjs(selectedCert.certIssueDate).format('YYYY-MM-DD')
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="有效期">
+                      {selectedCert.certExpiryDate
+                        ? dayjs(selectedCert.certExpiryDate).format('YYYY-MM-DD')
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="状态">
+                      <Tag color={STATUS_MAP[selectedCert.status].color}>
+                        {STATUS_MAP[selectedCert.status].text}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="是否冻结">
+                      {selectedCert.isFrozen ? (
+                        <Tag color="red">已冻结</Tag>
+                      ) : (
+                        <Tag color="green">正常</Tag>
+                      )}
+                    </Descriptions.Item>
+                    {selectedCert.freezeReason && (
+                      <Descriptions.Item label="冻结原因" span={2}>
+                        {selectedCert.freezeReason}
+                      </Descriptions.Item>
+                    )}
+                    <Descriptions.Item label="入库时间">
+                      {selectedCert.stockAt
+                        ? dayjs(selectedCert.stockAt).format('YYYY-MM-DD HH:mm')
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="出库时间">
+                      {selectedCert.outAt
+                        ? dayjs(selectedCert.outAt).format('YYYY-MM-DD HH:mm')
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="归还时间">
+                      {selectedCert.returnAt
+                        ? dayjs(selectedCert.returnAt).format('YYYY-MM-DD HH:mm')
+                        : '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="备注" span={2}>
+                      {selectedCert.remark || '-'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                ),
+              },
+              {
+                key: 'attachments',
+                label: `附件管理 (${selectedCert.certAttachments?.length || 0})`,
+                children: (
+                  <CollectiveAttachmentManager
+                    certId={selectedCert.id}
+                    certificateFamily="COLLECTIVE"
+                    attachments={selectedCert.certAttachments || []}
+                    onChanged={async () => {
+                      await loadCertDetail(selectedCert)
+                    }}
+                  />
+                ),
+              },
+              {
+                key: 'operations',
+                label: '操作记录',
+                children:
+                  selectedCert.operations && selectedCert.operations.length > 0 ? (
+                    <Steps
+                      direction="vertical"
+                      size="small"
+                      items={selectedCert.operations.map((op) => ({
+                        title: OPERATION_TYPE_MAP[op.operationType]?.text || op.operationType,
+                        description: (
+                          <span>
+                            {op.description}
+                            {op.operatorName && ` - ${op.operatorName}`}
+                            <br />
+                            {dayjs(op.createdAt).format('YYYY-MM-DD HH:mm')}
+                          </span>
+                        ),
+                        status: ['STOCK_APPROVE', 'OUT_APPROVE', 'RETURN', 'UNFREEZE'].includes(
+                          op.operationType,
+                        )
+                          ? 'finish'
+                          : ['STOCK_REJECT', 'OUT_REJECT', 'FREEZE', 'CANCEL'].includes(
+                                op.operationType,
+                              )
+                            ? 'error'
+                            : 'wait',
+                      }))}
+                    />
+                  ) : (
+                    <Text type="secondary">暂无操作记录</Text>
                   ),
-                  status: ['STOCK_APPROVE', 'OUT_APPROVE', 'RETURN', 'UNFREEZE'].includes(
-                    op.operationType,
-                  )
-                    ? 'finish'
-                    : ['STOCK_REJECT', 'OUT_REJECT', 'FREEZE', 'CANCEL'].includes(op.operationType)
-                      ? 'error'
-                      : 'wait',
-                }))}
-              />
-            ) : (
-              <Text type="secondary">暂无操作记录</Text>
-            )}
-          </>
+              },
+            ]}
+          />
         )}
       </Modal>
 

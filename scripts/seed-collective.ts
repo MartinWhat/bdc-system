@@ -73,7 +73,7 @@ function randomInt(min: number, max: number): number {
 }
 
 // 生成随机选择
-function randomChoice<T>(arr: T[]): T {
+function randomChoice<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
@@ -155,6 +155,7 @@ async function seedCollectiveCerts(count: number = 20) {
     PENDING_APPROVE: Math.floor(count * 0.15), // 15% 待审核
     RETURNED: Math.floor(count * 0.1), // 10% 已归还
     FROZEN: Math.floor(count * 0.05), // 5% 已冻结
+    CANCELLED: 0,
   }
 
   let certIndex = 1
