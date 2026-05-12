@@ -1,15 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
 import { useAuthStore } from '@/lib/store/auth'
-import { Card, Row, Col, Statistic, Typography } from 'antd'
+import { Row, Col, Statistic } from 'antd'
 import { UserOutlined, HomeOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
 import NotificationCard from '@/components/notifications/NotificationCard'
 import NotificationPopup from '@/components/notifications/NotificationPopup'
 import { MotionCard, MotionContainer } from '@/components/motion'
-
-const { Text } = Typography
 
 export default function DashboardPage() {
   const { user } = useAuthStore()

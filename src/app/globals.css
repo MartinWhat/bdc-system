@@ -5,15 +5,231 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  background: #f5f7fb;
+}
+
 html,
 body {
   height: 100%;
+}
+
+body {
+  min-width: 320px;
+  overflow-x: hidden;
+  background: #f5f7fb;
+  color: rgba(0, 0, 0, 0.88);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
     'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
     'Noto Color Emoji';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#__next {
+  min-height: 100%;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.app-shell-sider {
+  transition: width 0.2s ease, transform 0.2s ease;
+}
+
+.app-shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.app-shell-header__brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-shell-header__titleWrap {
+  min-width: 0;
+}
+
+.app-shell-header__title {
+  margin: 0;
+  line-height: 1.15;
+}
+
+.app-shell-header__user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-shell-header__userName {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell-content {
+  margin: 24px 16px;
+  padding: 24px;
+  min-height: calc(100vh - 112px);
+  border-radius: 16px;
+}
+
+.page-container {
+  padding: 24px;
+  min-height: calc(100vh - 112px);
+}
+
+.page-container__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-container__title {
+  min-width: 0;
+}
+
+.page-container__titleText {
+  margin: 0;
+}
+
+.page-container__subTitle {
+  font-size: 14px;
+}
+
+.page-container__extra {
+  flex-shrink: 0;
+}
+
+.page-container--card {
+  margin: 24px 16px;
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: inline-flex !important;
+}
+
+@media (max-width: 991px) {
+  .app-shell-sider {
+    display: none !important;
+  }
+
+  .app-shell-header {
+    padding: 8px 12px;
+    min-height: 56px;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .app-shell-header__brand {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+    gap: 8px;
+  }
+
+  .app-shell-header__title {
+    font-size: 15px !important;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell-header__userName {
+    max-width: 88px;
+    font-size: 12px;
+  }
+
+  .app-shell-header__user {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .app-shell-content {
+    margin: 12px 10px;
+    padding: 16px;
+    min-height: calc(100vh - 88px);
+    border-radius: 12px;
+  }
+
+  .page-container {
+    padding: 16px 12px;
+    min-height: calc(100vh - 88px);
+  }
+
+  .page-container__header {
+    flex-direction: column;
+    align-items: stretch;
+    margin-bottom: 16px;
+  }
+
+  .page-container__extra {
+    width: 100%;
+  }
+
+  .page-container__titleText {
+    font-size: 20px !important;
+    line-height: 1.2;
+  }
+
+  .page-container__subTitle {
+    font-size: 13px;
+  }
+
+  .page-container--card {
+    margin: 12px 8px;
+  }
+
+  .mobile-only {
+    display: inline-flex !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell-header__titleWrap {
+    display: none;
+  }
+
+  .app-shell-header__brand {
+    gap: 6px;
+  }
+
+  .app-shell-header__userName {
+    max-width: 64px;
+  }
 }

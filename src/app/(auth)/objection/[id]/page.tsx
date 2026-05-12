@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Descriptions, Button, Steps, Card, Spin, message, Typography, Space } from 'antd'
+import { Descriptions, Button, Steps, Card, Spin, message, Typography, Space, Grid } from 'antd'
 import {
   ArrowLeftOutlined,
   PlayCircleOutlined,
@@ -92,10 +92,12 @@ const STEP_STATUS_MAP: Record<string, 'wait' | 'process' | 'finish' | 'error'> =
 export default function ObjectionDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(true)
   const [processData, setProcessData] = useState<ProcessData | null>(null)
 
-  const loadProcess = async () => {
+  const loadProcess = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch(`/api/objection/${params.id}/process`)
@@ -110,13 +112,13 @@ export default function ObjectionDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
 
   useEffect(() => {
     if (params.id) {
       loadProcess()
     }
-  }, [params.id])
+  }, [params.id, loadProcess])
 
   const handleProcess = () => {
     router.push(`/objection/${params.id}/process`)
@@ -145,15 +147,25 @@ export default function ObjectionDetailPage() {
   return (
     <PageContainer
       title="异议详情"
-      extra={[
-        <Button key="back" icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
-          返回
-        </Button>,
-      ]}
+      extra={
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
+        >
+          <Button
+            key="back"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => router.back()}
+            block={isMobile}
+          >
+            返回
+          </Button>
+        </Space>
+      }
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        <Card title="异议信息">
-          <Descriptions column={2} bordered size="small">
+        <Card title="异议信息" size={isMobile ? 'small' : undefined}>
+          <Descriptions column={isMobile ? 1 : 2} bordered size="small">
             <Descriptions.Item label="异议ID">{processData.objectionId}</Descriptions.Item>
             <Descriptions.Item label="状态">
               {STATUS_MAP[processData.objectionStatus]?.text || processData.objectionStatus}
@@ -169,8 +181,8 @@ export default function ObjectionDetailPage() {
           </Descriptions>
         </Card>
 
-        <Card title="关联领证记录">
-          <Descriptions column={2} bordered size="small">
+        <Card title="关联领证记录" size={isMobile ? 'small' : undefined}>
+          <Descriptions column={isMobile ? 1 : 2} bordered size="small">
             <Descriptions.Item label="证书编号">
               {processData.receiveRecord?.bdc?.certNo}
             </Descriptions.Item>
@@ -188,7 +200,7 @@ export default function ObjectionDetailPage() {
         </Card>
 
         {/* 操作历史 */}
-        <Card title="操作历史">
+        <Card title="操作历史" size={isMobile ? 'small' : undefined}>
           {processData.processNodes && processData.processNodes.length > 0 ? (
             <Steps
               direction="vertical"
@@ -222,7 +234,7 @@ export default function ObjectionDetailPage() {
           )}
         </Card>
 
-        <Card title="处理进度">
+        <Card title="处理进度" size={isMobile ? 'small' : undefined}>
           <Steps
             direction="vertical"
             size="small"
@@ -242,7 +254,12 @@ export default function ObjectionDetailPage() {
             processData.objectionStatus !== 'RESOLVED' &&
             processData.objectionStatus !== 'REJECTED' && (
               <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <Button type="primary" icon={<PlayCircleOutlined />} onClick={handleProcess}>
+                <Button
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  onClick={handleProcess}
+                  block={isMobile}
+                >
                   处理异议
                 </Button>
               </div>

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Modal,
@@ -14,7 +16,6 @@ import {
   Typography,
   Badge,
   Descriptions,
-  Card,
   List,
 } from 'antd'
 import { EyeOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
@@ -95,6 +96,8 @@ const RECEIVE_STATUS_MAP: Record<string, { text: string; color: string }> = {
 
 export default function ObjectionPage() {
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [objections, setObjections] = useState<Objection[]>([])
   const [loading, setLoading] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
@@ -218,6 +221,65 @@ export default function ObjectionPage() {
     router.push(`/objection/${record.id}/process`)
   }
 
+  const getBadgeStatus = (status: string) => {
+    switch (status) {
+      case 'green':
+        return 'success'
+      case 'red':
+        return 'error'
+      case 'blue':
+        return 'processing'
+      case 'orange':
+        return 'warning'
+      default:
+        return 'default'
+    }
+  }
+
+  const renderActions = (record: Objection) => (
+    <Space wrap size={isMobile ? 6 : 8}>
+      <Button
+        type="link"
+        size="small"
+        icon={<EyeOutlined />}
+        onClick={() => handleViewDetail(record)}
+      >
+        详情
+      </Button>
+      {record.currentWorkflowId && (
+        <Button type="link" size="small" onClick={() => handleProcess(record)}>
+          处理
+        </Button>
+      )}
+    </Space>
+  )
+
+  const renderMobileCard = (record: Objection) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Tag color={OBJECTION_TYPE_MAP[record.objectionType]?.color || 'default'}>
+            {OBJECTION_TYPE_MAP[record.objectionType]?.text || record.objectionType}
+          </Tag>
+          <Badge
+            status={getBadgeStatus(STATUS_MAP[record.status]?.color || 'default')}
+            text={STATUS_MAP[record.status]?.text || record.status}
+          />
+        </Space>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{record.receiveRecord?.bdc?.certNo}</div>
+        <Text type="secondary">
+          {record.receiveRecord?.bdc?.ownerName} · {record.receiveRecord?.bdc?.village?.town?.name}/
+          {record.receiveRecord?.bdc?.village?.name}
+        </Text>
+        <Text ellipsis={{ tooltip: record.description }}>{record.description}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {dayjs(record.createdAt).format('YYYY-MM-DD HH:mm')}
+        </Text>
+        {renderActions(record)}
+      </Space>
+    </Card>
+  )
+
   const columns: ColumnsType<Objection> = [
     {
       title: '异议类型',
@@ -264,7 +326,7 @@ export default function ObjectionPage() {
       key: 'status',
       render: (status: string) => {
         const config = STATUS_MAP[status] || { text: status, color: 'default' }
-        return <Badge status={config.color as any} text={config.text} />
+        return <Badge status={getBadgeStatus(config.color)} text={config.text} />
       },
     },
     {
@@ -285,23 +347,7 @@ export default function ObjectionPage() {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
-          {record.currentWorkflowId && (
-            <Button type="link" size="small" onClick={() => handleProcess(record)}>
-              处理
-            </Button>
-          )}
-        </Space>
-      ),
+      render: (_, record) => renderActions(record),
     },
   ]
 
@@ -309,12 +355,24 @@ export default function ObjectionPage() {
     <PageContainer
       title="异议管理"
       extra={[
-        <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreateObjection}>
+        <Button
+          key="create"
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleCreateObjection}
+          block={isMobile}
+        >
           新增异议
         </Button>,
       ]}
     >
-      <Table columns={columns} dataSource={objections} rowKey="id" loading={loading} bordered />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {objections.map(renderMobileCard)}
+        </Space>
+      ) : (
+        <Table columns={columns} dataSource={objections} rowKey="id" loading={loading} bordered />
+      )}
       <Modal
         title="异议详情"
         open={detailVisible}
@@ -324,11 +382,13 @@ export default function ObjectionPage() {
             关闭
           </Button>,
         ]}
-        width={700}
+        width={isMobile ? 'calc(100vw - 24px)' : 700}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedObjection && (
           <div>
-            <Descriptions column={2} bordered size="small">
+            <Descriptions column={isMobile ? 1 : 2} bordered size="small">
               <Descriptions.Item label="异议类型">
                 {OBJECTION_TYPE_MAP[selectedObjection.objectionType]?.text ||
                   selectedObjection.objectionType}
@@ -378,7 +438,9 @@ export default function ObjectionPage() {
         onCancel={() => setCreateModalVisible(false)}
         onOk={handleCreateSubmit}
         okText="创建"
-        width={700}
+        width={isMobile ? 'calc(100vw - 24px)' : 700}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Space direction="vertical" style={{ width: '100%' }} size="middle">
           <Card title="选择领证记录" size="small">
@@ -389,9 +451,14 @@ export default function ObjectionPage() {
               onChange={(e) => setSearchKeyword(e.target.value)}
               onSearch={searchReceiveRecords}
               enterButton={
-                <>
-                  <SearchOutlined /> 搜索
-                </>
+                isMobile ? (
+                  <SearchOutlined />
+                ) : (
+                  <>
+                    {' '}
+                    <SearchOutlined /> 搜索{' '}
+                  </>
+                )
               }
             />
             {receiveRecords.length > 0 && (

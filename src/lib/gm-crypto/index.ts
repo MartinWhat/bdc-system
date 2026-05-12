@@ -31,6 +31,7 @@ export {
 export {
   findBdcByIdCard,
   findUserByPhone,
+  findUserByFixedPhone,
   findUserByIdCard,
   buildEncryptedWhereClause,
   buildEncryptedInClause,

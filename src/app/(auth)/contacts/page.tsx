@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
+  Card,
+  Grid,
   Input,
   Select,
   Button,
@@ -17,6 +19,7 @@ import {
   Col,
   Avatar,
   Tooltip,
+  Pagination,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { DataNode } from 'antd/es/tree'
@@ -72,10 +75,14 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export default function ContactsPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(false)
   const [treeLoading, setTreeLoading] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [total, setTotal] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [keyword, setKeyword] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [selectedTownId, setSelectedTownId] = useState<string>('')
@@ -91,8 +98,8 @@ export default function ContactsPage() {
       if (data.success) {
         setTowns(data.data)
       }
-    } catch (error) {
-      console.error('Load towns error:', error)
+    } catch {
+      console.error('Load towns error')
     } finally {
       setTreeLoading(false)
     }
@@ -106,8 +113,8 @@ export default function ContactsPage() {
       if (data.success) {
         return data.data
       }
-    } catch (error) {
-      console.error('Load villages error:', error)
+    } catch {
+      console.error('Load villages error')
     }
     return []
   }, [])
@@ -141,8 +148,8 @@ export default function ContactsPage() {
         console.error('[Contacts] Error:', data.error)
         message.error(data.error || '加载失败')
       }
-    } catch (error) {
-      console.error('[Contacts] Load error:', error)
+    } catch {
+      console.error('[Contacts] Load error')
       message.error('加载通讯录失败')
     } finally {
       setLoading(false)
@@ -201,15 +208,18 @@ export default function ContactsPage() {
     if (key === 'all') {
       setSelectedTownId('')
       setSelectedVillageId('')
+      setCurrentPage(1)
       loadContacts(keyword, roleFilter, '', '')
     } else if (key.startsWith('town-')) {
       const townId = key.replace('town-', '')
       setSelectedTownId(townId)
       setSelectedVillageId('')
+      setCurrentPage(1)
       loadContacts(keyword, roleFilter, townId, '')
     } else if (key.startsWith('village-')) {
       const villageId = key.replace('village-', '')
       setSelectedVillageId(villageId)
+      setCurrentPage(1)
       loadContacts(keyword, roleFilter, '', villageId)
     }
   }
@@ -230,6 +240,7 @@ export default function ContactsPage() {
 
   // 搜索防抖
   const handleSearch = (value: string) => {
+    setCurrentPage(1)
     setTimeout(() => {
       loadContacts(value, roleFilter, selectedTownId, selectedVillageId)
     }, 300)
@@ -238,11 +249,13 @@ export default function ContactsPage() {
   const handleKeywordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setKeyword(value)
+    setCurrentPage(1)
     handleSearch(value)
   }
 
   const handleRoleFilterChange = (value: string) => {
     setRoleFilter(value)
+    setCurrentPage(1)
     loadContacts(keyword, value, selectedTownId, selectedVillageId)
   }
 
@@ -250,7 +263,7 @@ export default function ContactsPage() {
     try {
       await navigator.clipboard.writeText(text)
       message.success(`${type}已复制`)
-    } catch (error) {
+    } catch {
       message.error('复制失败')
     }
   }
@@ -268,11 +281,87 @@ export default function ContactsPage() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
       message.success('导出成功')
-    } catch (error) {
-      console.error('Export error:', error)
+    } catch {
+      console.error('Export error')
       message.error('导出失败')
     }
   }
+
+  const paginatedContacts = contacts.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  const renderContactActions = (record: Contact) => (
+    <Space size="small">
+      {record.phone && (
+        <Tooltip title="复制手机">
+          <Button
+            type="text"
+            size="small"
+            icon={<PhoneOutlined />}
+            onClick={() => copyToClipboard(record.phone, '手机号')}
+          />
+        </Tooltip>
+      )}
+      {record.email && (
+        <Tooltip title="复制邮箱">
+          <Button
+            type="text"
+            size="small"
+            icon={<MailOutlined />}
+            onClick={() => copyToClipboard(record.email, '邮箱')}
+          />
+        </Tooltip>
+      )}
+    </Space>
+  )
+
+  const renderContactCard = (record: Contact) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Space>
+            <Avatar style={{ backgroundColor: '#1890ff' }} size="small">
+              {record.realName.charAt(0)}
+            </Avatar>
+            <div>
+              <div style={{ fontWeight: 'bold' }}>{record.realName}</div>
+              <div style={{ fontSize: 12, color: '#999' }}>@{record.username}</div>
+            </div>
+          </Space>
+        </Space>
+        <Space size={6} wrap>
+          {record.roles.map((role) => (
+            <Tag key={role.id} color="blue">
+              {ROLE_LABELS[role.code] || role.name}
+            </Tag>
+          ))}
+        </Space>
+        <Text type="secondary">
+          {record.village ? `${record.village.town.name}/${record.village.name}` : '-'}
+        </Text>
+        <Space direction="vertical" size={4}>
+          <Text>
+            手机号：{record.phone || '-'}{' '}
+            {record.phone && (
+              <CopyOutlined
+                style={{ cursor: 'pointer', color: '#999' }}
+                onClick={() => copyToClipboard(record.phone, '手机号')}
+              />
+            )}
+          </Text>
+          <Text ellipsis={{ tooltip: record.email }}>
+            邮箱：{record.email || '-'}{' '}
+            {record.email && (
+              <CopyOutlined
+                style={{ cursor: 'pointer', color: '#999' }}
+                onClick={() => copyToClipboard(record.email, '邮箱')}
+              />
+            )}
+          </Text>
+        </Space>
+        {renderContactActions(record)}
+      </Space>
+    </Card>
+  )
 
   // 表格列定义
   const columns: ColumnsType<Contact> = [
@@ -371,30 +460,7 @@ export default function ContactsPage() {
       key: 'action',
       width: 100,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          {record.phone && (
-            <Tooltip title="复制手机">
-              <Button
-                type="text"
-                size="small"
-                icon={<PhoneOutlined />}
-                onClick={() => copyToClipboard(record.phone, '手机号')}
-              />
-            </Tooltip>
-          )}
-          {record.email && (
-            <Tooltip title="复制邮箱">
-              <Button
-                type="text"
-                size="small"
-                icon={<MailOutlined />}
-                onClick={() => copyToClipboard(record.email, '邮箱')}
-              />
-            </Tooltip>
-          )}
-        </Space>
-      ),
+      render: (_, record) => renderContactActions(record),
     },
   ]
 
@@ -409,120 +475,197 @@ export default function ContactsPage() {
     <PageContainer
       title="通讯录"
       extra={
-        <Space>
-          <Button icon={<DownloadOutlined />} onClick={exportContacts}>
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
+        >
+          <Button icon={<DownloadOutlined />} onClick={exportContacts} block={isMobile}>
             导出
           </Button>
         </Space>
       }
     >
-      <div style={{ height: 'calc(100vh - 160px)', overflow: 'hidden' }}>
-        <Row gutter={16} style={{ height: '100%' }}>
-          {/* 左侧：镇街村居树 */}
-          <Col span={6} style={{ height: '100%' }}>
-            <div
-              style={{
-                background: '#fff',
-                padding: 16,
-                borderRadius: 8,
-                height: '100%',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              <div style={{ marginBottom: 16, flexShrink: 0 }}>
-                <Input
-                  placeholder="搜索姓名或邮箱"
-                  prefix={<SearchOutlined />}
-                  value={keyword}
-                  onChange={handleKeywordChange}
-                  allowClear
-                />
-              </div>
-              <div style={{ marginBottom: 8, flexShrink: 0 }}>
-                <Select
-                  placeholder="筛选角色"
-                  value={roleFilter}
-                  onChange={handleRoleFilterChange}
-                  options={roleOptions}
-                  style={{ width: '100%' }}
-                  allowClear
-                />
-              </div>
-              <div style={{ fontWeight: 'bold', marginBottom: 8, flexShrink: 0 }}>区域筛选</div>
-              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {treeLoading ? (
-                  <Spin size="small" />
-                ) : (
-                  <Tree
-                    treeData={buildTreeData()}
-                    onSelect={onTreeSelect}
-                    loadData={onLoadData}
-                    defaultExpandAll={false}
-                    selectedKeys={
-                      selectedVillageId
-                        ? [`village-${selectedVillageId}`]
-                        : selectedTownId
-                          ? [`town-${selectedTownId}`]
-                          : ['all']
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          </Col>
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Card size="small">
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Input
+                placeholder="搜索姓名或邮箱"
+                prefix={<SearchOutlined />}
+                value={keyword}
+                onChange={handleKeywordChange}
+                allowClear
+              />
+              <Select
+                placeholder="筛选角色"
+                value={roleFilter}
+                onChange={handleRoleFilterChange}
+                options={roleOptions}
+                style={{ width: '100%' }}
+                allowClear
+              />
+            </Space>
+          </Card>
 
-          {/* 右侧：用户列表表格 */}
-          <Col span={18} style={{ height: '100%', overflow: 'hidden' }}>
-            <div
-              style={{
-                background: '#fff',
-                padding: 16,
-                borderRadius: 8,
-                height: '100%',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
+          <Card size="small" title="区域筛选">
+            {treeLoading ? (
+              <Spin size="small" />
+            ) : (
+              <Tree
+                treeData={buildTreeData()}
+                onSelect={onTreeSelect}
+                loadData={onLoadData}
+                defaultExpandAll={false}
+                selectedKeys={
+                  selectedVillageId
+                    ? [`village-${selectedVillageId}`]
+                    : selectedTownId
+                      ? [`town-${selectedTownId}`]
+                      : ['all']
+                }
+              />
+            )}
+          </Card>
+
+          <Card size="small">
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Text type="secondary">共 {total} 位联系人</Text>
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                  <Spin size="large" />
+                </div>
+              ) : paginatedContacts.length === 0 ? (
+                <Empty description="暂无联系人" />
+              ) : (
+                paginatedContacts.map(renderContactCard)
+              )}
+              <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+                <Pagination
+                  current={currentPage}
+                  pageSize={pageSize}
+                  total={total}
+                  showSizeChanger={false}
+                  onChange={(page) => setCurrentPage(page)}
+                />
+              </div>
+            </Space>
+          </Card>
+        </Space>
+      ) : (
+        <div style={{ height: 'calc(100vh - 160px)', overflow: 'hidden' }}>
+          <Row gutter={16} style={{ height: '100%' }}>
+            {/* 左侧：镇街村居树 */}
+            <Col span={6} style={{ height: '100%' }}>
               <div
                 style={{
-                  marginBottom: 16,
+                  background: '#fff',
+                  padding: 16,
+                  borderRadius: 8,
+                  height: '100%',
+                  overflow: 'hidden',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexShrink: 0,
+                  flexDirection: 'column',
                 }}
               >
-                <Text type="secondary">共 {total} 位联系人</Text>
-              </div>
-              <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-                {loading ? (
-                  <div style={{ textAlign: 'center', padding: '100px 0' }}>
-                    <Spin size="large" />
-                  </div>
-                ) : contacts.length === 0 ? (
-                  <Empty description="暂无联系人" />
-                ) : (
-                  <Table
-                    columns={columns}
-                    dataSource={contacts}
-                    rowKey="id"
-                    pagination={{
-                      pageSize: 20,
-                      showSizeChanger: true,
-                      showTotal: (total) => `共 ${total} 位`,
-                    }}
-                    scroll={{ x: 1000 }}
-                    size="middle"
+                <div style={{ marginBottom: 16, flexShrink: 0 }}>
+                  <Input
+                    placeholder="搜索姓名或邮箱"
+                    prefix={<SearchOutlined />}
+                    value={keyword}
+                    onChange={handleKeywordChange}
+                    allowClear
                   />
-                )}
+                </div>
+                <div style={{ marginBottom: 8, flexShrink: 0 }}>
+                  <Select
+                    placeholder="筛选角色"
+                    value={roleFilter}
+                    onChange={handleRoleFilterChange}
+                    options={roleOptions}
+                    style={{ width: '100%' }}
+                    allowClear
+                  />
+                </div>
+                <div style={{ fontWeight: 'bold', marginBottom: 8, flexShrink: 0 }}>区域筛选</div>
+                <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                  {treeLoading ? (
+                    <Spin size="small" />
+                  ) : (
+                    <Tree
+                      treeData={buildTreeData()}
+                      onSelect={onTreeSelect}
+                      loadData={onLoadData}
+                      defaultExpandAll={false}
+                      selectedKeys={
+                        selectedVillageId
+                          ? [`village-${selectedVillageId}`]
+                          : selectedTownId
+                            ? [`town-${selectedTownId}`]
+                            : ['all']
+                      }
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-          </Col>
-        </Row>
-      </div>
+            </Col>
+
+            {/* 右侧：用户列表表格 */}
+            <Col span={18} style={{ height: '100%', overflow: 'hidden' }}>
+              <div
+                style={{
+                  background: '#fff',
+                  padding: 16,
+                  borderRadius: 8,
+                  height: '100%',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <div
+                  style={{
+                    marginBottom: 16,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Text type="secondary">共 {total} 位联系人</Text>
+                </div>
+                <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+                  {loading ? (
+                    <div style={{ textAlign: 'center', padding: '100px 0' }}>
+                      <Spin size="large" />
+                    </div>
+                  ) : contacts.length === 0 ? (
+                    <Empty description="暂无联系人" />
+                  ) : (
+                    <Table
+                      columns={columns}
+                      dataSource={contacts}
+                      rowKey="id"
+                      pagination={{
+                        current: currentPage,
+                        pageSize,
+                        total,
+                        showSizeChanger: true,
+                        showTotal: (total) => `共 ${total} 位`,
+                        onChange: (page, size) => {
+                          setCurrentPage(page)
+                          setPageSize(size)
+                        },
+                      }}
+                      scroll={{ x: 1000 }}
+                      size="middle"
+                    />
+                  )}
+                </div>
+              </div>
+            </Col>
+          </Row>
+        </div>
+      )}
     </PageContainer>
   )
 }

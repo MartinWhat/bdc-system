@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Modal,
   Form,
   Input,
-  Select,
   message,
   Space,
   Tag,
@@ -17,6 +18,7 @@ import {
   Divider,
   Alert,
   Typography,
+  Pagination,
 } from 'antd'
 import {
   EyeOutlined,
@@ -90,6 +92,8 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
 }
 
 export default function LingzhengPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [records, setRecords] = useState<ReceiveRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
@@ -152,38 +156,6 @@ export default function LingzhengPage() {
     loadRecords()
   }, [loadRecords])
 
-  const handleIssue = useCallback(
-    async (record: ReceiveRecord) => {
-      try {
-        const res = await authFetch(`/api/receive/${record.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ action: 'issue' }),
-        })
-        if (!res.ok) {
-          if (res.status === 401) {
-            message.error('认证已过期，请重新登录')
-            return
-          }
-          throw new Error(`HTTP error! status: ${res.status}`)
-        }
-        const data = await res.json()
-        if (data.success) {
-          message.success('已标记为发放')
-          loadRecords()
-        } else {
-          message.error(data.error)
-        }
-      } catch (error) {
-        console.error('Issue error:', error)
-        message.error('操作失败')
-      }
-    },
-    [loadRecords],
-  )
-
   const handleReceive = async (values: {
     receiverName?: string
     receiverIdCard?: string
@@ -228,45 +200,6 @@ export default function LingzhengPage() {
     } catch (error) {
       console.error('Receive error:', error)
       message.error('操作失败')
-    }
-  }
-
-  const handleBatchImport = async (values: { certNos: string; remark?: string }) => {
-    try {
-      const certNos = values.certNos
-        .split('\n')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s)
-
-      const items = certNos.map((certNo: string) => ({ certNo, remark: values.remark || '' }))
-
-      const res = await authFetch('/api/receive/batch-import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ items }),
-      })
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
-        }
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-      const data = await res.json()
-      if (data.success) {
-        const { successCount, failedCount } = data.data
-        message.success(`导入完成：成功 ${successCount}，失败 ${failedCount}`)
-        setImportModalVisible(false)
-        importForm.resetFields()
-        loadRecords()
-      } else {
-        message.error(data.error)
-      }
-    } catch (error) {
-      console.error('Batch import error:', error)
-      message.error('导入失败')
     }
   }
 
@@ -428,6 +361,70 @@ export default function LingzhengPage() {
     return false // 阻止默认上传
   }
 
+  const renderRowActions = useCallback(
+    (record: ReceiveRecord) => (
+      <Space wrap size={isMobile ? 6 : 8}>
+        <Button
+          size="small"
+          icon={<EyeOutlined />}
+          onClick={() => {
+            setSelectedRecord(record)
+            setDetailVisible(true)
+          }}
+        >
+          详情
+        </Button>
+        {record.status === 'ISSUED' && !record.hasObjection && (
+          <Button
+            size="small"
+            type="primary"
+            onClick={() => {
+              setSelectedRecord(record)
+              setReceiveModalVisible(true)
+            }}
+          >
+            领取
+          </Button>
+        )}
+      </Space>
+    ),
+    [isMobile],
+  )
+
+  const renderMobileCard = (record: ReceiveRecord) => {
+    const status = STATUS_MAP[record.status]
+
+    return (
+      <Card key={record.id} size="small" style={{ borderRadius: 12, width: '100%' }}>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+            <Tag color={status.color}>{status.text}</Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.bdc.certNo}
+            </Text>
+          </Space>
+
+          <div style={{ fontWeight: 600, fontSize: 16 }}>{record.bdc.ownerName}</div>
+
+          <Text type="secondary">
+            {record.bdc.village.town.name} · {record.bdc.village.name}
+          </Text>
+
+          <Space size={12} wrap>
+            <Text>领取人 {record.receiverName || '-'}</Text>
+            <Text>申请 {dayjs(record.applyDate).format('YYYY-MM-DD')}</Text>
+          </Space>
+
+          <Text type={record.hasObjection && record.activeObjectionId ? 'danger' : 'secondary'}>
+            {record.hasObjection && record.activeObjectionId ? '异议中' : '正常'}
+          </Text>
+
+          {renderRowActions(record)}
+        </Space>
+      </Card>
+    )
+  }
+
   // 使用 useMemo 避免每次渲染重新创建 columns
   const columns: ColumnsType<ReceiveRecord> = useMemo(
     () => [
@@ -499,42 +496,21 @@ export default function LingzhengPage() {
         title: '操作',
         key: 'action',
         width: 150,
-        render: (_, record) => (
-          <Space>
-            <Button
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => {
-                setSelectedRecord(record)
-                setDetailVisible(true)
-              }}
-            >
-              详情
-            </Button>
-            {record.status === 'ISSUED' && !record.hasObjection && (
-              <Button
-                size="small"
-                type="primary"
-                onClick={() => {
-                  setSelectedRecord(record)
-                  setReceiveModalVisible(true)
-                }}
-              >
-                领取
-              </Button>
-            )}
-          </Space>
-        ),
+        render: (_, record) => renderRowActions(record),
       },
     ],
-    [handleIssue],
+    [renderRowActions],
   )
 
   return (
     <PageContainer
       title="领证管理"
       extra={
-        <Button icon={<UploadOutlined />} onClick={() => setImportModalVisible(true)}>
+        <Button
+          icon={<UploadOutlined />}
+          onClick={() => setImportModalVisible(true)}
+          block={isMobile}
+        >
           批量导入
         </Button>
       }
@@ -543,22 +519,40 @@ export default function LingzhengPage() {
       skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无领证记录"
     >
-      <Table
-        columns={columns}
-        dataSource={records}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total,
-          onChange: (page, size) => {
-            setCurrentPage(page)
-            setPageSize(size)
-            loadRecords(page, size)
-          },
-        }}
-      />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {records.map(renderMobileCard)}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger={false}
+              onChange={(page) => {
+                setCurrentPage(page)
+                loadRecords(page, pageSize)
+              }}
+            />
+          </div>
+        </Space>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={records}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total,
+            onChange: (page, size) => {
+              setCurrentPage(page)
+              setPageSize(size)
+              loadRecords(page, size)
+            },
+          }}
+        />
+      )}
 
       {/* 详情模态框 */}
       <Modal
@@ -569,11 +563,13 @@ export default function LingzhengPage() {
           setSelectedRecord(null)
         }}
         footer={null}
-        width={900}
+        width={isMobile ? 'calc(100vw - 24px)' : 900}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedRecord && (
           <>
-            <Descriptions bordered column={2} style={{ marginBottom: 24 }}>
+            <Descriptions bordered column={isMobile ? 1 : 2} style={{ marginBottom: 24 }}>
               <Descriptions.Item label="证书编号">{selectedRecord.bdc.certNo}</Descriptions.Item>
               <Descriptions.Item label="使用权人">{selectedRecord.bdc.ownerName}</Descriptions.Item>
               <Descriptions.Item label="所属村居">
@@ -651,7 +647,9 @@ export default function LingzhengPage() {
           setScenePhoto('')
         }}
         onOk={() => receiveForm.submit()}
-        width={700}
+        width={isMobile ? 'calc(100vw - 24px)' : 700}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Alert
           message="领证流程"
@@ -686,15 +684,22 @@ export default function LingzhengPage() {
 
           <Divider>证件照片</Divider>
 
-          <Space style={{ marginBottom: 16 }}>
+          <Space
+            direction={isMobile ? 'vertical' : 'horizontal'}
+            style={{ marginBottom: 16, width: '100%' }}
+          >
             <Upload
               beforeUpload={(file) => handlePhotoUpload(file, 'front')}
               showUploadList={false}
             >
-              <Button icon={<UploadOutlined />}>{idCardFront ? '已上传' : '身份证正面'}</Button>
+              <Button icon={<UploadOutlined />} block={isMobile}>
+                {idCardFront ? '已上传' : '身份证正面'}
+              </Button>
             </Upload>
             <Upload beforeUpload={(file) => handlePhotoUpload(file, 'back')} showUploadList={false}>
-              <Button icon={<UploadOutlined />}>{idCardBack ? '已上传' : '身份证背面'}</Button>
+              <Button icon={<UploadOutlined />} block={isMobile}>
+                {idCardBack ? '已上传' : '身份证背面'}
+              </Button>
             </Upload>
           </Space>
 
@@ -705,7 +710,9 @@ export default function LingzhengPage() {
               beforeUpload={(file) => handlePhotoUpload(file, 'scene')}
               showUploadList={false}
             >
-              <Button icon={<CameraOutlined />}>{scenePhoto ? '已拍照' : '拍照'}</Button>
+              <Button icon={<CameraOutlined />} block={isMobile}>
+                {scenePhoto ? '已拍照' : '拍照'}
+              </Button>
             </Upload>
           </Form.Item>
         </Form>
@@ -723,8 +730,8 @@ export default function LingzhengPage() {
           importForm.resetFields()
         }}
         footer={
-          <Space>
-            <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate}>
+          <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+            <Button icon={<DownloadOutlined />} onClick={handleDownloadTemplate} block={isMobile}>
               下载模板
             </Button>
             <Button
@@ -736,6 +743,7 @@ export default function LingzhengPage() {
                 }
               }}
               disabled={parsedData.length === 0}
+              block={isMobile}
             >
               {previewVisible ? '隐藏预览' : '预览数据'} ({parsedData.length} 条)
             </Button>
@@ -747,6 +755,7 @@ export default function LingzhengPage() {
                 setPreviewVisible(false)
                 importForm.resetFields()
               }}
+              block={isMobile}
             >
               取消
             </Button>
@@ -755,12 +764,15 @@ export default function LingzhengPage() {
               loading={uploadLoading}
               onClick={handleSubmitExcel}
               disabled={parsedData.length === 0}
+              block={isMobile}
             >
               确认导入
             </Button>
           </Space>
         }
-        width={800}
+        width={isMobile ? 'calc(100vw - 24px)' : 800}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Alert
           message="导入说明"

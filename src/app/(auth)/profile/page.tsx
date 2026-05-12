@@ -1,18 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import {
-  Card,
-  Form,
-  Input,
-  Button,
-  Space,
-  message,
-  Descriptions,
-  Modal,
-  Typography,
-  Tag,
-} from 'antd'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, Grid, Form, Input, Button, Space, message, Descriptions, Modal, Tag } from 'antd'
 import {
   UserOutlined,
   MailOutlined,
@@ -22,8 +11,6 @@ import {
 } from '@ant-design/icons'
 import { authFetch } from '@/lib/api-fetch'
 import PageContainer from '@/components/PageContainer'
-
-const { Title } = Typography
 
 interface UserProfile {
   id: string
@@ -43,6 +30,8 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
   const [changePwdLoading, setChangePwdLoading] = useState(false)
@@ -52,11 +41,7 @@ export default function ProfilePage() {
   const [editForm] = Form.useForm()
   const [changePwdForm] = Form.useForm()
 
-  useEffect(() => {
-    loadProfile()
-  }, [])
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch('/api/profile')
@@ -66,13 +51,17 @@ export default function ProfilePage() {
       } else {
         message.error(data.error || '加载失败')
       }
-    } catch (error) {
-      console.error('Load profile error:', error)
+    } catch {
+      console.error('Load profile error')
       message.error('加载个人信息失败')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadProfile()
+  }, [loadProfile])
 
   const handleUpdateProfile = async (values: {
     realName: string
@@ -167,17 +156,20 @@ export default function ProfilePage() {
     <PageContainer
       title="个人信息"
       extra={
-        <Space>
-          <Button icon={<EditOutlined />} onClick={openEditModal}>
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
+        >
+          <Button icon={<EditOutlined />} onClick={openEditModal} block={isMobile}>
             编辑资料
           </Button>
-          <Button icon={<SafetyOutlined />} onClick={openChangePwdModal}>
+          <Button icon={<SafetyOutlined />} onClick={openChangePwdModal} block={isMobile}>
             修改密码
           </Button>
         </Space>
       }
     >
-      <Card loading={loading}>
+      <Card loading={loading} size={isMobile ? 'small' : undefined}>
         <Descriptions
           title="基本信息"
           bordered
@@ -236,6 +228,9 @@ export default function ProfilePage() {
         open={editModalVisible}
         onCancel={() => setEditModalVisible(false)}
         footer={null}
+        width={isMobile ? 'calc(100vw - 24px)' : 520}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form form={editForm} layout="vertical" onFinish={handleUpdateProfile} autoComplete="off">
           <Form.Item label="用户名" tooltip="用户名不可修改">
@@ -277,9 +272,11 @@ export default function ProfilePage() {
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setEditModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit" loading={editLoading}>
+            <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+              <Button onClick={() => setEditModalVisible(false)} block={isMobile}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={editLoading} block={isMobile}>
                 保存
               </Button>
             </Space>
@@ -293,6 +290,9 @@ export default function ProfilePage() {
         open={changePwdModalVisible}
         onCancel={() => setChangePwdModalVisible(false)}
         footer={null}
+        width={isMobile ? 'calc(100vw - 24px)' : 520}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form
           form={changePwdForm}
@@ -339,9 +339,11 @@ export default function ProfilePage() {
           </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setChangePwdModalVisible(false)}>取消</Button>
-              <Button type="primary" htmlType="submit" loading={changePwdLoading}>
+            <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+              <Button onClick={() => setChangePwdModalVisible(false)} block={isMobile}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={changePwdLoading} block={isMobile}>
                 确认修改
               </Button>
             </Space>

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Modal,
@@ -15,6 +17,8 @@ import {
   Descriptions,
   DatePicker,
   Tabs,
+  Pagination,
+  Typography,
 } from 'antd'
 import { PlusOutlined, EyeOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -76,8 +80,11 @@ const STATUS_MAP: Record<string, { text: string; color: string }> = {
 }
 
 const LAND_USE_TYPES = ['宅基地', '农用地', '建设用地', '未利用地']
+const { Text } = Typography
 
 export default function BdcPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [bdcs, setBdcs] = useState<Bdc[]>([])
   const [loading, setLoading] = useState(false)
   const [modalVisible, setModalVisible] = useState(false)
@@ -214,7 +221,7 @@ export default function BdcPage() {
 
   const columns: ColumnsType<Bdc> = [
     {
-      title: '证书编号',
+      title: '不动产单元号',
       dataIndex: 'certNo',
       key: 'certNo',
       width: 150,
@@ -231,7 +238,7 @@ export default function BdcPage() {
       render: (_, record) => `${record.village.town.name} - ${record.village.name}`,
     },
     {
-      title: '面积(㎡)',
+      title: '建筑面积(㎡)',
       dataIndex: 'area',
       key: 'area',
       width: 100,
@@ -337,6 +344,109 @@ export default function BdcPage() {
     },
   ]
 
+  const renderMobileCard = (record: Bdc) => {
+    const status = STATUS_MAP[record.status]
+
+    return (
+      <Card key={record.id} size="small" style={{ borderRadius: 12, width: '100%' }}>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Space
+            size={8}
+            wrap
+            style={{ width: '100%', minWidth: 0, justifyContent: 'space-between' }}
+          >
+            <Space size={8} wrap style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, lineHeight: 1.35 }}>
+                {record.ownerName}
+              </div>
+              <Tag
+                color={status?.color || 'default'}
+                style={{ marginRight: 0, width: 'fit-content' }}
+              >
+                {status?.text || record.status}
+              </Tag>
+            </Space>
+            <Text
+              type="secondary"
+              style={{
+                fontSize: 12,
+                minWidth: 0,
+                display: 'block',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+                lineHeight: 1.4,
+                flex: '1 1 auto',
+                textAlign: 'right',
+              }}
+            >
+              {record.village.town.name} · {record.village.name}
+            </Text>
+          </Space>
+
+          <Text
+            type="secondary"
+            style={{
+              fontSize: 12,
+              width: '100%',
+              minWidth: 0,
+              display: 'block',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              lineHeight: 1.4,
+            }}
+          >
+            不动产单元号：{record.certNo}
+          </Text>
+
+          <Space size={12} wrap>
+            <Text>建筑面积 {record.area} ㎡</Text>
+            <Text>用途 {record.landUseType}</Text>
+          </Space>
+
+          <Text
+            type="secondary"
+            style={{
+              width: '100%',
+              minWidth: 0,
+              display: 'block',
+              overflowWrap: 'anywhere',
+              wordBreak: 'break-word',
+              lineHeight: 1.4,
+            }}
+          >
+            不动产权证书号：{record.certNos || record.certNo}
+          </Text>
+
+          <Text type="secondary" ellipsis={{ tooltip: record.address }}>
+            地址：{record.address}
+          </Text>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 8,
+            }}
+          >
+            <Button block onClick={() => loadBdcDetail(record.id)}>
+              详情
+            </Button>
+            <Button
+              block
+              onClick={() => {
+                setEditingBdc(record)
+                form.setFieldsValue(record)
+                setModalVisible(true)
+              }}
+            >
+              编辑
+            </Button>
+          </div>
+        </Space>
+      </Card>
+    )
+  }
+
   return (
     <PageContainer
       title="宅基地管理"
@@ -344,6 +454,7 @@ export default function BdcPage() {
         <Button
           type="primary"
           icon={<PlusOutlined />}
+          block={isMobile}
           onClick={() => {
             setEditingBdc(null)
             form.resetFields()
@@ -358,12 +469,17 @@ export default function BdcPage() {
       skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无宅基地档案"
     >
-      <Form form={queryForm} layout="inline" onFinish={handleQuery} style={{ marginBottom: 16 }}>
+      <Form
+        form={queryForm}
+        layout={isMobile ? 'vertical' : 'inline'}
+        onFinish={handleQuery}
+        style={{ marginBottom: 16 }}
+      >
         <Form.Item name="keyword" label="关键字">
-          <Input placeholder="姓名/证书/地址" style={{ width: 140 }} />
+          <Input placeholder="姓名/证书/地址" style={{ width: isMobile ? '100%' : 140 }} />
         </Form.Item>
         <Form.Item name="status" label="状态">
-          <Select placeholder="全部" allowClear style={{ width: 120 }}>
+          <Select placeholder="全部" allowClear style={{ width: isMobile ? '100%' : 120 }}>
             <Select.Option value="PENDING">待审核</Select.Option>
             <Select.Option value="ISSUED">已发放</Select.Option>
             <Select.Option value="RETURNED">已退件</Select.Option>
@@ -374,7 +490,7 @@ export default function BdcPage() {
           <Select
             placeholder="全部"
             allowClear
-            style={{ width: 140 }}
+            style={{ width: isMobile ? '100%' : 140 }}
             onChange={(val) => {
               setSelectedTownId(val || '')
               queryForm.setFieldValue('villageId', undefined)
@@ -388,7 +504,12 @@ export default function BdcPage() {
           </Select>
         </Form.Item>
         <Form.Item name="villageId" label="村居">
-          <Select placeholder="全部" allowClear style={{ width: 140 }} disabled={!selectedTownId}>
+          <Select
+            placeholder="全部"
+            allowClear
+            style={{ width: isMobile ? '100%' : 140 }}
+            disabled={!selectedTownId}
+          >
             {villages.map((v) => (
               <Select.Option key={v.id} value={v.id}>
                 {v.name}
@@ -397,42 +518,62 @@ export default function BdcPage() {
           </Select>
         </Form.Item>
         <Form.Item name="acceptDateRange" label="受理日期">
-          <DatePicker.RangePicker style={{ width: 220 }} />
+          <DatePicker.RangePicker style={{ width: isMobile ? '100%' : 220 }} />
         </Form.Item>
         <Form.Item>
-          <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
-            查询
-          </Button>
-          <Button
-            style={{ marginLeft: 8 }}
-            onClick={() => {
-              queryForm.resetFields()
-              setSelectedTownId('')
-              loadBdcs()
-            }}
-          >
-            重置
-          </Button>
+          <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} block={isMobile}>
+              查询
+            </Button>
+            <Button
+              block={isMobile}
+              onClick={() => {
+                queryForm.resetFields()
+                setSelectedTownId('')
+                loadBdcs()
+              }}
+            >
+              重置
+            </Button>
+          </Space>
         </Form.Item>
       </Form>
 
-      <Table
-        columns={columns}
-        dataSource={bdcs}
-        rowKey="id"
-        loading={loading}
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total,
-          onChange: (page, size) => {
-            setCurrentPage(page)
-            setPageSize(size)
-            loadBdcs(page, size)
-          },
-        }}
-      />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {bdcs.map(renderMobileCard)}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger={false}
+              onChange={(page) => {
+                setCurrentPage(page)
+                loadBdcs(page, pageSize)
+              }}
+            />
+          </div>
+        </Space>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={bdcs}
+          rowKey="id"
+          loading={loading}
+          scroll={{ x: 'max-content' }}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total,
+            onChange: (page, size) => {
+              setCurrentPage(page)
+              setPageSize(size)
+              loadBdcs(page, size)
+            },
+          }}
+        />
+      )}
 
       {/* 创建/编辑模态框 */}
       <Modal
@@ -444,15 +585,17 @@ export default function BdcPage() {
           form.resetFields()
         }}
         footer={null}
-        width={800}
+        width={isMobile ? 'calc(100vw - 24px)' : 800}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item
             name="certNo"
-            label="证书编号"
+            label="不动产单元号"
             rules={[
-              { required: true, message: '请输入证书编号' },
-              { pattern: /^[0-9]+$/, message: '证书编号必须为数字' },
+              { required: true, message: '请输入不动产单元号' },
+              { pattern: /^[0-9]+$/, message: '不动产单元号必须为数字' },
             ]}
           >
             <Input disabled={!!editingBdc} />
@@ -502,10 +645,10 @@ export default function BdcPage() {
 
           <Form.Item
             name="area"
-            label="面积（平方米）"
+            label="建筑面积（平方米）"
             rules={[
-              { required: true, message: '请输入面积' },
-              { type: 'number', min: 0, message: '面积必须大于 0' },
+              { required: true, message: '请输入建筑面积' },
+              { type: 'number', min: 0, message: '建筑面积必须大于 0' },
             ]}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
@@ -554,25 +697,28 @@ export default function BdcPage() {
           setDetailBdc(null)
         }}
         footer={null}
-        width={1000}
+        width={isMobile ? 'calc(100vw - 24px)' : 1000}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {detailBdc && (
           <Tabs
             defaultActiveKey="info"
+            tabBarGutter={isMobile ? 12 : undefined}
             items={[
               {
                 key: 'info',
                 label: '档案信息',
                 children: (
-                  <Descriptions bordered column={2}>
-                    <Descriptions.Item label="证书编号">{detailBdc.certNo}</Descriptions.Item>
+                  <Descriptions bordered column={isMobile ? 1 : 2}>
+                    <Descriptions.Item label="不动产单元号">{detailBdc.certNo}</Descriptions.Item>
                     <Descriptions.Item label="使用权人">{detailBdc.ownerName}</Descriptions.Item>
                     <Descriptions.Item label="身份证号">{detailBdc.idCard}</Descriptions.Item>
                     <Descriptions.Item label="手机号">{detailBdc.phone || '-'}</Descriptions.Item>
                     <Descriptions.Item label="地址" span={2}>
                       {detailBdc.address}
                     </Descriptions.Item>
-                    <Descriptions.Item label="面积">{detailBdc.area} ㎡</Descriptions.Item>
+                    <Descriptions.Item label="建筑面积">{detailBdc.area} ㎡</Descriptions.Item>
                     <Descriptions.Item label="土地用途">{detailBdc.landUseType}</Descriptions.Item>
                     <Descriptions.Item label="所属镇街">
                       {detailBdc.village.town.name}

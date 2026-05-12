@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Card,
@@ -15,12 +15,11 @@ import {
   Spin,
   Typography,
   Divider,
+  Grid,
 } from 'antd'
 import { ArrowLeftOutlined, SaveOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
 import { authFetch } from '@/lib/api-fetch'
-
-const { Text } = Typography
 
 interface WorkflowStep {
   stepOrder: number
@@ -48,19 +47,15 @@ const STEP_TYPES = [
 export default function WorkflowEditPage() {
   const params = useParams()
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [workflow, setWorkflow] = useState<Workflow | null>(null)
   const [form] = Form.useForm()
   const isNew = params.id === 'new'
 
-  useEffect(() => {
-    if (!isNew && params.id) {
-      loadWorkflow()
-    }
-  }, [params.id])
-
-  const loadWorkflow = async () => {
+  const loadWorkflow = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch(`/api/objection-workflow/${params.id}`)
@@ -76,7 +71,13 @@ export default function WorkflowEditPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [form, params.id])
+
+  useEffect(() => {
+    if (!isNew && params.id) {
+      loadWorkflow()
+    }
+  }, [isNew, loadWorkflow, params.id])
 
   const handleSave = async () => {
     try {
@@ -119,23 +120,34 @@ export default function WorkflowEditPage() {
   return (
     <PageContainer
       title={isNew ? '新建流程' : '编辑流程'}
-      extra={[
-        <Button key="back" icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
-          返回
-        </Button>,
-        <Button
-          key="save"
-          type="primary"
-          icon={<SaveOutlined />}
-          onClick={handleSave}
-          loading={saving}
+      extra={
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
         >
-          保存
-        </Button>,
-      ]}
+          <Button
+            key="back"
+            icon={<ArrowLeftOutlined />}
+            onClick={() => router.back()}
+            block={isMobile}
+          >
+            返回
+          </Button>
+          <Button
+            key="save"
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleSave}
+            loading={saving}
+            block={isMobile}
+          >
+            保存
+          </Button>
+        </Space>
+      }
     >
       <Form form={form} layout="vertical">
-        <Card title="基本信息">
+        <Card title="基本信息" size={isMobile ? 'small' : undefined}>
           <Form.Item
             name="name"
             label="流程名称"
@@ -153,7 +165,7 @@ export default function WorkflowEditPage() {
           )}
         </Card>
 
-        <Card title="流程步骤">
+        <Card title="流程步骤" size={isMobile ? 'small' : undefined}>
           <Form.List name="steps">
             {(fields, { add, remove }) => (
               <>
@@ -169,7 +181,12 @@ export default function WorkflowEditPage() {
                 <Divider />
                 {fields.map(({ key, name, ...restField }) => (
                   <Card key={key} size="small" style={{ marginBottom: 16 }}>
-                    <Space align="start" wrap>
+                    <Space
+                      direction={isMobile ? 'vertical' : 'horizontal'}
+                      align="start"
+                      wrap={!isMobile}
+                      style={{ width: '100%' }}
+                    >
                       <Form.Item
                         {...restField}
                         name={[name, 'stepOrder']}
@@ -183,16 +200,22 @@ export default function WorkflowEditPage() {
                         name={[name, 'stepName']}
                         label="步骤名称"
                         rules={[{ required: true, message: '请输入步骤名称' }]}
+                        style={{ width: isMobile ? '100%' : undefined }}
                       >
-                        <Input placeholder="如：初审" style={{ width: 120 }} maxLength={20} />
+                        <Input
+                          placeholder="如：初审"
+                          style={{ width: isMobile ? '100%' : 120 }}
+                          maxLength={20}
+                        />
                       </Form.Item>
                       <Form.Item
                         {...restField}
                         name={[name, 'stepType']}
                         label="步骤类型"
                         rules={[{ required: true, message: '请选择步骤类型' }]}
+                        style={{ width: isMobile ? '100%' : undefined }}
                       >
-                        <Select placeholder="选择类型" style={{ width: 120 }}>
+                        <Select placeholder="选择类型" style={{ width: isMobile ? '100%' : 120 }}>
                           {STEP_TYPES.map((type) => (
                             <Select.Option key={type.value} value={type.value}>
                               {type.label}
@@ -200,8 +223,17 @@ export default function WorkflowEditPage() {
                           ))}
                         </Select>
                       </Form.Item>
-                      <Form.Item {...restField} name={[name, 'approverRole']} label="审批角色">
-                        <Select placeholder="选择角色（可选）" style={{ width: 120 }} allowClear>
+                      <Form.Item
+                        {...restField}
+                        name={[name, 'approverRole']}
+                        label="审批角色"
+                        style={{ width: isMobile ? '100%' : undefined }}
+                      >
+                        <Select
+                          placeholder="选择角色（可选）"
+                          style={{ width: isMobile ? '100%' : 120 }}
+                          allowClear
+                        >
                           <Select.Option value="ADMIN">管理员</Select.Option>
                           <Select.Option value="OBJECTION_HANDLER">异议处理员</Select.Option>
                           <Select.Option value="RECEIVE_CLERK">领证员</Select.Option>
@@ -221,6 +253,7 @@ export default function WorkflowEditPage() {
                         icon={<DeleteOutlined />}
                         onClick={() => remove(name)}
                         disabled={fields.length <= 1}
+                        block={isMobile}
                       >
                         删除
                       </Button>

@@ -8,7 +8,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { hasAnyRole, getUserFromRequest } from '@/lib/middleware/auth'
-import { getDataPermissionFilter } from '@/lib/auth'
 import { logOperation } from '@/lib/log'
 
 const createVillageSchema = z.object({
@@ -51,7 +50,11 @@ export async function GET(request: NextRequest) {
           },
         },
         _count: {
-          select: { bdcs: true },
+          select: {
+            bdcs: true,
+            users: true,
+            collectiveCerts: true,
+          },
         },
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],

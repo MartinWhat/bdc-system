@@ -58,8 +58,8 @@ model SysUser {
   displayUsername  String?
   passwordHash     String
   realName         String
-  idCard           String?
   phone            String?
+  fixedPhone       String?
   email            String?
   avatar           String?
   emailVerified    Boolean            @default(false)
@@ -81,7 +81,7 @@ model SysUser {
 
   @@index([villageId])
   @@index([status, createdAt])
-  @@index([idCard])
+  @@index([fixedPhone])
   @@index([phone])
   @@map("sys_user")
 }

@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Upload,
@@ -12,8 +13,8 @@ import {
   Popconfirm,
   Input,
   Select,
-  Card,
   Progress,
+  Pagination,
 } from 'antd'
 import {
   PlusOutlined,
@@ -78,7 +79,8 @@ const formatFileSize = (bytes?: number | null) => {
 }
 
 export default function AttachmentsPage() {
-  const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [total, setTotal] = useState(0)
@@ -88,10 +90,6 @@ export default function AttachmentsPage() {
   const [fileType, setFileType] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadModalVisible, setUploadModalVisible] = useState(false)
-
-  useEffect(() => {
-    fetchAttachments()
-  }, [page, pageSize, keyword, fileType])
 
   const fetchAttachments = useCallback(async () => {
     setLoading(true)
@@ -109,13 +107,17 @@ export default function AttachmentsPage() {
         setAttachments(data.data.list)
         setTotal(data.data.total)
       }
-    } catch (error) {
-      console.error('Fetch attachments error:', error)
+    } catch {
+      console.error('Fetch attachments error')
       message.error('加载附件列表失败')
     } finally {
       setLoading(false)
     }
   }, [page, pageSize, keyword, fileType])
+
+  useEffect(() => {
+    fetchAttachments()
+  }, [fetchAttachments])
 
   const handleDelete = async (id: string) => {
     try {
@@ -129,10 +131,46 @@ export default function AttachmentsPage() {
       } else {
         message.error(data.error)
       }
-    } catch (error) {
+    } catch {
       message.error('删除失败')
     }
   }
+
+  const renderActions = (record: Attachment) => (
+    <Space wrap size={isMobile ? 6 : 8}>
+      <a href={record.url} target="_blank" rel="noopener noreferrer">
+        查看
+      </a>
+      <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
+        <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+          删除
+        </Button>
+      </Popconfirm>
+    </Space>
+  )
+
+  const renderMobileCard = (record: Attachment) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Space>
+            {getFileTypeIcon(record.fileType)}
+            <a href={record.url} target="_blank" rel="noopener noreferrer">
+              {record.name}
+            </a>
+          </Space>
+          <Tag color="blue">{record.fileType.toUpperCase()}</Tag>
+        </Space>
+        <Space size={12} wrap>
+          <Tag>{formatFileSize(record.fileSize)}</Tag>
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+            {new Date(record.createdAt).toLocaleString('zh-CN')}
+          </span>
+        </Space>
+        {renderActions(record)}
+      </Space>
+    </Card>
+  )
 
   const uploadProps: UploadProps = {
     name: 'file',
@@ -182,11 +220,11 @@ export default function AttachmentsPage() {
           onSuccess?.(data)
         } else {
           message.error(data.error)
-          onError?.(data as any)
+          onError?.(new Error(data.error || '上传失败'))
         }
       } catch (error) {
         message.error('上传失败')
-        onError?.(error as any)
+        onError?.(error instanceof Error ? error : new Error('上传失败'))
       } finally {
         setUploading(false)
       }
@@ -244,18 +282,7 @@ export default function AttachmentsPage() {
       title: '操作',
       key: 'action',
       width: 150,
-      render: (_: unknown, record: Attachment) => (
-        <Space>
-          <a href={record.url} target="_blank" rel="noopener noreferrer">
-            查看
-          </a>
-          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="link" danger size="small" icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_: unknown, record: Attachment) => renderActions(record),
     },
   ]
 
@@ -264,49 +291,71 @@ export default function AttachmentsPage() {
       title="附件库"
       subTitle="管理和查看系统中的附件文件"
       extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadModalVisible(true)}>
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setUploadModalVisible(true)}
+          block={isMobile}
+        >
           上传附件
         </Button>
       }
     >
       <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
+        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
           <Input
             placeholder="搜索文件名"
             prefix={<SearchOutlined />}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200 }}
             allowClear
           />
           <Select
             options={fileTypeOptions}
             value={fileType}
             onChange={setFileType}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
           />
         </Space>
       </Card>
 
       <Card>
-        <Table
-          columns={columns}
-          dataSource={attachments}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (t) => `共 ${t} 条`,
-            onChange: (p, ps) => {
-              setPage(p)
-              setPageSize(ps)
-            },
-          }}
-        />
+        {isMobile ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            {attachments.map(renderMobileCard)}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+              <Pagination
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger={false}
+                onChange={(p) => {
+                  setPage(p)
+                }}
+              />
+            </div>
+          </Space>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={attachments}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (t) => `共 ${t} 条`,
+              onChange: (p, ps) => {
+                setPage(p)
+                setPageSize(ps)
+              },
+            }}
+          />
+        )}
       </Card>
 
       {/* 上传对话框 */}
@@ -314,11 +363,21 @@ export default function AttachmentsPage() {
         <Card
           style={{
             position: 'fixed',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
             zIndex: 1000,
-            width: 500,
+            ...(isMobile
+              ? {
+                  top: 12,
+                  left: 12,
+                  right: 12,
+                  width: 'calc(100vw - 24px)',
+                  transform: 'none',
+                }
+              : {
+                  top: '50%',
+                  left: '50%',
+                  width: 500,
+                  transform: 'translate(-50%, -50%)',
+                }),
           }}
         >
           <h3>上传附件</h3>
@@ -330,8 +389,10 @@ export default function AttachmentsPage() {
             <p className="ant-upload-hint">支持 PDF、Word、Excel 和图片文件，单个文件不超过 50MB</p>
           </Dragger>
           <div style={{ marginTop: 16, textAlign: 'right' }}>
-            <Space>
-              <Button onClick={() => setUploadModalVisible(false)}>取消</Button>
+            <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+              <Button block={isMobile} onClick={() => setUploadModalVisible(false)}>
+                取消
+              </Button>
             </Space>
           </div>
           {uploading && <Progress percent={50} status="active" style={{ marginTop: 16 }} />}

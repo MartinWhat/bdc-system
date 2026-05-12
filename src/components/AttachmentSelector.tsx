@@ -5,8 +5,8 @@
 
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { Modal, Table, Input, Select, Tag, Space, Button, Card } from 'antd'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Modal, Table, Input, Select, Tag, Space, Button, Grid } from 'antd'
 import {
   SearchOutlined,
   FilePdfOutlined,
@@ -66,6 +66,9 @@ export function AttachmentSelector({
   onSelect,
   fileTypeFilter,
 }: AttachmentSelectorProps) {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
+  const allowedFileTypes = fileTypeFilter?.map((type) => type.toLowerCase())
   const [loading, setLoading] = useState(false)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [total, setTotal] = useState(0)
@@ -74,13 +77,7 @@ export function AttachmentSelector({
   const [keyword, setKeyword] = useState('')
   const [fileType, setFileType] = useState('')
 
-  useEffect(() => {
-    if (open) {
-      fetchAttachments()
-    }
-  }, [open, page, keyword, fileType])
-
-  const fetchAttachments = async () => {
+  const fetchAttachments = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -96,12 +93,18 @@ export function AttachmentSelector({
         setAttachments(data.data.list)
         setTotal(data.data.total)
       }
-    } catch (error) {
-      console.error('Fetch attachments error:', error)
+    } catch {
+      console.error('Fetch attachments error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, pageSize, keyword, fileType])
+
+  useEffect(() => {
+    if (open) {
+      fetchAttachments()
+    }
+  }, [open, fetchAttachments])
 
   const handleSelect = (record: Attachment) => {
     onSelect(record.url, record.name)
@@ -171,25 +174,36 @@ export function AttachmentSelector({
     { label: 'Word', value: 'doc' },
     { label: 'Excel', value: 'xls' },
     { label: '图片', value: 'image' },
-  ]
+  ].filter(
+    (option) => !allowedFileTypes || option.value === '' || allowedFileTypes.includes(option.value),
+  )
 
   return (
-    <Modal title="选择附件" open={open} onCancel={onClose} footer={null} width={800} destroyOnClose>
+    <Modal
+      title="选择附件"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={isMobile ? 'calc(100vw - 24px)' : 800}
+      style={isMobile ? { top: 12 } : undefined}
+      centered={!isMobile}
+      destroyOnClose
+    >
       <div style={{ marginBottom: 16 }}>
-        <Space wrap>
+        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
           <Input
             placeholder="搜索文件名"
             prefix={<SearchOutlined />}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200 }}
             allowClear
           />
           <Select
             options={fileTypeOptions}
             value={fileType}
             onChange={setFileType}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
           />
         </Space>
       </div>
@@ -199,13 +213,14 @@ export function AttachmentSelector({
         dataSource={attachments}
         rowKey="id"
         loading={loading}
+        scroll={{ x: 'max-content' }}
         pagination={{
           current: page,
           pageSize,
           total,
-          showSizeChanger: true,
-          showQuickJumper: true,
-          showTotal: (t) => `共 ${t} 条`,
+          showSizeChanger: !isMobile,
+          showQuickJumper: !isMobile,
+          showTotal: (t) => (isMobile ? undefined : `共 ${t} 条`),
           onChange: (p) => setPage(p),
         }}
         onRow={(record: Attachment) => ({

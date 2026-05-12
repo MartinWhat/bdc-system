@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Card, Typography, Tag, Space, Button, Spin } from 'antd'
+import { Card, Typography, Tag, Space, Button, Spin, Grid } from 'antd'
 import {
   ArrowLeftOutlined,
   CalendarOutlined,
@@ -58,18 +58,14 @@ interface NotificationDetail {
 export default function NotificationDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(true)
   const [notification, setNotification] = useState<NotificationDetail | null>(null)
 
   const id = params.id as string
 
-  useEffect(() => {
-    if (id) {
-      fetchNotification()
-    }
-  }, [id])
-
-  const fetchNotification = async () => {
+  const fetchNotification = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch(`/api/notifications/${id}`)
@@ -77,12 +73,18 @@ export default function NotificationDetailPage() {
       if (data.success) {
         setNotification(data.data)
       }
-    } catch (error) {
-      console.error('Fetch notification error:', error)
+    } catch {
+      console.error('Fetch notification error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    if (id) {
+      fetchNotification()
+    }
+  }, [id, fetchNotification])
 
   if (loading) {
     return (
@@ -108,15 +110,15 @@ export default function NotificationDetailPage() {
     <PageContainer
       title="通知详情"
       extra={
-        <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()} block={isMobile}>
           返回
         </Button>
       }
     >
-      <Card>
+      <Card size={isMobile ? 'small' : undefined}>
         <div style={{ maxWidth: 800 }}>
           <div style={{ marginBottom: 16 }}>
-            <Space size={4} style={{ marginBottom: 8 }}>
+            <Space size={4} wrap style={{ marginBottom: 8 }}>
               {notification.isPinned && <Tag color="gold">置顶</Tag>}
               {notification.isPopup && <Tag color="orange">弹窗提醒</Tag>}
               <Tag color={priorityColors[notification.priority]}>
@@ -142,7 +144,8 @@ export default function NotificationDetailPage() {
           <div
             style={{
               display: 'flex',
-              gap: 24,
+              flexDirection: isMobile ? 'column' : 'row',
+              gap: isMobile ? 8 : 24,
               marginBottom: 24,
               paddingBottom: 16,
               borderBottom: '1px solid #f0f0f0',
@@ -203,12 +206,17 @@ export default function NotificationDetailPage() {
                   <iframe
                     src={notification.pdfUrl}
                     width="100%"
-                    height="600px"
+                    height={isMobile ? '420px' : '600px'}
                     style={{ border: 'none' }}
                     title="PDF 预览"
                   />
                 </div>
-                <Button href={notification.pdfUrl} target="_blank" icon={<DownloadOutlined />}>
+                <Button
+                  href={notification.pdfUrl}
+                  target="_blank"
+                  icon={<DownloadOutlined />}
+                  block={isMobile}
+                >
                   下载 PDF
                 </Button>
               </Space>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Layout, Menu, Typography, Avatar, Dropdown, Modal, theme } from 'antd'
+import { Layout, Menu, Typography, Avatar, Dropdown, Modal, Drawer, theme } from 'antd'
 import type { MenuProps } from 'antd'
 import { motion } from 'framer-motion'
 import {
@@ -19,6 +19,7 @@ import {
   FolderOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MenuOutlined,
 } from '@ant-design/icons'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store/auth'
@@ -161,6 +162,7 @@ function filterMenuByPermission(
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [reLoginModalVisible, setReLoginModalVisible] = useState(false)
   const [loading, setLoading] = useState(true)
   const pathname = usePathname()
@@ -178,6 +180,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
     return unsubscribe
   }, [clearAuth])
+
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [pathname])
 
   // 通过 API 加载用户信息（Better Auth session）
   useEffect(() => {
@@ -264,11 +270,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const menuItems = filterMenuByPermission(ALL_MENU_ITEMS, user?.permissions || [])
 
   return (
-    <Layout style={{ minHeight: '100vh', background: token.colorBgLayout }}>
+    <Layout className="app-shell" style={{ minHeight: '100vh', background: token.colorBgLayout }}>
       <Sider
+        className="app-shell-sider"
         collapsed={collapsed}
         onCollapse={setCollapsed}
         breakpoint="lg"
+        collapsedWidth={0}
         width={200}
         style={{
           background: isDark ? token.colorBgContainer : '#fff',
@@ -302,6 +310,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </Sider>
       <Layout style={{ background: token.colorBgLayout }}>
         <Header
+          className="app-shell-header"
           style={{
             background: token.colorBgContainer,
             padding: '0 24px',
@@ -309,10 +318,26 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             justifyContent: 'space-between',
             alignItems: 'center',
             borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            gap: 16,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="app-shell-header__brand">
+            <span
+              className="mobile-only"
+              onClick={() => setMobileMenuOpen(true)}
+              style={{
+                fontSize: 18,
+                cursor: 'pointer',
+                color: token.colorText,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <MenuOutlined />
+            </span>
             <motion.span
+              className="desktop-only"
               onClick={() => setCollapsed(!collapsed)}
               style={{
                 fontSize: 18,
@@ -326,32 +351,41 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
             </motion.span>
             <motion.div
+              className="app-shell-header__titleWrap"
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Title level={4} style={{ margin: 0, color: token.colorTextHeading }}>
+              <Title
+                level={4}
+                className="app-shell-header__title"
+                style={{ color: token.colorTextHeading }}
+              >
                 不动产证书管理系统
               </Title>
             </motion.div>
-            <ThemeToggle />
+            <div className="desktop-only">
+              <ThemeToggle />
+            </div>
           </div>
           <Dropdown menu={{ items: userMenuItems }}>
             <motion.div
-              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+              className="app-shell-header__user"
+              style={{ cursor: 'pointer' }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
               <Avatar icon={<UserOutlined />} />
-              <span style={{ color: token.colorText }}>{user?.realName || user?.username}</span>
+              <span className="app-shell-header__userName" style={{ color: token.colorText }}>
+                {user?.realName || user?.username}
+              </span>
             </motion.div>
           </Dropdown>
         </Header>
         <Content
+          className="app-shell-content"
           style={{
-            margin: '24px 16px',
             background: token.colorBgContainer,
-            padding: 24,
             minHeight: 280,
             borderRadius: token.borderRadiusLG,
           }}
@@ -373,6 +407,29 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       >
         <p>您的登录状态已过期，需要重新登录才能继续使用系统。</p>
       </Modal>
+
+      <Drawer
+        title="系统菜单"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        placement="left"
+        width={280}
+        bodyStyle={{ padding: 0 }}
+      >
+        <Menu
+          theme={isDark ? 'dark' : 'light'}
+          mode="inline"
+          selectedKeys={[pathname]}
+          items={menuItems}
+          onClick={({ key }) => {
+            router.push(key)
+            setMobileMenuOpen(false)
+          }}
+          style={{
+            borderInlineEnd: 'none',
+          }}
+        />
+      </Drawer>
 
       <FloatingButtons />
     </Layout>

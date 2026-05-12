@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Card,
+  Grid,
   Row,
   Col,
   Statistic,
@@ -10,7 +11,6 @@ import {
   Space,
   Typography,
   Spin,
-  Table,
   Tag,
   Button,
   message,
@@ -26,7 +26,6 @@ import {
   DownOutlined,
 } from '@ant-design/icons'
 import { Pie, Bar, Line } from '@ant-design/charts'
-import dayjs from 'dayjs'
 import PageContainer from '@/components/PageContainer'
 import TownVillageCascader from '@/components/TownVillageCascader'
 import { authFetch } from '@/lib/api-fetch'
@@ -72,6 +71,8 @@ interface TrendData {
 }
 
 export default function StatsPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<StatsData | null>(null)
   const [trendData, setTrendData] = useState<TrendData | null>(null)
@@ -157,40 +158,19 @@ export default function StatsPage() {
     innerRadius: 0.6,
     label: {
       text: 'count',
-      style: { fontWeight: 'bold' },
+      style: { fontWeight: 'bold', fontSize: isMobile ? 10 : 12 },
     },
     legend: {
-      position: 'right' as const,
+      position: isMobile ? 'top' : 'right',
     },
     annotations: [
       {
         type: 'text',
-        style: { text: 'text', fontSize: 14, fontWeight: 'bold' },
+        style: { text: 'text', fontSize: isMobile ? 12 : 14, fontWeight: 'bold' },
         content: '总计',
       },
     ],
-    height,
-  })
-
-  // 柱状图配置
-  const barConfig = (
-    data: Array<{ townName: string; bdcCount: number; certCount: number }>,
-    height = 300,
-  ) => ({
-    data,
-    xField: 'townName',
-    yField: 'value',
-    seriesField: 'type',
-    isGroup: true,
-    groupField: 'type',
-    label: {
-      text: 'value',
-      style: { fontSize: 10 },
-    },
-    legend: {
-      position: 'top' as const,
-    },
-    height,
+    height: isMobile ? 220 : height,
   })
 
   // 转换镇街数据为图表格式
@@ -234,7 +214,7 @@ export default function StatsPage() {
       smooth: true,
       label: {
         text: 'value',
-        style: { fontSize: 10, fill: '#aaa' },
+        style: { fontSize: isMobile ? 9 : 10, fill: '#aaa' },
       },
       legend: {
         position: 'top' as const,
@@ -247,7 +227,7 @@ export default function StatsPage() {
         shape: 'circle',
       },
       tickCount,
-      height: 300,
+      height: isMobile ? 240 : 300,
     }
   }
 
@@ -297,24 +277,29 @@ export default function StatsPage() {
     <PageContainer
       title="统计报表"
       extra={
-        <Space>
-          <TownVillageCascader
-            value={
-              filterTownId
-                ? filterVillageId
-                  ? [filterTownId, filterVillageId]
-                  : [filterTownId]
-                : undefined
-            }
-            onChange={(value) => {
-              setFilterTownId(value[0] || '')
-              setFilterVillageId(value[1] || '')
-            }}
-          />
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
+        >
+          <div style={{ width: isMobile ? '100%' : 240 }}>
+            <TownVillageCascader
+              value={
+                filterTownId
+                  ? filterVillageId
+                    ? [filterTownId, filterVillageId]
+                    : [filterTownId]
+                  : undefined
+              }
+              onChange={(value) => {
+                setFilterTownId(value[0] || '')
+                setFilterVillageId(value[1] || '')
+              }}
+            />
+          </div>
           <Select
             value={trendType}
             onChange={setTrendType}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
             options={[
               { value: 'daily', label: '按日' },
               { value: 'weekly', label: '按周' },
@@ -322,13 +307,16 @@ export default function StatsPage() {
               { value: 'yearly', label: '按年' },
             ]}
           />
-          <ReloadOutlined
+          <Button
+            icon={<ReloadOutlined />}
             onClick={() => {
               loadStats()
               loadTrend()
             }}
-            style={{ fontSize: 16, cursor: 'pointer' }}
-          />
+            block={isMobile}
+          >
+            刷新
+          </Button>
           <Dropdown
             menu={{
               items: [
@@ -371,7 +359,7 @@ export default function StatsPage() {
               ],
             }}
           >
-            <Button icon={<DownloadOutlined />}>
+            <Button icon={<DownloadOutlined />} block={isMobile}>
               导出报表 <DownOutlined />
             </Button>
           </Dropdown>
@@ -379,9 +367,9 @@ export default function StatsPage() {
       }
     >
       {/* 概览统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24} sm={12} xl={6}>
+          <Card size={isMobile ? 'small' : undefined}>
             <Statistic
               title="宅基地总数"
               value={stats?.overview.totalBdc || 0}
@@ -390,8 +378,8 @@ export default function StatsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={24} sm={12} xl={6}>
+          <Card size={isMobile ? 'small' : undefined}>
             <Statistic
               title="村集体证书总数"
               value={stats?.overview.totalCert || 0}
@@ -400,8 +388,8 @@ export default function StatsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={24} sm={12} xl={6}>
+          <Card size={isMobile ? 'small' : undefined}>
             <Statistic
               title="本月新增宅基地"
               value={stats?.overview.thisMonthBdc || 0}
@@ -410,8 +398,8 @@ export default function StatsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={24} sm={12} xl={6}>
+          <Card size={isMobile ? 'small' : undefined}>
             <Statistic
               title="待处理任务"
               value={pendingTasks?.total || 0}
@@ -423,10 +411,14 @@ export default function StatsPage() {
       </Row>
 
       {/* 待处理任务详情 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col span={24}>
           <Card title="待处理任务" size="small">
-            <Space size="large">
+            <Space
+              direction={isMobile ? 'vertical' : 'horizontal'}
+              size={isMobile ? 8 : 'large'}
+              style={{ width: '100%' }}
+            >
               <Text>
                 待审核宅基地：<Tag color="blue">{pendingTasks?.pendingBdc || 0}</Tag>
               </Text>
@@ -445,12 +437,12 @@ export default function StatsPage() {
       </Row>
 
       {/* 图表区域 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         {/* 宅基地状态分布 */}
-        <Col span={8}>
-          <Card title="宅基地状态分布">
+        <Col xs={24} lg={8}>
+          <Card title="宅基地状态分布" size={isMobile ? 'small' : undefined}>
             {stats?.bdcStatus && stats.bdcStatus.length > 0 ? (
-              <Pie {...pieConfig(stats.bdcStatus)} />
+              <Pie {...pieConfig(stats.bdcStatus, 260)} />
             ) : (
               <div style={{ height: 280, textAlign: 'center', lineHeight: '280px', color: '#999' }}>
                 暂无数据
@@ -460,10 +452,10 @@ export default function StatsPage() {
         </Col>
 
         {/* 村集体证书状态分布 */}
-        <Col span={8}>
-          <Card title="村集体证书状态分布">
+        <Col xs={24} lg={8}>
+          <Card title="村集体证书状态分布" size={isMobile ? 'small' : undefined}>
             {stats?.certStatus && stats.certStatus.length > 0 ? (
-              <Pie {...pieConfig(stats.certStatus)} />
+              <Pie {...pieConfig(stats.certStatus, 260)} />
             ) : (
               <div style={{ height: 280, textAlign: 'center', lineHeight: '280px', color: '#999' }}>
                 暂无数据
@@ -473,19 +465,19 @@ export default function StatsPage() {
         </Col>
 
         {/* 操作概览 */}
-        <Col span={8}>
-          <Card title="各镇街统计">
+        <Col xs={24} lg={8}>
+          <Card title="各镇街统计" size={isMobile ? 'small' : undefined}>
             {stats?.townStats && stats.townStats.length > 0 ? (
               <Bar
                 data={townChartData()}
-                height={280}
+                height={isMobile ? 240 : 280}
                 xField="townName"
                 yField="value"
                 seriesField="type"
                 isGroup
                 groupField="type"
                 label={{ text: 'value', style: { fontSize: 10 } }}
-                legend={{ position: 'right' }}
+                legend={{ position: isMobile ? 'top' : 'right' }}
               />
             ) : (
               <div style={{ height: 280, textAlign: 'center', lineHeight: '280px', color: '#999' }}>
@@ -497,13 +489,20 @@ export default function StatsPage() {
       </Row>
 
       {/* 趋势分析 */}
-      <Row gutter={16}>
+      <Row gutter={[16, 16]}>
         <Col span={24}>
-          <Card title="趋势分析">
+          <Card title="趋势分析" size={isMobile ? 'small' : undefined}>
             {trendChartData.length > 0 ? (
               <Line {...trendConfig} data={trendChartData} />
             ) : (
-              <div style={{ height: 300, textAlign: 'center', lineHeight: '300px', color: '#999' }}>
+              <div
+                style={{
+                  height: isMobile ? 240 : 300,
+                  textAlign: 'center',
+                  lineHeight: `${isMobile ? 240 : 300}px`,
+                  color: '#999',
+                }}
+              >
                 暂无数据
               </div>
             )}

@@ -39,19 +39,25 @@ export async function findUserByPhone(phone: string) {
 }
 
 /**
- * 通过身份证号查询用户记录
- * @param idCard - 身份证号明文
+ * 通过固定电话查询用户记录
+ * @param fixedPhone - 固定电话明文
  * @returns 用户记录或 null
  */
-export async function findUserByIdCard(idCard: string) {
+export async function findUserByFixedPhone(fixedPhone: string) {
   return prisma.sysUser.findFirst({
-    where: { idCard },
+    where: { fixedPhone },
   })
 }
 
 /**
+ * 兼容旧命名：通过固定电话查询用户记录
+ * @deprecated 请改用 findUserByFixedPhone
+ */
+export const findUserByIdCard = findUserByFixedPhone
+
+/**
  * 构建加密字段查询条件
- * @param fieldName - 字段名（如 idCard, phone）
+ * @param fieldName - 字段名（如 fixedPhone, phone）
  * @param plainValue - 明文值
  * @returns Prisma 查询条件
  */

@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import {
   createUser,
-  findUserByUsername,
   validateUserCredentials,
   getUserPermissions,
   getUserRoles,
@@ -10,16 +9,20 @@ import { prisma } from '@/lib/prisma'
 import { seedTestKeys } from '@/test/helpers'
 import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
 
+const buildTestPhone = (suffix: string) => `138${suffix.slice(-8).padStart(8, '0')}`
+
 describe('用户管理', () => {
   beforeAll(async () => {
     await seedTestKeys()
   })
 
   it('应该创建用户', async () => {
+    const suffix = `${Date.now()}`
     const user = await createUser({
-      username: `testuser_mgmt_${Date.now()}`,
+      username: `testuser_mgmt_${suffix}`,
       password: 'testpass123',
       realName: '测试管理用户',
+      phone: buildTestPhone(suffix),
     })
 
     expect(user.username).toContain('testuser_mgmt')
@@ -82,10 +85,12 @@ describe('数据权限过滤', () => {
   })
 
   it('应该返回 SELF 范围（新用户无额外权限）', async () => {
+    const suffix = `${Date.now()}`
     const user = await createUser({
-      username: `testuser_perm_${Date.now()}`,
+      username: `testuser_perm_${suffix}`,
       password: 'testpass123',
       realName: '测试权限用户',
+      phone: buildTestPhone(suffix),
     })
 
     const filter = await getDataPermissionFilter(user.id)

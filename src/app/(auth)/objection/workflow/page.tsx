@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Table, Button, Modal, Form, Input, Switch, message, Space, Tag, Popconfirm } from 'antd'
-import { PlusOutlined, EditOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
+import { useState, useEffect, useCallback } from 'react'
+import { Card, Grid, Table, Button, message, Space, Tag, Popconfirm } from 'antd'
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useRouter } from 'next/navigation'
 import PageContainer from '@/components/PageContainer'
@@ -28,12 +28,12 @@ interface Workflow {
 
 export default function WorkflowListPage() {
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(false)
-  const [createModalVisible, setCreateModalVisible] = useState(false)
-  const [form] = Form.useForm()
 
-  const loadWorkflows = async () => {
+  const loadWorkflows = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch('/api/objection-workflow')
@@ -46,11 +46,11 @@ export default function WorkflowListPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     loadWorkflows()
-  }, [])
+  }, [loadWorkflows])
 
   const handleCreate = () => {
     router.push('/objection/workflow/new')
@@ -74,6 +74,52 @@ export default function WorkflowListPage() {
       console.error('Delete error:', error)
     }
   }
+
+  const renderWorkflowActions = (record: Workflow) => (
+    <Space wrap size={isMobile ? 6 : 8}>
+      <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+        编辑
+      </Button>
+      <Popconfirm
+        title="确定删除此流程吗？"
+        onConfirm={() => handleDelete(record.id)}
+        okText="确定"
+        cancelText="取消"
+      >
+        <Button type="link" size="small" danger icon={<DeleteOutlined />}>
+          删除
+        </Button>
+      </Popconfirm>
+    </Space>
+  )
+
+  const renderWorkflowCard = (record: Workflow) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Space wrap>
+            <strong>{record.name}</strong>
+            {!record.isActive && <Tag color="red">已禁用</Tag>}
+          </Space>
+          <Tag color="blue">{record.steps.length} 步</Tag>
+        </Space>
+        {record.description ? (
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>{record.description}</span>
+        ) : null}
+        <Space wrap>
+          {record.steps.map((step) => (
+            <Tag key={step.id} color="blue">
+              {step.stepOrder}. {step.stepName}
+            </Tag>
+          ))}
+        </Space>
+        <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+          创建于 {new Date(record.createdAt).toLocaleDateString()}
+        </span>
+        {renderWorkflowActions(record)}
+      </Space>
+    </Card>
+  )
 
   const columns: ColumnsType<Workflow> = [
     {
@@ -150,12 +196,24 @@ export default function WorkflowListPage() {
     <PageContainer
       title="异议处理流程配置"
       extra={[
-        <Button key="create" type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button
+          key="create"
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleCreate}
+          block={isMobile}
+        >
           新建流程
         </Button>,
       ]}
     >
-      <Table columns={columns} dataSource={workflows} rowKey="id" loading={loading} bordered />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {workflows.map(renderWorkflowCard)}
+        </Space>
+      ) : (
+        <Table columns={columns} dataSource={workflows} rowKey="id" loading={loading} bordered />
+      )}
     </PageContainer>
   )
 }

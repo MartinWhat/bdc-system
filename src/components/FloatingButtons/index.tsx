@@ -17,11 +17,11 @@ import { authFetch } from '@/lib/api-fetch'
  */
 export default function FloatingButtons() {
   const router = useRouter()
-  const [visible, setVisible] = useState(false)
   const [showBackToTop, setShowBackToTop] = useState(false)
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false)
   const [feedbackForm] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   // 监听滚动，显示/隐藏返回顶部按钮
   useEffect(() => {
@@ -30,7 +30,18 @@ export default function FloatingButtons() {
     }
 
     window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    handleScroll()
+
+    const mediaQuery = window.matchMedia('(max-width: 991px)')
+    const syncViewport = () => setIsMobile(mediaQuery.matches)
+
+    syncViewport()
+    mediaQuery.addEventListener('change', syncViewport)
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      mediaQuery.removeEventListener('change', syncViewport)
+    }
   }, [])
 
   // 返回顶部
@@ -86,73 +97,84 @@ export default function FloatingButtons() {
 
   return (
     <>
-      {/* 悬浮按钮组 */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 100,
-          right: 24,
-          zIndex: 999,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 8,
-        }}
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-      >
-        {/* 通讯录 */}
-        <Tooltip title="通讯录" placement="left">
-          <FloatButton
-            icon={<PhoneOutlined />}
-            type="default"
-            style={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              transition: 'all 0.3s',
-            }}
-            onClick={handleContacts}
-          />
-        </Tooltip>
+      {isMobile ? (
+        <FloatButton.Group
+          trigger="click"
+          style={{
+            right: 16,
+            bottom: 16,
+          }}
+          icon={<CustomerServiceOutlined />}
+        >
+          <FloatButton icon={<PhoneOutlined />} tooltip="通讯录" onClick={handleContacts} />
+          <FloatButton icon={<MessageOutlined />} tooltip="问题反馈" onClick={handleOpenFeedback} />
+          <FloatButton icon={<SettingOutlined />} tooltip="系统设置" onClick={handleSettings} />
+          {showBackToTop && (
+            <FloatButton icon={<ArrowUpOutlined />} tooltip="返回顶部" onClick={handleBackToTop} />
+          )}
+        </FloatButton.Group>
+      ) : (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 100,
+            right: 24,
+            zIndex: 999,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
+        >
+          <Tooltip title="通讯录" placement="left">
+            <FloatButton
+              icon={<PhoneOutlined />}
+              type="default"
+              style={{
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.3s',
+              }}
+              onClick={handleContacts}
+            />
+          </Tooltip>
 
-        {/* 问题反馈 */}
-        <Tooltip title="问题反馈" placement="left">
-          <FloatButton
-            icon={<MessageOutlined />}
-            type="default"
-            style={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              transition: 'all 0.3s',
-            }}
-            onClick={handleOpenFeedback}
-          />
-        </Tooltip>
+          <Tooltip title="问题反馈" placement="left">
+            <FloatButton
+              icon={<MessageOutlined />}
+              type="default"
+              style={{
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.3s',
+              }}
+              onClick={handleOpenFeedback}
+            />
+          </Tooltip>
 
-        {/* 设置 */}
-        <Tooltip title="系统设置" placement="left">
-          <FloatButton
-            icon={<SettingOutlined />}
-            type="default"
-            style={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              transition: 'all 0.3s',
-            }}
-            onClick={handleSettings}
-          />
-        </Tooltip>
+          <Tooltip title="系统设置" placement="left">
+            <FloatButton
+              icon={<SettingOutlined />}
+              type="default"
+              style={{
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.3s',
+              }}
+              onClick={handleSettings}
+            />
+          </Tooltip>
 
-        {/* 返回顶部 */}
-        {showBackToTop && (
-          <FloatButton
-            icon={<ArrowUpOutlined />}
-            type="primary"
-            style={{
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              transition: 'all 0.3s',
-              animation: 'fadeIn 0.3s ease-in',
-            }}
-            onClick={handleBackToTop}
-          />
-        )}
-      </div>
+          {showBackToTop && (
+            <FloatButton
+              icon={<ArrowUpOutlined />}
+              type="primary"
+              style={{
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                transition: 'all 0.3s',
+                animation: 'fadeIn 0.3s ease-in',
+              }}
+              onClick={handleBackToTop}
+            />
+          )}
+        </div>
+      )}
 
       {/* 问题反馈弹窗 */}
       <Modal
@@ -165,7 +187,9 @@ export default function FloatingButtons() {
         open={feedbackModalVisible}
         onCancel={() => setFeedbackModalVisible(false)}
         footer={null}
-        width={500}
+        width={isMobile ? 'calc(100vw - 24px)' : 500}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form
           form={feedbackForm}

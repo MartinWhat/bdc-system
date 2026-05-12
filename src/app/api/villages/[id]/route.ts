@@ -98,7 +98,11 @@ export async function DELETE(
       where: { id },
       include: {
         _count: {
-          select: { bdcs: true },
+          select: {
+            bdcs: true,
+            users: true,
+            collectiveCerts: true,
+          },
         },
       },
     })
@@ -107,16 +111,45 @@ export async function DELETE(
       return NextResponse.json({ error: '村居不存在', code: 'VILLAGE_NOT_FOUND' }, { status: 404 })
     }
 
-    if (existingVillage._count.bdcs > 0) {
+    const hasBdcs = existingVillage._count.bdcs > 0
+    const hasUsers = existingVillage._count.users > 0
+    const hasCollectiveCerts = existingVillage._count.collectiveCerts > 0
+
+    if (hasBdcs || hasUsers || hasCollectiveCerts) {
+      const reasons: string[] = []
+      if (hasBdcs) reasons.push(`宅基地档案 ${existingVillage._count.bdcs} 条`)
+      if (hasUsers) reasons.push(`系统用户 ${existingVillage._count.users} 个`)
+      if (hasCollectiveCerts)
+        reasons.push(`村集体证书 ${existingVillage._count.collectiveCerts} 份`)
+
       return NextResponse.json(
-        { error: '该村居下还有宅基地档案，无法删除', code: 'VILLAGE_HAS_BDC' },
+        {
+          error: `该村居下还有关联数据（${reasons.join('、')}），无法删除`,
+          code: 'VILLAGE_HAS_REFERENCES',
+        },
         { status: 409 },
       )
     }
 
-    await prisma.sysVillage.delete({
-      where: { id },
-    })
+    try {
+      await prisma.sysVillage.delete({
+        where: { id },
+      })
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === 'P2003'
+      ) {
+        return NextResponse.json(
+          { error: '该村居仍被其他记录引用，无法删除', code: 'VILLAGE_HAS_REFERENCES' },
+          { status: 409 },
+        )
+      }
+
+      throw error
+    }
 
     return NextResponse.json({
       success: true,

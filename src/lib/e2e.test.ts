@@ -11,6 +11,8 @@ import { createUser, validateUserCredentials } from '@/lib/auth/user-service'
 import { seedTestKeys } from '@/test/helpers'
 import { logOperation, queryOperationLogs } from '@/lib/log'
 
+const buildTestPhone = (suffix: string) => `138${suffix.slice(-8).padStart(8, '0')}`
+
 describe('一期端到端集成测试', () => {
   let adminUserId: string
   let townId: string
@@ -24,10 +26,12 @@ describe('一期端到端集成测试', () => {
   describe('完整业务流程测试', () => {
     it('应该完成：创建管理员 → 创建镇街 → 创建村居 → 创建宅基地 → 记录日志', async () => {
       // 1. 创建管理员用户
+      const suffix = `${Date.now()}`
       const adminUser = await createUser({
-        username: `e2e_admin_${Date.now()}`,
+        username: `e2e_admin_${suffix}`,
         password: 'admin123',
         realName: '端到端测试管理员',
+        phone: buildTestPhone(suffix),
       })
       adminUserId = adminUser.id
       expect(adminUser.username).toContain('e2e_admin')

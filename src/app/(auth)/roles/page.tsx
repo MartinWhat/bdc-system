@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Modal,
@@ -48,6 +50,8 @@ interface Permission {
 }
 
 export default function RolesPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [loading, setLoading] = useState(false)
@@ -67,8 +71,8 @@ export default function RolesPage() {
       } else {
         message.error(data.error || '加载失败')
       }
-    } catch (error) {
-      console.error('Load roles error:', error)
+    } catch {
+      console.error('Load roles error')
       message.error('加载角色列表失败')
     } finally {
       setLoading(false)
@@ -85,8 +89,8 @@ export default function RolesPage() {
       } else {
         message.error(data.error || '加载失败')
       }
-    } catch (error) {
-      console.error('Load permissions error:', error)
+    } catch {
+      console.error('Load permissions error')
       message.error('加载权限失败')
     }
   }, [])
@@ -94,7 +98,7 @@ export default function RolesPage() {
   useEffect(() => {
     loadRoles()
     loadPermissions()
-  }, [])
+  }, [loadRoles, loadPermissions])
 
   // 创建/编辑角色
   const handleSubmit = async (values: {
@@ -124,8 +128,8 @@ export default function RolesPage() {
       } else {
         message.error(data.error)
       }
-    } catch (error) {
-      console.error('Submit error:', error)
+    } catch {
+      console.error('Submit error')
       message.error('操作失败')
     }
   }
@@ -143,10 +147,63 @@ export default function RolesPage() {
       } else {
         message.error(data.error)
       }
-    } catch (error) {
+    } catch {
       message.error('删除失败')
     }
   }
+
+  const renderActions = (record: Role) => (
+    <Space wrap size={isMobile ? 6 : 8}>
+      <Button
+        size="small"
+        icon={<EditOutlined />}
+        onClick={() => {
+          setEditingRole(record)
+          const permissionIds = record.permissions.map((p) => p.permission.id)
+          form.setFieldsValue({
+            name: record.name,
+            code: record.code,
+            description: record.description,
+            status: record.status,
+            permissionIds,
+          })
+          setTargetKeys(permissionIds)
+          setModalVisible(true)
+        }}
+      >
+        编辑
+      </Button>
+      <Popconfirm
+        title="确认删除"
+        description="删除前请确保该角色下没有用户"
+        onConfirm={() => handleDelete(record.id)}
+      >
+        <Button size="small" danger icon={<DeleteOutlined />}>
+          删除
+        </Button>
+      </Popconfirm>
+    </Space>
+  )
+
+  const renderMobileCard = (record: Role) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Text strong>{record.name}</Text>
+          <Tag color={record.status === 'ACTIVE' ? 'green' : 'red'}>
+            {record.status === 'ACTIVE' ? '启用' : '禁用'}
+          </Tag>
+        </Space>
+        <Text type="secondary">{record.code}</Text>
+        <Text type="secondary">{record.description || '暂无描述'}</Text>
+        <Space size={6} wrap>
+          <Tag color="blue">{record.permissions.length} 个权限</Tag>
+          <Tag>{record._count.users} 个用户</Tag>
+        </Space>
+        {renderActions(record)}
+      </Space>
+    </Card>
+  )
 
   const columns: ColumnsType<Role> = [
     {
@@ -187,38 +244,7 @@ export default function RolesPage() {
     {
       title: '操作',
       key: 'action',
-      render: (_, record) => (
-        <Space>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => {
-              setEditingRole(record)
-              const permissionIds = record.permissions.map((p) => p.permission.id)
-              form.setFieldsValue({
-                name: record.name,
-                code: record.code,
-                description: record.description,
-                status: record.status,
-                permissionIds,
-              })
-              setTargetKeys(permissionIds)
-              setModalVisible(true)
-            }}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确认删除"
-            description="删除前请确保该角色下没有用户"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      ),
+      render: (_, record) => renderActions(record),
     },
   ]
 
@@ -229,6 +255,7 @@ export default function RolesPage() {
         <Button
           type="primary"
           icon={<PlusOutlined />}
+          block={isMobile}
           onClick={() => {
             setEditingRole(null)
             form.resetFields()
@@ -243,13 +270,19 @@ export default function RolesPage() {
       skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无角色数据"
     >
-      <Table
-        columns={columns}
-        dataSource={roles}
-        rowKey="id"
-        loading={loading}
-        pagination={false}
-      />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {roles.map(renderMobileCard)}
+        </Space>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={roles}
+          rowKey="id"
+          loading={loading}
+          pagination={false}
+        />
+      )}
 
       <Modal
         title={editingRole ? '编辑角色' : '创建角色'}
@@ -261,7 +294,9 @@ export default function RolesPage() {
           setTargetKeys([])
         }}
         footer={null}
-        width={900}
+        width={isMobile ? 'calc(100vw - 24px)' : 900}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
           <Form.Item

@@ -10,7 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
-import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
 import { logOperation } from '@/lib/log'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
@@ -20,8 +20,16 @@ const createUserSchema = z.object({
   username: z.string().min(1, '用户名不能为空'),
   password: z.string().min(6, '密码至少6位'),
   realName: z.string().min(1, '真实姓名不能为空'),
-  idCard: z.string().optional(),
-  phone: z.string().optional(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^1\d{10}$/, '请输入正确的手机号'),
+  fixedPhone: z
+    .string()
+    .trim()
+    .regex(/^[0-9()+\-\s]{5,20}$/, '请输入正确的固定电话')
+    .optional()
+    .or(z.literal('')),
   email: z.string().email().optional().or(z.literal('')),
   roleIds: z.array(z.string()).optional(),
 })
@@ -55,6 +63,7 @@ async function getUsersHandler(request: NextRequest) {
           id: true,
           username: true,
           realName: true,
+          fixedPhone: true,
           email: true,
           status: true,
           twoFactorEnabled: true,
@@ -76,10 +85,17 @@ async function getUsersHandler(request: NextRequest) {
       }),
     ])
 
+    const list = await Promise.all(
+      users.map(async (user) => ({
+        ...user,
+        fixedPhone: user.fixedPhone ? await decryptSensitiveField(user.fixedPhone) : undefined,
+      })),
+    )
+
     return NextResponse.json({
       success: true,
       data: {
-        list: users,
+        list,
         total,
         page,
         pageSize,
@@ -108,7 +124,8 @@ async function createUserHandler(request: NextRequest) {
       )
     }
 
-    const { username, password, realName, idCard, phone, email, roleIds } = validationResult.data
+    const { username, password, realName, phone, fixedPhone, email, roleIds } =
+      validationResult.data
 
     // 检查用户名是否已存在
     const existingUser = await prisma.sysUser.findUnique({
@@ -128,19 +145,17 @@ async function createUserHandler(request: NextRequest) {
       email: email || `${username}@system.local`,
       status: 'ACTIVE',
       createdBy: request.headers.get('x-user-id') || 'system',
-      idCard: null as string | null,
       phone: null as string | null,
+      fixedPhone: null as string | null,
     }
 
     // 加密敏感字段
-    if (idCard) {
-      const result = await encryptSensitiveField(idCard)
-      createData.idCard = result.encrypted
-    }
+    const phoneResult = await encryptSensitiveField(phone)
+    createData.phone = phoneResult.encrypted
 
-    if (phone) {
-      const result = await encryptSensitiveField(phone)
-      createData.phone = result.encrypted
+    if (fixedPhone) {
+      const result = await encryptSensitiveField(fixedPhone)
+      createData.fixedPhone = result.encrypted
     }
 
     // 创建用户并同步 Better Auth credential account

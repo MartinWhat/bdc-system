@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Card,
+  Grid,
   Table,
   Tag,
   Space,
@@ -14,6 +14,8 @@ import {
   Form,
   message,
   Popconfirm,
+  Pagination,
+  Checkbox,
 } from 'antd'
 import {
   PlusOutlined,
@@ -74,7 +76,8 @@ interface NotificationItem {
 }
 
 export default function NotificationManagePage() {
-  const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(false)
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [total, setTotal] = useState(0)
@@ -88,11 +91,7 @@ export default function NotificationManagePage() {
   const [form] = Form.useForm()
   const [selectorOpen, setSelectorOpen] = useState(false)
 
-  useEffect(() => {
-    fetchNotifications()
-  }, [page, pageSize, keyword, type, status])
-
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams({
@@ -110,12 +109,16 @@ export default function NotificationManagePage() {
         setNotifications(data.data.list)
         setTotal(data.data.total)
       }
-    } catch (error) {
-      console.error('Fetch notifications error:', error)
+    } catch {
+      console.error('Fetch notifications error')
     } finally {
       setLoading(false)
     }
-  }
+  }, [page, pageSize, keyword, type, status])
+
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
 
   const handleCreate = () => {
     setEditingId(null)
@@ -148,7 +151,7 @@ export default function NotificationManagePage() {
       } else {
         message.error(data.error || '删除失败')
       }
-    } catch (error) {
+    } catch {
       message.error('删除失败')
     }
   }
@@ -165,7 +168,7 @@ export default function NotificationManagePage() {
       } else {
         message.error(data.error || '发布失败')
       }
-    } catch (error) {
+    } catch {
       message.error('发布失败')
     }
   }
@@ -191,7 +194,7 @@ export default function NotificationManagePage() {
       } else {
         message.error(data.error || '操作失败')
       }
-    } catch (error) {
+    } catch {
       message.error('操作失败')
     }
   }
@@ -307,55 +310,141 @@ export default function NotificationManagePage() {
     },
   ]
 
+  const renderMobileCard = (record: NotificationItem) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Space wrap size={6}>
+            {record.isPinned && <Tag color="gold">置顶</Tag>}
+            <Tag color={typeTagColors[record.type]}>
+              {record.type === 'SYSTEM'
+                ? '系统通知'
+                : record.type === 'POLICY'
+                  ? '政策文件'
+                  : '公告'}
+            </Tag>
+            <Tag color={record.status === 'PUBLISHED' ? 'success' : 'default'}>
+              {record.status === 'DRAFT'
+                ? '草稿'
+                : record.status === 'PUBLISHED'
+                  ? '已发布'
+                  : '已归档'}
+            </Tag>
+          </Space>
+          {record.isPopup && <Tag color="blue">弹窗</Tag>}
+        </Space>
+
+        <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.4 }}>{record.title}</div>
+
+        <Space size={12} wrap>
+          <Tag
+            color={
+              record.priority === 'URGENT' ? 'red' : record.priority === 'HIGH' ? 'orange' : 'blue'
+            }
+          >
+            {record.priority === 'LOW'
+              ? '低'
+              : record.priority === 'NORMAL'
+                ? '普通'
+                : record.priority === 'HIGH'
+                  ? '高'
+                  : '紧急'}
+          </Tag>
+          <span style={{ color: '#8c8c8c' }}>
+            {record.publishedAt ? new Date(record.publishedAt).toLocaleDateString('zh-CN') : '-'}
+          </span>
+        </Space>
+
+        <Space wrap>
+          {record.status === 'DRAFT' && (
+            <Button size="small" type="primary" onClick={() => handlePublish(record.id)}>
+              发布
+            </Button>
+          )}
+          <Button size="small" onClick={() => handleEdit(record)}>
+            编辑
+          </Button>
+          <Popconfirm title="确定删除？" onConfirm={() => handleDelete(record.id)}>
+            <Button size="small" danger>
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
+      </Space>
+    </Card>
+  )
+
   return (
     <PageContainer
       title="通知管理"
       subTitle="发布和管理系统通知、政策文件和公告"
       extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} block={isMobile}>
           发布通知
         </Button>
       }
     >
       <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
+        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
           <Input
             placeholder="搜索标题"
             prefix={<SearchOutlined />}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            style={{ width: 200 }}
+            style={{ width: isMobile ? '100%' : 200 }}
             allowClear
           />
-          <Select options={typeOptions} value={type} onChange={setType} style={{ width: 120 }} />
+          <Select
+            options={typeOptions}
+            value={type}
+            onChange={setType}
+            style={{ width: isMobile ? '100%' : 120 }}
+          />
           <Select
             options={statusOptions}
             value={status}
             onChange={setStatus}
-            style={{ width: 120 }}
+            style={{ width: isMobile ? '100%' : 120 }}
           />
         </Space>
       </Card>
 
       <Card>
-        <Table
-          columns={columns}
-          dataSource={notifications}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: page,
-            pageSize,
-            total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (t) => `共 ${t} 条`,
-            onChange: (p, ps) => {
-              setPage(p)
-              setPageSize(ps)
-            },
-          }}
-        />
+        {isMobile ? (
+          <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            {notifications.map(renderMobileCard)}
+            <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+              <Pagination
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                showSizeChanger={false}
+                onChange={(p) => {
+                  setPage(p)
+                }}
+              />
+            </div>
+          </Space>
+        ) : (
+          <Table
+            columns={columns}
+            dataSource={notifications}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (t) => `共 ${t} 条`,
+              onChange: (p, ps) => {
+                setPage(p)
+                setPageSize(ps)
+              },
+            }}
+          />
+        )}
       </Card>
 
       <Modal
@@ -363,7 +452,9 @@ export default function NotificationManagePage() {
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={720}
+        width={isMobile ? 'calc(100vw - 24px)' : 720}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
         destroyOnClose
       >
         <Form
@@ -405,21 +496,28 @@ export default function NotificationManagePage() {
             fileTypeFilter={['pdf']}
           />
 
-          <Space size="large" style={{ width: '100%' }}>
+          <Space
+            direction={isMobile ? 'vertical' : 'horizontal'}
+            size="large"
+            style={{ width: '100%' }}
+          >
             <Form.Item name="type" label="类型" initialValue="ANNOUNCEMENT">
-              <Select options={typeOptions.filter((o) => o.value !== '')} style={{ width: 120 }} />
+              <Select
+                options={typeOptions.filter((o) => o.value !== '')}
+                style={{ width: isMobile ? '100%' : 120 }}
+              />
             </Form.Item>
 
             <Form.Item name="priority" label="优先级">
-              <Select options={priorityOptions} style={{ width: 100 }} />
+              <Select options={priorityOptions} style={{ width: isMobile ? '100%' : 100 }} />
             </Form.Item>
 
             <Form.Item name="isPopup" label="弹窗提醒" valuePropName="checked">
-              <input type="checkbox" />
+              <Checkbox />
             </Form.Item>
 
             <Form.Item name="isPinned" label="置顶" valuePropName="checked">
-              <input type="checkbox" />
+              <Checkbox />
             </Form.Item>
           </Space>
 

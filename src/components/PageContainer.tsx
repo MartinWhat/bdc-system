@@ -1,7 +1,7 @@
 import React from 'react'
 import { Typography, Card, Spin, Empty, Skeleton, theme } from 'antd'
 import { motion } from 'framer-motion'
-import { PAGE_TRANSITION, PULSE } from '@/config/motion'
+import { PAGE_TRANSITION } from '@/config/motion'
 import type { ReactNode } from 'react'
 
 const { Title } = Typography
@@ -83,36 +83,31 @@ export const PageContainer: React.FC<PageContainerProps> = ({
 
   const content = (
     <div
-      className={className}
+      className={['page-container', className].filter(Boolean).join(' ')}
       style={{
-        padding: '24px',
         background: token.colorBgContainer,
-        minHeight: 'calc(100vh - 112px)',
         ...contentStyle,
       }}
     >
       {(title || extra) && (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '24px',
-          }}
-        >
-          <div>
+        <div className="page-container__header">
+          <div className="page-container__title">
             {title && (
-              <Title level={3} style={{ margin: 0, marginBottom: subTitle ? '8px' : 0 }}>
+              <Title
+                level={3}
+                className="page-container__titleText"
+                style={{ marginBottom: subTitle ? 8 : 0 }}
+              >
                 {title}
               </Title>
             )}
             {subTitle && (
-              <Typography.Text type="secondary" style={{ fontSize: '14px' }}>
+              <Typography.Text type="secondary" className="page-container__subTitle">
                 {subTitle}
               </Typography.Text>
             )}
           </div>
-          {extra && <div>{extra}</div>}
+          {extra && <div className="page-container__extra">{extra}</div>}
         </div>
       )}
 
@@ -145,7 +140,11 @@ export const PageContainer: React.FC<PageContainerProps> = ({
   )
 
   if (card) {
-    return <Card style={{ margin: '24px 16px', ...cardStyle }}>{content}</Card>
+    return (
+      <Card className="page-container--card" style={cardStyle}>
+        {content}
+      </Card>
+    )
   }
 
   if (disableAnimation) {

@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
+  Card,
+  Grid,
   Table,
   Button,
   Modal,
@@ -21,6 +23,7 @@ import {
   Steps,
   Popconfirm,
   Badge,
+  Pagination,
 } from 'antd'
 import {
   EyeOutlined,
@@ -114,6 +117,8 @@ const OPERATION_TYPE_MAP: Record<string, { text: string; icon: React.ReactNode }
 }
 
 export default function CollectivePage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [certs, setCerts] = useState<CollectiveCert[]>([])
   const [loading, setLoading] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
@@ -572,6 +577,107 @@ export default function CollectivePage() {
     }
   }, [])
 
+  const renderActions = useCallback(
+    (record: CollectiveCert) => (
+      <Space wrap size={isMobile ? 6 : 8}>
+        <Button size="small" icon={<EyeOutlined />} onClick={() => loadCertDetail(record)}>
+          详情
+        </Button>
+        {record.status === 'PENDING_APPROVE' && (
+          <Button
+            size="small"
+            type="primary"
+            onClick={() => {
+              setSelectedCert(record)
+              setApproveModalVisible(true)
+            }}
+          >
+            审核
+          </Button>
+        )}
+        {record.status === 'IN_STOCK' && !record.isFrozen && (
+          <>
+            <Button
+              size="small"
+              onClick={() => {
+                setSelectedCert(record)
+                setOutModalVisible(true)
+              }}
+            >
+              出库
+            </Button>
+            <Button
+              size="small"
+              onClick={() => {
+                setSelectedCert(record)
+                setFreezeModalVisible(true)
+              }}
+            >
+              冻结
+            </Button>
+            <Popconfirm title="确定注销该证书？" onConfirm={() => handleCancel(record)}>
+              <Button size="small" danger>
+                注销
+              </Button>
+            </Popconfirm>
+          </>
+        )}
+        {record.status === 'OUT_STOCK' && (
+          <Popconfirm title="确定归还该证书？" onConfirm={() => handleReturn(record)}>
+            <Button size="small" type="primary">
+              归还
+            </Button>
+          </Popconfirm>
+        )}
+        {record.isFrozen && (
+          <Popconfirm title="确定解冻该证书？" onConfirm={() => handleUnfreeze(record)}>
+            <Button size="small">解冻</Button>
+          </Popconfirm>
+        )}
+      </Space>
+    ),
+    [handleCancel, handleReturn, handleUnfreeze, isMobile, loadCertDetail],
+  )
+
+  const renderMobileCard = (record: CollectiveCert) => {
+    const config = STATUS_MAP[record.status]
+
+    return (
+      <Card key={record.id} size="small" style={{ borderRadius: 12, width: '100%' }}>
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+            <Tag color={record.isFrozen ? 'red' : config.color}>{config.text}</Tag>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.certNo}
+            </Text>
+          </Space>
+
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{record.ownerName}</div>
+
+          <Space size={8} wrap>
+            <Tag>{OWNER_TYPE_MAP[record.ownerType] || record.ownerType}</Tag>
+            {record.isFrozen && <Tag color="red">已冻结</Tag>}
+          </Space>
+
+          <Text type="secondary">
+            {record.village.town.name} · {record.village.name}
+          </Text>
+
+          <Space size={12} wrap>
+            <Text>面积 {record.area} ㎡</Text>
+            <Text>入库 {record.stockAt ? dayjs(record.stockAt).format('YYYY-MM-DD') : '-'}</Text>
+          </Space>
+
+          <Text type="secondary" ellipsis={{ tooltip: record.address }}>
+            地址：{record.address}
+          </Text>
+
+          {renderActions(record)}
+        </Space>
+      </Card>
+    )
+  }
+
   const columns: ColumnsType<CollectiveCert> = useMemo(
     () => [
       {
@@ -631,78 +737,33 @@ export default function CollectivePage() {
         title: '操作',
         key: 'action',
         width: 250,
-        render: (_, record) => (
-          <Space>
-            <Button size="small" icon={<EyeOutlined />} onClick={() => loadCertDetail(record)}>
-              详情
-            </Button>
-            {record.status === 'PENDING_APPROVE' && (
-              <Button
-                size="small"
-                type="primary"
-                onClick={() => {
-                  setSelectedCert(record)
-                  setApproveModalVisible(true)
-                }}
-              >
-                审核
-              </Button>
-            )}
-            {record.status === 'IN_STOCK' && !record.isFrozen && (
-              <>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setSelectedCert(record)
-                    setOutModalVisible(true)
-                  }}
-                >
-                  出库
-                </Button>
-                <Button
-                  size="small"
-                  onClick={() => {
-                    setSelectedCert(record)
-                    setFreezeModalVisible(true)
-                  }}
-                >
-                  冻结
-                </Button>
-                <Popconfirm title="确定注销该证书？" onConfirm={() => handleCancel(record)}>
-                  <Button size="small" danger>
-                    注销
-                  </Button>
-                </Popconfirm>
-              </>
-            )}
-            {record.status === 'OUT_STOCK' && (
-              <Popconfirm title="确定归还该证书？" onConfirm={() => handleReturn(record)}>
-                <Button size="small" type="primary">
-                  归还
-                </Button>
-              </Popconfirm>
-            )}
-            {record.isFrozen && (
-              <Popconfirm title="确定解冻该证书？" onConfirm={() => handleUnfreeze(record)}>
-                <Button size="small">解冻</Button>
-              </Popconfirm>
-            )}
-          </Space>
-        ),
+        render: (_, record) => renderActions(record),
       },
     ],
-    [handleCancel, handleReturn, handleUnfreeze, loadCertDetail],
+    [renderActions],
   )
 
   return (
     <PageContainer
       title="村集体所有权管理"
       extra={
-        <Space>
-          <Button icon={<PlusOutlined />} type="primary" onClick={() => setAddModalVisible(true)}>
+        <Space
+          direction={isMobile ? 'vertical' : 'horizontal'}
+          style={{ width: isMobile ? '100%' : undefined }}
+        >
+          <Button
+            icon={<PlusOutlined />}
+            type="primary"
+            block={isMobile}
+            onClick={() => setAddModalVisible(true)}
+          >
             入库申请
           </Button>
-          <Button icon={<UploadOutlined />} onClick={() => setBatchImportModalVisible(true)}>
+          <Button
+            icon={<UploadOutlined />}
+            block={isMobile}
+            onClick={() => setBatchImportModalVisible(true)}
+          >
             批量导入
           </Button>
         </Space>
@@ -712,13 +773,16 @@ export default function CollectivePage() {
       skeleton={{ active: true, paragraph: { rows: 10 } }}
       emptyDescription="暂无证书数据"
     >
-      <Space style={{ marginBottom: 16 }}>
+      <Space
+        direction={isMobile ? 'vertical' : 'horizontal'}
+        style={{ marginBottom: 16, width: '100%' }}
+      >
         <Input.Search
           placeholder="搜索证书编号或所有权人"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           onSearch={() => loadCerts(1, pageSize)}
-          style={{ width: 250 }}
+          style={{ width: isMobile ? '100%' : 250 }}
         />
         <TownVillageCascader
           value={selectedVillageId}
@@ -736,7 +800,7 @@ export default function CollectivePage() {
             loadCerts(1, pageSize, value)
           }}
           allowClear
-          style={{ width: 120 }}
+          style={{ width: isMobile ? '100%' : 120 }}
           options={Object.entries(STATUS_MAP).map(([key, val]) => ({
             value: key,
             label: val.text,
@@ -744,22 +808,40 @@ export default function CollectivePage() {
         />
       </Space>
 
-      <Table
-        columns={columns}
-        dataSource={certs}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total,
-          onChange: (page, size) => {
-            setCurrentPage(page)
-            setPageSize(size)
-            loadCerts(page, size)
-          },
-        }}
-      />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {certs.map(renderMobileCard)}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger={false}
+              onChange={(page) => {
+                setCurrentPage(page)
+                loadCerts(page, pageSize)
+              }}
+            />
+          </div>
+        </Space>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={certs}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total,
+            onChange: (page, size) => {
+              setCurrentPage(page)
+              setPageSize(size)
+              loadCerts(page, size)
+            },
+          }}
+        />
+      )}
 
       {/* 详情模态框 */}
       <Modal
@@ -770,17 +852,20 @@ export default function CollectivePage() {
           setSelectedCert(null)
         }}
         footer={null}
-        width={900}
+        width={isMobile ? 'calc(100vw - 24px)' : 900}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedCert && (
           <Tabs
             defaultActiveKey="info"
+            tabBarGutter={isMobile ? 12 : undefined}
             items={[
               {
                 key: 'info',
                 label: '证书信息',
                 children: (
-                  <Descriptions bordered column={2}>
+                  <Descriptions bordered column={isMobile ? 1 : 2}>
                     <Descriptions.Item label="证书编号">{selectedCert.certNo}</Descriptions.Item>
                     <Descriptions.Item label="所有权人">{selectedCert.ownerName}</Descriptions.Item>
                     <Descriptions.Item label="所有权类型">
@@ -911,7 +996,9 @@ export default function CollectivePage() {
           addForm.resetFields()
         }}
         onOk={() => addForm.submit()}
-        width={700}
+        width={isMobile ? 'calc(100vw - 24px)' : 700}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Form form={addForm} layout="vertical" onFinish={handleAdd}>
           <Form.Item
@@ -1032,7 +1119,9 @@ export default function CollectivePage() {
             </Button>
           </Space>
         }
-        width={900}
+        width={isMobile ? 'calc(100vw - 24px)' : 900}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         <Alert
           message="导入说明"
@@ -1134,7 +1223,9 @@ export default function CollectivePage() {
             </Button>
           </Space>
         }
-        width={500}
+        width={isMobile ? 'calc(100vw - 24px)' : 500}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedCert && (
           <Descriptions column={1} style={{ marginBottom: 16 }}>
@@ -1164,7 +1255,9 @@ export default function CollectivePage() {
           setSelectedCert(null)
         }}
         onOk={() => outForm.submit()}
-        width={500}
+        width={isMobile ? 'calc(100vw - 24px)' : 500}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedCert && (
           <Descriptions column={1} style={{ marginBottom: 16 }}>
@@ -1198,7 +1291,9 @@ export default function CollectivePage() {
           setSelectedCert(null)
         }}
         onOk={() => freezeForm.submit()}
-        width={500}
+        width={isMobile ? 'calc(100vw - 24px)' : 500}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
       >
         {selectedCert && (
           <Descriptions column={1} style={{ marginBottom: 16 }}>

@@ -1,13 +1,13 @@
 /**
- * 用户详情/更新/删除 API
+ * 用户详情/更新/禁用 API
  * GET    /api/users/[id] - 获取用户详情
  * PUT    /api/users/[id] - 更新用户
- * DELETE /api/users/[id] - 删除用户
+ * DELETE /api/users/[id] - 禁用用户
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { encryptSensitiveField } from '@/lib/gm-crypto'
+import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
 import { updateUserSchema } from '../schema'
 import { getUserFromRequest, isAdmin } from '@/lib/middleware/auth'
 
@@ -21,6 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         id: true,
         username: true,
         realName: true,
+        fixedPhone: true,
         email: true,
         avatar: true,
         status: true,
@@ -44,6 +45,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     if (!user) {
       return NextResponse.json({ error: '用户不存在', code: 'USER_NOT_FOUND' }, { status: 404 })
+    }
+
+    if (user.fixedPhone) {
+      user.fixedPhone = await decryptSensitiveField(user.fixedPhone)
     }
 
     return NextResponse.json({
@@ -72,7 +77,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       )
     }
 
-    const { realName, idCard, phone, email, status, twoFactorEnabled, roleIds } =
+    const { realName, fixedPhone, phone, email, status, twoFactorEnabled, roleIds } =
       validationResult.data
 
     // 检查用户是否存在
@@ -93,14 +98,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (twoFactorEnabled !== undefined) updateData.twoFactorEnabled = twoFactorEnabled
 
     // 更新加密字段
-    if (idCard !== undefined) {
-      const result = await encryptSensitiveField(idCard)
-      updateData.idCard = result.encrypted
-    }
-
     if (phone !== undefined) {
       const result = await encryptSensitiveField(phone)
       updateData.phone = result.encrypted
+    }
+
+    if (fixedPhone !== undefined) {
+      if (fixedPhone) {
+        const result = await encryptSensitiveField(fixedPhone)
+        updateData.fixedPhone = result.encrypted
+      } else {
+        updateData.fixedPhone = null
+      }
     }
 
     // 使用事务更新用户信息和角色关联
@@ -139,6 +148,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
+    if (userWithRoles?.fixedPhone) {
+      userWithRoles.fixedPhone = await decryptSensitiveField(userWithRoles.fixedPhone)
+    }
+
     return NextResponse.json({
       success: true,
       data: userWithRoles,
@@ -156,7 +169,7 @@ export async function DELETE(
   try {
     const { id } = await params
 
-    // 授权校验：只有管理员可以删除用户
+    // 授权校验：只有管理员可以禁用用户
     if (!isAdmin(request)) {
       return NextResponse.json({ error: '需要管理员权限', code: 'FORBIDDEN' }, { status: 403 })
     }
@@ -170,16 +183,16 @@ export async function DELETE(
       return NextResponse.json({ error: '用户不存在', code: 'USER_NOT_FOUND' }, { status: 404 })
     }
 
-    // 不能删除自己（从中间件注入的请求头获取当前用户 ID）
+    // 不能禁用自己（从中间件注入的请求头获取当前用户 ID）
     const { userId: currentUserId } = getUserFromRequest(request)
     if (id === currentUserId) {
       return NextResponse.json(
-        { error: '不能删除自己的账号', code: 'CANNOT_DELETE_SELF' },
+        { error: '不能禁用自己的账号', code: 'CANNOT_DISABLE_SELF' },
         { status: 403 },
       )
     }
 
-    // 删除用户（软删除：禁用）
+    // 禁用用户（软删除）
     await prisma.sysUser.update({
       where: { id },
       data: { status: 'DISABLED' },
@@ -187,10 +200,10 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: '用户已删除',
+      message: '用户已禁用',
     })
   } catch (error) {
     console.error('Delete user error:', error)
-    return NextResponse.json({ error: '删除用户失败', code: 'SERVER_ERROR' }, { status: 500 })
+    return NextResponse.json({ error: '禁用用户失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }

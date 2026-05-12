@@ -11,8 +11,8 @@ export interface CreateUserInput {
   username: string
   password: string
   realName: string
-  idCard?: string
-  phone?: string
+  phone: string
+  fixedPhone?: string
   email?: string
   createdBy?: string
 }
@@ -25,6 +25,7 @@ export interface CreateUserInput {
 export async function createUser(input: CreateUserInput) {
   // 密码加密（bcrypt）
   const passwordHash = await hashUserPassword(input.password)
+  const phoneResult = await encryptSensitiveField(input.phone)
 
   const createData: {
     username: string
@@ -34,8 +35,8 @@ export async function createUser(input: CreateUserInput) {
     email?: string | null
     createdBy: string
     status: string
-    idCard?: string
-    phone?: string
+    phone: string
+    fixedPhone?: string
   } = {
     username: input.username,
     passwordHash,
@@ -44,20 +45,15 @@ export async function createUser(input: CreateUserInput) {
     createdBy: input.createdBy || 'system',
     status: 'ACTIVE',
     displayUsername: input.realName,
+    phone: phoneResult.encrypted,
   }
 
-  // 加密身份证号
-  if (input.idCard) {
-    const idCardResult = await encryptSensitiveField(input.idCard)
-    createData.idCard = idCardResult.encrypted
+  if (input.fixedPhone) {
+    const fixedPhoneResult = await encryptSensitiveField(input.fixedPhone)
+    createData.fixedPhone = fixedPhoneResult.encrypted
   }
 
   // 加密手机号
-  if (input.phone) {
-    const phoneResult = await encryptSensitiveField(input.phone)
-    createData.phone = phoneResult.encrypted
-  }
-
   const user = await prisma.$transaction(async (tx) => {
     const created = await tx.sysUser.create({
       data: createData,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import {
   Card,
@@ -15,6 +15,7 @@ import {
   Alert,
   Space,
   Tag,
+  Grid,
 } from 'antd'
 import {
   CheckCircleOutlined,
@@ -27,7 +28,7 @@ import PageContainer from '@/components/PageContainer'
 import { authFetch } from '@/lib/api-fetch'
 import ApproverSelectorModal, { User } from '@/components/ApproverSelectorModal'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 const { TextArea } = Input
 
 interface Task {
@@ -84,6 +85,8 @@ const STEP_STATUS_MAP: Record<string, 'wait' | 'process' | 'finish' | 'error'> =
 export default function ObjectionProcessPage() {
   const params = useParams()
   const router = useRouter()
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [processData, setProcessData] = useState<ProcessData | null>(null)
@@ -91,7 +94,7 @@ export default function ObjectionProcessPage() {
   const [selectedApprover, setSelectedApprover] = useState<User | null>(null)
   const [form] = Form.useForm()
 
-  const loadProcess = async () => {
+  const loadProcess = useCallback(async () => {
     setLoading(true)
     try {
       const res = await authFetch(`/api/objection/${params.id}/process`)
@@ -107,13 +110,13 @@ export default function ObjectionProcessPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [params.id])
 
   useEffect(() => {
     if (params.id) {
       loadProcess()
     }
-  }, [params.id])
+  }, [params.id, loadProcess])
 
   const handleSubmit = async (action: 'approve' | 'reject') => {
     try {
@@ -141,7 +144,6 @@ export default function ObjectionProcessPage() {
         form.resetFields()
         loadProcess()
 
-        // 如果异议已完成或被驳回，返回详情页
         if (data.data.objectionStatus === 'RESOLVED' || data.data.objectionStatus === 'REJECTED') {
           setTimeout(() => {
             router.push(`/objection/${params.id}`)
@@ -158,6 +160,17 @@ export default function ObjectionProcessPage() {
     }
   }
 
+  const pageExtra = (
+    <Space
+      direction={isMobile ? 'vertical' : 'horizontal'}
+      style={{ width: isMobile ? '100%' : undefined }}
+    >
+      <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()} block={isMobile}>
+        返回
+      </Button>
+    </Space>
+  )
+
   if (loading) {
     return (
       <PageContainer title="异议处理">
@@ -171,7 +184,7 @@ export default function ObjectionProcessPage() {
   if (!processData) {
     return (
       <PageContainer title="异议处理">
-        <Card>
+        <Card size={isMobile ? 'small' : undefined}>
           <Text type="secondary">未找到异议记录</Text>
         </Card>
       </PageContainer>
@@ -181,17 +194,12 @@ export default function ObjectionProcessPage() {
   return (
     <PageContainer
       title={`异议处理 - ${processData.currentTask?.stepName || '未知步骤'}`}
-      extra={[
-        <Button key="back" icon={<ArrowLeftOutlined />} onClick={() => router.back()}>
-          返回
-        </Button>,
-      ]}
+      extra={pageExtra}
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        {/* 当前任务信息 */}
-        <Card title="当前任务">
+        <Card title="当前任务" size={isMobile ? 'small' : undefined}>
           {processData.currentTask ? (
-            <Descriptions column={2} bordered size="small">
+            <Descriptions column={isMobile ? 1 : 2} bordered size="small">
               <Descriptions.Item label="步骤名称">
                 {processData.currentTask.stepName}
               </Descriptions.Item>
@@ -218,9 +226,8 @@ export default function ObjectionProcessPage() {
           )}
         </Card>
 
-        {/* 关联领证记录 */}
-        <Card title="关联领证记录">
-          <Descriptions column={2} bordered size="small">
+        <Card title="关联领证记录" size={isMobile ? 'small' : undefined}>
+          <Descriptions column={isMobile ? 1 : 2} bordered size="small">
             <Descriptions.Item label="证书编号">
               {processData.receiveRecord?.bdc?.certNo}
             </Descriptions.Item>
@@ -230,8 +237,7 @@ export default function ObjectionProcessPage() {
           </Descriptions>
         </Card>
 
-        {/* 处理历史 */}
-        <Card title="处理进度">
+        <Card title="处理进度" size={isMobile ? 'small' : undefined}>
           <Steps
             direction="vertical"
             size="small"
@@ -249,11 +255,10 @@ export default function ObjectionProcessPage() {
           />
         </Card>
 
-        {/* 审批操作 */}
         {processData.currentTask &&
           processData.objectionStatus !== 'RESOLVED' &&
           processData.objectionStatus !== 'REJECTED' && (
-            <Card title="审批操作">
+            <Card title="审批操作" size={isMobile ? 'small' : undefined}>
               <Form form={form} layout="vertical">
                 <Form.Item name="remark" label="处理备注">
                   <TextArea
@@ -263,14 +268,17 @@ export default function ObjectionProcessPage() {
                     showCount
                   />
                 </Form.Item>
-                {/* 判断是否为最终步骤：当前步骤小于总步骤数 */}
                 {processData.workflow &&
                   processData.currentTask.stepOrder < processData.workflow.totalSteps && (
                     <Form.Item label="下一步处理人" required>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <Space
+                        direction={isMobile ? 'vertical' : 'horizontal'}
+                        style={{ width: '100%' }}
+                      >
                         <Button
                           icon={<UserOutlined />}
                           onClick={() => setApproverSelectorVisible(true)}
+                          block={isMobile}
                         >
                           {selectedApprover ? '更换处理人' : '选择处理人'}
                         </Button>
@@ -279,15 +287,16 @@ export default function ObjectionProcessPage() {
                             {selectedApprover.realName} ({selectedApprover.username})
                           </Tag>
                         )}
-                      </div>
+                      </Space>
                     </Form.Item>
                   )}
-                <Space>
+                <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
                   <Button
                     type="primary"
                     icon={<CheckCircleOutlined />}
                     onClick={() => handleSubmit('approve')}
                     loading={submitting}
+                    block={isMobile}
                   >
                     通过
                   </Button>
@@ -296,6 +305,7 @@ export default function ObjectionProcessPage() {
                     icon={<CloseCircleOutlined />}
                     onClick={() => handleSubmit('reject')}
                     loading={submitting}
+                    block={isMobile}
                   >
                     驳回
                   </Button>
@@ -304,7 +314,6 @@ export default function ObjectionProcessPage() {
             </Card>
           )}
 
-        {/* 处理人选择模态框 */}
         <ApproverSelectorModal
           visible={approverSelectorVisible}
           onCancel={() => setApproverSelectorVisible(false)}

@@ -10,11 +10,13 @@ import {
   Space,
   Tag,
   Card,
+  Grid,
   Statistic,
   Row,
   Col,
   message,
   Typography,
+  Pagination,
 } from 'antd'
 import { SearchOutlined, ReloadOutlined, BarChartOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -67,6 +69,8 @@ const ACTION_MAP: Record<string, string> = {
 }
 
 export default function LogsPage() {
+  const screens = Grid.useBreakpoint()
+  const isMobile = !screens.md
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [stats, setStats] = useState<LogStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -93,8 +97,8 @@ export default function LogsPage() {
         } else {
           message.error(data.error || '加载失败')
         }
-      } catch (error) {
-        console.error('Load logs error:', error)
+      } catch {
+        console.error('Load logs error')
         message.error('加载日志失败')
       } finally {
         setLoading(false)
@@ -112,8 +116,8 @@ export default function LogsPage() {
       } else {
         message.error(data.error || '加载统计失败')
       }
-    } catch (error) {
-      console.error('Load stats error:', error)
+    } catch {
+      console.error('Load stats error')
       message.error('加载统计失败')
     }
   }, [])
@@ -121,7 +125,7 @@ export default function LogsPage() {
   useEffect(() => {
     loadLogs()
     loadStats()
-  }, [])
+  }, [loadLogs, loadStats])
 
   const handleSearch = (values: {
     userId?: string
@@ -208,6 +212,34 @@ export default function LogsPage() {
     },
   ]
 
+  const renderLogCard = (record: LogEntry) => (
+    <Card key={record.id} size="small" style={{ borderRadius: 12 }}>
+      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Tag color={record.status === 'SUCCESS' ? 'green' : 'red'}>
+            {record.status === 'SUCCESS' ? '成功' : '失败'}
+          </Tag>
+          <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+            {dayjs(record.createdAt).format('YYYY-MM-DD HH:mm:ss')}
+          </span>
+        </Space>
+        <Text strong>
+          {record.user.realName} ({record.user.username})
+        </Text>
+        <Text type="secondary">
+          {record.module} · {ACTION_MAP[record.action] || record.action}
+        </Text>
+        <Text ellipsis={{ tooltip: record.description }}>{record.description}</Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {record.bdc ? `${record.bdc.certNo} - ${record.bdc.ownerName}` : '无关联档案'}
+        </Text>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          IP：{record.ipAddress || '-'}
+        </Text>
+      </Space>
+    </Card>
+  )
+
   return (
     <PageContainer
       title="操作日志"
@@ -218,13 +250,13 @@ export default function LogsPage() {
     >
       {/* 统计卡片 */}
       {stats && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={12} sm={12} lg={6}>
             <Card>
               <Statistic title="总操作数" value={stats.totalLogs} prefix={<BarChartOutlined />} />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} lg={6}>
             <Card>
               <Statistic
                 title="成功操作"
@@ -233,7 +265,7 @@ export default function LogsPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} lg={6}>
             <Card>
               <Statistic
                 title="失败操作"
@@ -242,7 +274,7 @@ export default function LogsPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} lg={6}>
             <Card>
               <Statistic title="统计周期" value="7天" />
             </Card>
@@ -251,9 +283,14 @@ export default function LogsPage() {
       )}
 
       {/* 筛选表单 */}
-      <Form form={form} layout="inline" onFinish={handleSearch} style={{ marginBottom: 16 }}>
+      <Form
+        form={form}
+        layout={isMobile ? 'vertical' : 'inline'}
+        onFinish={handleSearch}
+        style={{ marginBottom: 16 }}
+      >
         <Form.Item name="module" label="模块">
-          <Select placeholder="选择模块" style={{ width: 120 }} allowClear>
+          <Select placeholder="选择模块" style={{ width: isMobile ? '100%' : 120 }} allowClear>
             <Select.Option value="AUTH">认证</Select.Option>
             <Select.Option value="USER">用户管理</Select.Option>
             <Select.Option value="ROLE">角色管理</Select.Option>
@@ -263,7 +300,7 @@ export default function LogsPage() {
           </Select>
         </Form.Item>
         <Form.Item name="action" label="操作">
-          <Select placeholder="选择操作" style={{ width: 120 }} allowClear>
+          <Select placeholder="选择操作" style={{ width: isMobile ? '100%' : 120 }} allowClear>
             {Object.entries(ACTION_MAP).map(([key, value]) => (
               <Select.Option key={key} value={key}>
                 {value}
@@ -272,20 +309,20 @@ export default function LogsPage() {
           </Select>
         </Form.Item>
         <Form.Item name="status" label="状态">
-          <Select placeholder="选择状态" style={{ width: 100 }} allowClear>
+          <Select placeholder="选择状态" style={{ width: isMobile ? '100%' : 100 }} allowClear>
             <Select.Option value="SUCCESS">成功</Select.Option>
             <Select.Option value="FAILED">失败</Select.Option>
           </Select>
         </Form.Item>
         <Form.Item name="dateRange" label="时间范围">
-          <RangePicker />
+          <RangePicker style={{ width: isMobile ? '100%' : undefined }} />
         </Form.Item>
         <Form.Item>
-          <Space>
-            <Button type="primary" htmlType="submit" icon={<SearchOutlined />}>
+          <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+            <Button type="primary" htmlType="submit" icon={<SearchOutlined />} block={isMobile}>
               查询
             </Button>
-            <Button onClick={handleReset} icon={<ReloadOutlined />}>
+            <Button onClick={handleReset} icon={<ReloadOutlined />} block={isMobile}>
               重置
             </Button>
           </Space>
@@ -293,24 +330,43 @@ export default function LogsPage() {
       </Form>
 
       {/* 日志表格 */}
-      <Table
-        columns={columns}
-        dataSource={logs}
-        rowKey="id"
-        loading={loading}
-        pagination={{
-          current: currentPage,
-          pageSize,
-          total,
-          showSizeChanger: true,
-          showTotal: (total) => `共 ${total} 条`,
-          onChange: (page, size) => {
-            setCurrentPage(page)
-            setPageSize(size)
-            loadLogs(page, size)
-          },
-        }}
-      />
+      {isMobile ? (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {logs.map(renderLogCard)}
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+            <Pagination
+              current={currentPage}
+              pageSize={pageSize}
+              total={total}
+              showSizeChanger={false}
+              onChange={(page, size) => {
+                setCurrentPage(page)
+                setPageSize(size)
+                loadLogs(page, size)
+              }}
+            />
+          </div>
+        </Space>
+      ) : (
+        <Table
+          columns={columns}
+          dataSource={logs}
+          rowKey="id"
+          loading={loading}
+          pagination={{
+            current: currentPage,
+            pageSize,
+            total,
+            showSizeChanger: true,
+            showTotal: (total) => `共 ${total} 条`,
+            onChange: (page, size) => {
+              setCurrentPage(page)
+              setPageSize(size)
+              loadLogs(page, size)
+            },
+          }}
+        />
+      )}
     </PageContainer>
   )
 }
