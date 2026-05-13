@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
@@ -331,6 +332,14 @@ async function executeProcessHandler(
             }
           : null,
       }
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: action === 'approve' ? 'APPROVE' : 'REJECT',
+      module: 'OBJECTION',
+      description: action === 'approve' ? `审批异议通过：${id}` : `审批异议驳回：${id}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

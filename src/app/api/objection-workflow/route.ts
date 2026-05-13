@@ -97,4 +97,6 @@ async function createWorkflowHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建流程失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['objection:manage'])(createWorkflowHandler)
+export const POST = withPermission(['objection:manage'], [], { module: 'OBJECTION_WORKFLOW' })(
+  createWorkflowHandler,
+)

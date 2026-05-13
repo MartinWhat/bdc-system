@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -63,6 +64,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           },
         },
       },
+    })
+
+    await safeLogOperation({
+      userId: authorId,
+      action: 'PUBLISH',
+      module: 'NOTIFICATION',
+      description: `发布通知 ${existing.title}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

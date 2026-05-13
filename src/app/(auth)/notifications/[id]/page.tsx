@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, Typography, Tag, Space, Button, Spin, Grid } from 'antd'
 import {
@@ -13,6 +13,7 @@ import {
 } from '@ant-design/icons'
 import PageContainer from '@/components/PageContainer'
 import { authFetch } from '@/lib/api-fetch'
+import { recordNotificationView, shouldRecordNotificationView } from '@/lib/notification-view'
 
 const { Title, Text } = Typography
 
@@ -62,6 +63,7 @@ export default function NotificationDetailPage() {
   const isMobile = !screens.md
   const [loading, setLoading] = useState(true)
   const [notification, setNotification] = useState<NotificationDetail | null>(null)
+  const markedViewRef = useRef<string | null>(null)
 
   const id = params.id as string
 
@@ -85,6 +87,53 @@ export default function NotificationDetailPage() {
       fetchNotification()
     }
   }, [id, fetchNotification])
+
+  useEffect(() => {
+    if (!notification) {
+      return
+    }
+
+    if (markedViewRef.current === notification.id) {
+      return
+    }
+    markedViewRef.current = notification.id
+
+    let cancelled = false
+
+    const recordView = async () => {
+      if (!shouldRecordNotificationView(notification.id)) {
+        return
+      }
+
+      try {
+        const res = await authFetch(`/api/notifications/${notification.id}/view`, {
+          method: 'POST',
+        })
+
+        const data = await res.json().catch(() => null)
+        if (!cancelled && data?.success && typeof data.readCount === 'number') {
+          recordNotificationView(notification.id)
+          setNotification((current) =>
+            current && current.id === notification.id
+              ? {
+                  ...current,
+                  readCount: data.readCount,
+                }
+              : current,
+          )
+        }
+      } catch (error) {
+        console.error('Record notification view error:', error)
+        markedViewRef.current = null
+      }
+    }
+
+    recordView()
+
+    return () => {
+      cancelled = true
+    }
+  }, [notification])
 
   if (loading) {
     return (

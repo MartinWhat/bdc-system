@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { hashUserPassword } from '@/lib/auth'
 import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
-import { logOperation } from '@/lib/log'
 import { withPermission } from '@/lib/api/withPermission'
 import { z } from 'zod'
 
@@ -202,15 +201,6 @@ async function createUserHandler(request: NextRequest) {
       return createdUser
     })
 
-    // 记录日志
-    await logOperation({
-      userId: user.id,
-      action: 'CREATE',
-      module: 'USER',
-      description: `创建用户 ${user.username}`,
-      status: 'SUCCESS',
-    })
-
     return NextResponse.json({
       success: true,
       data: user,
@@ -220,4 +210,6 @@ async function createUserHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建用户失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['user:create'], ['ADMIN'])(createUserHandler)
+export const POST = withPermission(['user:create'], ['ADMIN'], { module: 'USER' })(
+  createUserHandler,
+)

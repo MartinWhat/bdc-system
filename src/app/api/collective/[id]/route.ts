@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptSensitiveField, encryptSensitiveField } from '@/lib/gm-crypto'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const updateCertSchema = z.object({
@@ -217,6 +218,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'UPDATE',
+      module: 'COLLECTIVE',
+      description: `更新村集体证书 ${cert.certNo}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({ success: true, data: updatedCert })
   } catch (error) {
     console.error('Update collective cert error:', error)
@@ -283,6 +292,14 @@ export async function DELETE(
       })
 
       return updatedCert
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'CANCEL',
+      module: 'COLLECTIVE',
+      description: `注销村集体证书 ${cert.certNo}（${cancelReason}）`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({ success: true, data: result })

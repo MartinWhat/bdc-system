@@ -11,7 +11,6 @@ import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { withPermission } from '@/lib/api/withPermission'
 import { getUserFromRequest } from '@/lib/middleware/auth'
 import { getDataPermissionFilter } from '@/lib/auth/data-permission'
-import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 const updateBdcSchema = z.object({
@@ -197,19 +196,6 @@ async function updateBdcHandler(
       },
     })
 
-    // 记录操作日志
-    const { userId } = getUserFromRequest(request)
-    if (userId) {
-      await logOperation({
-        userId,
-        bdcId: id,
-        action: 'BDC_UPDATE',
-        module: 'BDC',
-        description: `更新宅基地档案：${existingBdc.certNo}`,
-        status: 'SUCCESS',
-      })
-    }
-
     return NextResponse.json({
       success: true,
       data: bdc,
@@ -254,19 +240,6 @@ async function deleteBdcHandler(
       data: { status: 'CANCELLED' },
     })
 
-    // 记录操作日志
-    const { userId } = getUserFromRequest(request)
-    if (userId) {
-      await logOperation({
-        userId,
-        bdcId: id,
-        action: 'BDC_DELETE',
-        module: 'BDC',
-        description: `删除（注销）宅基地档案：${existingBdc.certNo}`,
-        status: 'SUCCESS',
-      })
-    }
-
     return NextResponse.json({
       success: true,
       message: '宅基地档案已删除',
@@ -290,5 +263,9 @@ function maskPhone(phone: string): string {
 
 // 导出带权限检查的 handlers
 export const GET = withPermission(['bdc:read'], ['ADMIN', 'BDC_MANAGER'])(getBdcDetailHandler)
-export const PUT = withPermission(['bdc:update'], ['ADMIN', 'BDC_MANAGER'])(updateBdcHandler)
-export const DELETE = withPermission(['bdc:delete'], ['ADMIN', 'BDC_MANAGER'])(deleteBdcHandler)
+export const PUT = withPermission(['bdc:update'], ['ADMIN', 'BDC_MANAGER'], { module: 'BDC' })(
+  updateBdcHandler,
+)
+export const DELETE = withPermission(['bdc:delete'], ['ADMIN', 'BDC_MANAGER'], {
+  module: 'BDC',
+})(deleteBdcHandler)

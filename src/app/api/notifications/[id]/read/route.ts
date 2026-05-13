@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const readSchema = z.object({
@@ -49,6 +50,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     if (existingRead) {
+      await safeLogOperation({
+        userId,
+        action: 'READ',
+        module: 'NOTIFICATION',
+        description: `通知 ${notification.title} 已读（重复标记）`,
+        status: 'SUCCESS',
+      })
       return NextResponse.json({
         success: true,
         message: '已标记为已读',
@@ -56,25 +64,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
     }
 
-    // 创建已读记录并更新阅读数
-    await prisma.$transaction([
-      prisma.notificationRead.create({
-        data: {
-          notificationId: id,
-          userId,
-        },
-      }),
-      prisma.notification.update({
-        where: { id },
-        data: {
-          readCount: { increment: 1 },
-        },
-      }),
-    ])
+    // 仅创建已读记录，不再影响浏览量统计
+    await prisma.notificationRead.create({
+      data: {
+        notificationId: id,
+        userId,
+      },
+    })
+
+    await safeLogOperation({
+      userId,
+      action: 'READ',
+      module: 'NOTIFICATION',
+      description: `标记通知已读：${notification.title}`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,
-      readCount: notification.readCount + 1,
+      readCount: notification.readCount,
     })
   } catch (error) {
     console.error('Mark read error:', error)

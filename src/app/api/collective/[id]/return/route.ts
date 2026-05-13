@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const returnSchema = z.object({
@@ -86,6 +87,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
 
       return updatedCert
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'RETURN',
+      module: 'COLLECTIVE',
+      description: `归还村集体证书 ${cert.certNo}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

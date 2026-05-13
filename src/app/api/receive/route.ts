@@ -145,6 +145,14 @@ async function createReceiveRecordHandler(request: NextRequest) {
     }
 
     const { bdcId, remark } = validationResult.data
+    const operatorId = request.headers.get('x-user-id')
+
+    if (!operatorId) {
+      return NextResponse.json(
+        { error: '未认证或认证已过期', code: 'UNAUTHORIZED' },
+        { status: 401 },
+      )
+    }
 
     // 检查宅基地是否存在
     const bdc = await prisma.zjdBdc.findUnique({
@@ -178,7 +186,7 @@ async function createReceiveRecordHandler(request: NextRequest) {
           status: 'ISSUED',
           issueDate: new Date(),
           remark,
-          createdBy: 'system',
+          createdBy: operatorId,
         },
         include: {
           bdc: {
@@ -213,7 +221,6 @@ async function createReceiveRecordHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建领证记录失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(
-  ['receive:create'],
-  ['ADMIN', 'RECEIVE_CLERK'],
-)(createReceiveRecordHandler)
+export const POST = withPermission(['receive:create'], ['ADMIN', 'RECEIVE_CLERK'], {
+  module: 'RECEIVE',
+})(createReceiveRecordHandler)

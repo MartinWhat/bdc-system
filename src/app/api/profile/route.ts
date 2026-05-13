@@ -11,6 +11,7 @@ import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { getCurrentUser } from '@/lib/auth/middleware'
 import { auth } from '@/lib/auth/better-auth'
 import { isAPIError } from 'better-auth/api'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 // 更新用户信息验证
@@ -138,6 +139,14 @@ export async function PUT(request: NextRequest) {
       },
     })
 
+    await safeLogOperation({
+      userId: user.userId,
+      action: 'UPDATE',
+      module: 'PROFILE',
+      description: `更新个人信息：${currentUser.username}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({
       success: true,
       data: updatedUser,
@@ -195,6 +204,14 @@ export async function PATCH(request: NextRequest) {
 
       throw error
     }
+
+    await safeLogOperation({
+      userId: user.userId,
+      action: 'PASSWORD',
+      module: 'PROFILE',
+      description: `修改密码：${user.userId}`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,

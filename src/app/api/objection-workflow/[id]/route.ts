@@ -116,7 +116,9 @@ async function updateWorkflowHandler(
     return NextResponse.json({ error: '更新流程失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const PUT = withPermission(['objection:manage'])(updateWorkflowHandler)
+export const PUT = withPermission(['objection:manage'], [], { module: 'OBJECTION_WORKFLOW' })(
+  updateWorkflowHandler,
+)
 
 // DELETE - 删除流程配置
 async function deleteWorkflowHandler(
@@ -152,4 +154,6 @@ async function deleteWorkflowHandler(
     return NextResponse.json({ error: '删除流程失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const DELETE = withPermission(['objection:manage'])(deleteWorkflowHandler)
+export const DELETE = withPermission(['objection:manage'], [], { module: 'OBJECTION_WORKFLOW' })(
+  deleteWorkflowHandler,
+)

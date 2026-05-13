@@ -10,7 +10,6 @@ import { encryptSensitiveField } from '@/lib/gm-crypto'
 import { withPermission } from '@/lib/api/withPermission'
 import { getUserFromRequest } from '@/lib/middleware/auth'
 import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
-import { logOperation } from '@/lib/log'
 import { z } from 'zod'
 
 const createBdcSchema = z.object({
@@ -203,18 +202,6 @@ async function createBdcHandler(request: NextRequest) {
       },
     })
 
-    // 记录操作日志
-    if (userId) {
-      await logOperation({
-        userId,
-        bdcId: bdc.id,
-        action: 'BDC_CREATE',
-        module: 'BDC',
-        description: `创建宅基地档案：${certNo}`,
-        status: 'SUCCESS',
-      })
-    }
-
     return NextResponse.json({
       success: true,
       data: bdc,
@@ -224,4 +211,6 @@ async function createBdcHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建宅基地档案失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['bdc:create'], ['ADMIN', 'BDC_MANAGER'])(createBdcHandler)
+export const POST = withPermission(['bdc:create'], ['ADMIN', 'BDC_MANAGER'], { module: 'BDC' })(
+  createBdcHandler,
+)

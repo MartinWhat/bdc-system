@@ -6,7 +6,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
+import { getUserFromRequest } from '@/lib/middleware/auth'
 
 const createTownSchema = z.object({
   code: z.string().min(1, '镇街代码不能为空'),
@@ -88,6 +90,15 @@ export async function POST(request: NextRequest) {
         sortOrder,
         status: 'ACTIVE',
       },
+    })
+
+    const { userId } = getUserFromRequest(request)
+    await safeLogOperation({
+      userId: userId || 'unknown',
+      action: 'CREATE',
+      module: 'TOWN',
+      description: `创建镇街 ${town.name} (${town.code})`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

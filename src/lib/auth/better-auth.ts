@@ -1,9 +1,11 @@
 import { prismaAdapter } from '@better-auth/prisma-adapter'
 import { betterAuth } from 'better-auth'
+import { createAuthMiddleware } from 'better-auth/api'
 import { nextCookies } from 'better-auth/next-js'
 import { passkey } from '@better-auth/passkey'
 import { customSession, twoFactor, username } from 'better-auth/plugins'
 import { prisma } from '@/lib/prisma'
+import { recordAuthLoginAudit, resolveAuthAuditEvent } from '@/lib/auth/audit'
 import { hashPassword, verifyPassword } from './password'
 
 type AuthUserContext = {
@@ -103,6 +105,47 @@ function resolveBaseURL() {
   return undefined
 }
 
+const authAuditPlugin = {
+  id: 'auth-audit',
+  hooks: {
+    after: [
+      {
+        matcher: ({ path }: { path?: string | null }) => {
+          const event = resolveAuthAuditEvent(path)
+          return event?.action === 'LOGIN'
+        },
+        handler: createAuthMiddleware(async (ctx) => {
+          const event = resolveAuthAuditEvent(ctx.path)
+          if (!event || event.action !== 'LOGIN') {
+            return
+          }
+
+          const setCookieHeaders = ctx.context.responseHeaders?.getSetCookie?.() || []
+          const sessionTokenName = ctx.context.authCookies.sessionToken.name
+          const hasSessionCookie = setCookieHeaders.some((cookie) =>
+            cookie.includes(sessionTokenName),
+          )
+
+          if (!hasSessionCookie) {
+            return
+          }
+
+          const userId = ctx.context.newSession?.user?.id || ctx.context.session?.user?.id
+          if (!userId) {
+            return
+          }
+
+          await recordAuthLoginAudit({
+            userId,
+            description: event.description,
+            headers: ctx.headers,
+          })
+        }),
+      },
+    ],
+  },
+} satisfies import('better-auth').BetterAuthPlugin
+
 export const auth = betterAuth({
   secret: betterAuthSecret,
   baseURL: resolveBaseURL(),
@@ -161,6 +204,7 @@ export const auth = betterAuth({
         },
       },
     }),
+    authAuditPlugin,
     customSession(async ({ user, session }) => {
       const context = await loadAuthContext(user.id)
 

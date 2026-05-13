@@ -7,6 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { logOperation } from '@/lib/log'
+import { getUserFromRequest } from '@/lib/middleware/auth'
 import { z } from 'zod'
 
 const updateRoleSchema = z.object({
@@ -104,6 +106,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
+    const { userId: currentUserId } = getUserFromRequest(request)
+    try {
+      await logOperation({
+        userId: currentUserId || 'unknown',
+        action: 'UPDATE',
+        module: 'ROLE',
+        description: `更新角色 ${existingRole.name} (${existingRole.code})`,
+        status: 'SUCCESS',
+      })
+    } catch (error) {
+      console.error('Log role update error:', error)
+    }
+
     return NextResponse.json({
       success: true,
       data: role,
@@ -144,6 +159,19 @@ export async function DELETE(
     await prisma.sysRole.delete({
       where: { id },
     })
+
+    const { userId: currentUserId } = getUserFromRequest(request)
+    try {
+      await logOperation({
+        userId: currentUserId || 'unknown',
+        action: 'DELETE',
+        module: 'ROLE',
+        description: `删除角色 ${existingRole.name} (${existingRole.code})`,
+        status: 'SUCCESS',
+      })
+    } catch (error) {
+      console.error('Log role delete error:', error)
+    }
 
     return NextResponse.json({
       success: true,

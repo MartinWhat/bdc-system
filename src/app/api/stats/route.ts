@@ -13,21 +13,18 @@ async function getStatsHandler(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const townId = searchParams.get('townId')
 
-    // 构建基础查询条件
-    const baseWhere: Record<string, unknown> = {}
+    // 构建分模型查询条件
+    const bdcWhere: Record<string, unknown> = {}
+    const certWhere: Record<string, unknown> = {}
+    const receiveWhere: Record<string, unknown> = {}
+    const objectionWhere: Record<string, unknown> = {}
+
     if (townId) {
-      baseWhere.village = { townId }
+      bdcWhere.village = { townId }
+      certWhere.village = { townId }
+      receiveWhere.bdc = { village: { townId } }
+      objectionWhere.receiveRecord = { bdc: { village: { townId } } }
     }
-
-    // 1. 宅基地总数
-    const totalBdc = await prisma.zjdBdc.count({ where: baseWhere })
-
-    // 2. 宅基地按状态统计
-    const bdcStatusStats = await prisma.zjdBdc.groupBy({
-      by: ['status'],
-      where: baseWhere,
-      _count: true,
-    })
 
     const statusMap: Record<string, string> = {
       PENDING: '待审核',
@@ -36,16 +33,6 @@ async function getStatsHandler(request: NextRequest) {
       COMPLETED: '已完成',
       CANCELLED: '已注销',
     }
-
-    // 3. 村集体证书总数
-    const totalCert = await prisma.collectiveCert.count({ where: baseWhere })
-
-    // 4. 村集体证书按状态统计
-    const certStatusStats = await prisma.collectiveCert.groupBy({
-      by: ['status'],
-      where: baseWhere,
-      _count: true,
-    })
 
     const certStatusMap: Record<string, string> = {
       IN_STOCK: '在库',
@@ -56,25 +43,80 @@ async function getStatsHandler(request: NextRequest) {
       PENDING_APPROVE: '待审核',
     }
 
-    // 5. 镇街统计（使用数据库 GROUP BY 代替应用层计算）
-    const townBdcStats = await prisma.zjdBdc.groupBy({
-      by: ['villageId'],
-      where: baseWhere,
-      _count: { id: true },
-    })
-
-    const townCertStats = await prisma.collectiveCert.groupBy({
-      by: ['villageId'],
-      where: baseWhere,
-      _count: { id: true },
-    })
-
-    // 获取镇街和村居信息
-    const townsData = await prisma.sysTown.findMany({
-      include: {
-        villages: { select: { id: true, name: true } },
-      },
-    })
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const [
+      totalUsers,
+      totalBdc,
+      totalCert,
+      totalReceive,
+      bdcStatusStats,
+      certStatusStats,
+      townBdcStats,
+      townCertStats,
+      townsData,
+      thisMonthBdc,
+      thisMonthCert,
+      pendingBdc,
+      pendingCertApprove,
+      pendingReceive,
+      pendingObjection,
+      recentLogs,
+    ] = await Promise.all([
+      prisma.sysUser.count(),
+      prisma.zjdBdc.count({ where: bdcWhere }),
+      prisma.collectiveCert.count({ where: certWhere }),
+      prisma.zjdReceiveRecord.count({ where: receiveWhere }),
+      prisma.zjdBdc.groupBy({
+        by: ['status'],
+        where: bdcWhere,
+        _count: true,
+      }),
+      prisma.collectiveCert.groupBy({
+        by: ['status'],
+        where: certWhere,
+        _count: true,
+      }),
+      prisma.zjdBdc.groupBy({
+        by: ['villageId'],
+        where: bdcWhere,
+        _count: { id: true },
+      }),
+      prisma.collectiveCert.groupBy({
+        by: ['villageId'],
+        where: certWhere,
+        _count: { id: true },
+      }),
+      prisma.sysTown.findMany({
+        include: {
+          villages: { select: { id: true, name: true } },
+        },
+      }),
+      prisma.zjdBdc.count({
+        where: { ...bdcWhere, createdAt: { gte: monthStart } },
+      }),
+      prisma.collectiveCert.count({
+        where: { ...certWhere, createdAt: { gte: monthStart } },
+      }),
+      prisma.zjdBdc.count({
+        where: { ...bdcWhere, status: 'PENDING' },
+      }),
+      prisma.collectiveCert.count({
+        where: { ...certWhere, status: 'PENDING_APPROVE' },
+      }),
+      prisma.zjdReceiveRecord.count({
+        where: { ...receiveWhere, status: 'ISSUED' },
+      }),
+      prisma.objection.count({
+        where: { ...objectionWhere, status: 'PENDING' },
+      }),
+      prisma.operationLog.groupBy({
+        by: ['action'],
+        where: { createdAt: { gte: sevenDaysAgo } },
+        _count: true,
+      }),
+    ])
 
     // 构建村居到镇街的映射
     const villageToTown = new Map<string, { townId: string; townName: string; villageId: string }>()
@@ -119,45 +161,14 @@ async function getStatsHandler(request: NextRequest) {
 
     const townStats = Array.from(townCountMap.values())
 
-    // 6. 本月新增
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    const thisMonthBdc = await prisma.zjdBdc.count({
-      where: { ...baseWhere, createdAt: { gte: monthStart } },
-    })
-    const thisMonthCert = await prisma.collectiveCert.count({
-      where: { ...baseWhere, createdAt: { gte: monthStart } },
-    })
-
-    // 7. 待处理任务
-    const pendingBdc = await prisma.zjdBdc.count({
-      where: { ...baseWhere, status: 'PENDING' },
-    })
-    const pendingCertApprove = await prisma.collectiveCert.count({
-      where: { ...baseWhere, status: 'PENDING_APPROVE' },
-    })
-    // 待领取：已发放但尚未领取完成的记录
-    const pendingReceive = await prisma.zjdReceiveRecord.count({
-      where: { status: 'ISSUED' },
-    })
-    const pendingObjection = await prisma.objection.count({
-      where: { status: 'PENDING' },
-    })
-
-    // 8. 最近 7 天操作日志统计
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const recentLogs = await prisma.operationLog.groupBy({
-      by: ['action'],
-      where: { createdAt: { gte: sevenDaysAgo } },
-      _count: true,
-    })
-
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         overview: {
+          totalUsers,
           totalBdc,
           totalCert,
+          totalReceive,
           thisMonthBdc,
           thisMonthCert,
         },
@@ -185,6 +196,8 @@ async function getStatsHandler(request: NextRequest) {
         })),
       },
     })
+    response.headers.set('Cache-Control', 'private, max-age=300, stale-while-revalidate=300')
+    return response
   } catch (error) {
     console.error('Get stats error:', error)
     return NextResponse.json({ error: '获取统计失败', code: 'SERVER_ERROR' }, { status: 500 })

@@ -145,4 +145,6 @@ async function initiateWorkflowHandler(
     return NextResponse.json({ error: '初始化流程失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['objection:write'])(initiateWorkflowHandler)
+export const POST = withPermission(['objection:write'], [], { module: 'OBJECTION' })(
+  initiateWorkflowHandler,
+)

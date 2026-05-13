@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseExcelBuffer } from '@/lib/excel-parser'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 // 导入数据项 schema
@@ -218,6 +219,14 @@ export async function POST(request: NextRequest) {
         })
       })
     }
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'BATCH_IMPORT',
+      module: 'RECEIVE',
+      description: `批量导入领证记录，成功 ${results.success.length} 条，失败 ${results.failed.length} 条`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,

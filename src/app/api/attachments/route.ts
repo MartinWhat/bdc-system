@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { existsSync } from 'fs'
@@ -203,6 +204,14 @@ export async function POST(request: NextRequest) {
         processed,
         mimeType: file.type,
       },
+    })
+
+    await safeLogOperation({
+      userId: authorId,
+      action: 'UPLOAD',
+      module: 'ATTACHMENT',
+      description: `上传附件 ${file.name}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

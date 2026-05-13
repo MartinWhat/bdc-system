@@ -5,10 +5,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getUserFromRequest } from '@/lib/middleware/auth'
+import { safeLogOperation } from '@/lib/log/safe'
 
 // 使用 any 以兼容 Next.js 15 的动态路由 [id] 参数签名
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyHandler = (req: NextRequest, context?: any) => Promise<NextResponse>
+
+export interface OperationLogOptions {
+  module: string
+  actionMap?: Partial<Record<string, string>>
+}
 
 /**
  * 创建权限验证包装器
@@ -16,7 +22,11 @@ type AnyHandler = (req: NextRequest, context?: any) => Promise<NextResponse>
  * @param requiredRoles - 需要的角色列表（满足其一即可）
  * @returns 包装后的 Handler
  */
-export function withPermission(requiredPermissions: string[] = [], requiredRoles: string[] = []) {
+export function withPermission(
+  requiredPermissions: string[] = [],
+  requiredRoles: string[] = [],
+  operationLog?: OperationLogOptions,
+) {
   return function (handler: AnyHandler): AnyHandler {
     return async function (req: NextRequest, context?: unknown): Promise<NextResponse> {
       // 1. 获取用户信息
@@ -49,7 +59,30 @@ export function withPermission(requiredPermissions: string[] = [], requiredRoles
       }
 
       // 4. 权限通过，执行原 Handler
-      return handler(req, context)
+      const response = await handler(req, context)
+
+      if (operationLog && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+        const userId = req.headers.get('x-user-id')
+        if (userId) {
+          const defaultActionMap: Record<string, string> = {
+            POST: 'CREATE',
+            PUT: 'UPDATE',
+            PATCH: 'UPDATE',
+            DELETE: 'DELETE',
+          }
+          const action =
+            operationLog.actionMap?.[req.method] || defaultActionMap[req.method] || req.method
+          await safeLogOperation({
+            userId,
+            action,
+            module: operationLog.module,
+            description: `${action} ${req.nextUrl.pathname}`,
+            status: response.status >= 400 ? 'FAILED' : 'SUCCESS',
+          })
+        }
+      }
+
+      return response
     }
   }
 }

@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
 
@@ -66,6 +67,14 @@ export async function DELETE(
     // 删除数据库记录
     await prisma.attachment.delete({
       where: { id },
+    })
+
+    await safeLogOperation({
+      userId: authorId,
+      action: 'DELETE',
+      module: 'ATTACHMENT',
+      description: `删除附件 ${attachment.name}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

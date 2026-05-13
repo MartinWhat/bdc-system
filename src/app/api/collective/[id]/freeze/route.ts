@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const freezeSchema = z.object({
@@ -95,6 +96,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return updatedCert
     })
 
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'FREEZE',
+      module: 'COLLECTIVE',
+      description: `冻结村集体证书 ${cert.certNo}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({
       success: true,
       data: result,
@@ -167,6 +176,14 @@ export async function DELETE(
       })
 
       return updatedCert
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'UNFREEZE',
+      module: 'COLLECTIVE',
+      description: `解冻村集体证书 ${cert.certNo}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

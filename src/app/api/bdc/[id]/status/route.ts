@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { withPermission } from '@/lib/api/withPermission'
 import { getUserFromRequest } from '@/lib/middleware/auth'
 import { getDataPermissionFilter } from '@/lib/auth/data-permission'
@@ -117,6 +118,20 @@ async function updateBdcStatusHandler(
     const bdc = await prisma.zjdBdc.update({
       where: { id },
       data: updateData,
+    })
+
+    const { userId } = getUserFromRequest(request)
+    const actionMap: Record<string, string> = {
+      APPROVED: 'APPROVE',
+      CERTIFIED: 'CERTIFY',
+      CANCELLED: 'CANCEL',
+    }
+    await safeLogOperation({
+      userId: userId || 'unknown',
+      action: actionMap[status] || 'UPDATE',
+      module: 'BDC',
+      description: `宅基地状态更新为 ${status}：${existingBdc.certNo}${reason ? `（${reason}）` : ''}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

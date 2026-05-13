@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
+import { logOperation } from '@/lib/log'
 import { updateUserSchema } from '../schema'
 import { getUserFromRequest, isAdmin } from '@/lib/middleware/auth'
 
@@ -79,6 +80,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { realName, fixedPhone, phone, email, status, twoFactorEnabled, roleIds } =
       validationResult.data
+    const { userId: currentUserId } = getUserFromRequest(request)
 
     // 检查用户是否存在
     const existingUser = await prisma.sysUser.findUnique({
@@ -152,6 +154,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       userWithRoles.fixedPhone = await decryptSensitiveField(userWithRoles.fixedPhone)
     }
 
+    const changedFields = [
+      realName !== undefined ? '真实姓名' : null,
+      email !== undefined ? '邮箱' : null,
+      status !== undefined ? '状态' : null,
+      twoFactorEnabled !== undefined ? '双重验证' : null,
+      phone !== undefined ? '手机号' : null,
+      fixedPhone !== undefined ? '固定电话' : null,
+      roleIds !== undefined ? '角色' : null,
+    ]
+      .filter(Boolean)
+      .join('、')
+
+    try {
+      await logOperation({
+        userId: currentUserId || 'unknown',
+        action: 'UPDATE',
+        module: 'USER',
+        description: `更新用户 ${existingUser.username}${
+          changedFields ? `（${changedFields}）` : ''
+        }`,
+        status: 'SUCCESS',
+      })
+    } catch (error) {
+      console.error('Log user update error:', error)
+    }
+
     return NextResponse.json({
       success: true,
       data: userWithRoles,
@@ -197,6 +225,18 @@ export async function DELETE(
       where: { id },
       data: { status: 'DISABLED' },
     })
+
+    try {
+      await logOperation({
+        userId: currentUserId || 'unknown',
+        action: 'DISABLE',
+        module: 'USER',
+        description: `禁用用户 ${existingUser.username}`,
+        status: 'SUCCESS',
+      })
+    } catch (error) {
+      console.error('Log user disable error:', error)
+    }
 
     return NextResponse.json({
       success: true,

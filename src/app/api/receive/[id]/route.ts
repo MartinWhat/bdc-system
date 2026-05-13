@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { encryptSensitiveField, decryptSensitiveField } from '@/lib/gm-crypto'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 // 身份证验证正则
@@ -154,6 +155,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const updateData: Record<string, unknown> = {}
     const processNodeData: Record<string, unknown> = {}
     let shouldUpdateBdc = false
+    let logAction = 'UPDATE'
+    let logDescription = `更新领证记录 ${id}`
 
     // 处理状态操作
     if (action) {
@@ -170,6 +173,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           processNodeData.nodeType = 'ISSUE'
           processNodeData.nodeName = '证书发放'
           processNodeData.description = '证书已发放给领取人'
+          logAction = 'ISSUE'
+          logDescription = `领证记录 ${id} 已发放`
           break
 
         case 'receive': // 领取完成
@@ -194,6 +199,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           processNodeData.nodeName = '领取完成'
           processNodeData.description = `领取人：${receiverName}`
           shouldUpdateBdc = true
+          logAction = 'COMPLETE'
+          logDescription = `领证记录 ${id} 领取完成，领取人：${receiverName}`
           break
 
         case 'cancel': // 取消
@@ -201,6 +208,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           processNodeData.nodeType = 'CANCEL'
           processNodeData.nodeName = '取消领证'
           processNodeData.description = remark || '取消领证'
+          logAction = 'CANCEL'
+          logDescription = `领证记录 ${id} 已取消${remark ? `：${remark}` : ''}`
           break
       }
     }
@@ -273,6 +282,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       }
 
       return updated
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      bdcId: record.bdcId,
+      action: logAction,
+      module: 'RECEIVE',
+      description: logDescription,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({ success: true, data: updatedRecord })

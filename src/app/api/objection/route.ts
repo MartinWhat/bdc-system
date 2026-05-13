@@ -200,7 +200,6 @@ async function createObjectionHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建异议记录失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(
-  ['objection:create'],
-  ['ADMIN', 'OBJECTION_HANDLER'],
-)(createObjectionHandler)
+export const POST = withPermission(['objection:create'], ['ADMIN', 'OBJECTION_HANDLER'], {
+  module: 'OBJECTION',
+})(createObjectionHandler)

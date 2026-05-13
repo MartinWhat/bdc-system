@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { sanitizeHtml } from '@/lib/utils/sanitize'
 import { z } from 'zod'
 
@@ -176,6 +177,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     })
 
+    await safeLogOperation({
+      userId: authorId,
+      action: 'UPDATE',
+      module: 'NOTIFICATION',
+      description: `更新通知 ${existing.title}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({
       success: true,
       data: notification,
@@ -231,6 +240,14 @@ export async function DELETE(
 
     await prisma.notification.delete({
       where: { id },
+    })
+
+    await safeLogOperation({
+      userId: authorId,
+      action: 'DELETE',
+      module: 'NOTIFICATION',
+      description: `删除通知 ${existing.title}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

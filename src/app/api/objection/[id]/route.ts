@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const resolveObjectionSchema = z.object({
@@ -125,6 +126,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           },
         })
       }
+    })
+
+    await safeLogOperation({
+      userId: resolverId,
+      bdcId: objection.receiveRecord?.bdcId,
+      action: status === 'RESOLVED' ? 'RESOLVE' : 'REJECT',
+      module: 'OBJECTION',
+      description: `异议 ${id} ${status === 'RESOLVED' ? '已解决' : '已驳回'}，备注：${resolveRemark}`,
+      status: 'SUCCESS',
     })
 
     // 返回更新后的异议记录

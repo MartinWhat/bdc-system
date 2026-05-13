@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const outApplySchema = z.object({
@@ -105,6 +106,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return updatedCert
     })
 
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'OUT',
+      module: 'COLLECTIVE',
+      description: `申请村集体证书出库 ${cert.certNo}`,
+      status: 'SUCCESS',
+    })
+
     return NextResponse.json({
       success: true,
       data: result,
@@ -193,6 +202,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       })
 
       return updatedCert
+    })
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: action === 'approve' ? 'OUT_APPROVE' : 'OUT_REJECT',
+      module: 'COLLECTIVE',
+      description:
+        action === 'approve' ? `出库审批通过 ${cert.certNo}` : `出库审批驳回 ${cert.certNo}`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({

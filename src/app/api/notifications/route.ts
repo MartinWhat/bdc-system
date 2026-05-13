@@ -88,7 +88,7 @@ async function getNotificationsListHandler(request: NextRequest) {
       }),
     ])
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       data: {
         list: notifications,
@@ -97,6 +97,8 @@ async function getNotificationsListHandler(request: NextRequest) {
         pageSize,
       },
     })
+    response.headers.set('Cache-Control', 'private, max-age=180, stale-while-revalidate=180')
+    return response
   } catch (error) {
     console.error('Get notifications error:', error)
     return NextResponse.json({ error: '获取通知列表失败', code: 'SERVER_ERROR' }, { status: 500 })
@@ -199,4 +201,6 @@ async function createNotificationHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建通知失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['notification:create'], ['ADMIN'])(createNotificationHandler)
+export const POST = withPermission(['notification:create'], ['ADMIN'], {
+  module: 'NOTIFICATION',
+})(createNotificationHandler)

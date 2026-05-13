@@ -228,7 +228,6 @@ async function createCollectiveCertHandler(request: NextRequest) {
     return NextResponse.json({ error: '创建证书失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(
-  ['collective:create'],
-  ['ADMIN', 'COLLECTIVE_MANAGER'],
-)(createCollectiveCertHandler)
+export const POST = withPermission(['collective:create'], ['ADMIN', 'COLLECTIVE_MANAGER'], {
+  module: 'COLLECTIVE',
+})(createCollectiveCertHandler)

@@ -367,7 +367,7 @@ export default function LoginPage() {
               </motion.div>
               <motion.div className="slogan-card" variants={SLIDE_UP}>
                 <HomeOutlined className="slogan-icon" />
-                <div className="slogan-text">宅基地信息 一目了然</div>
+                <div className="slogan-text">宅基地及所有权信息 一目了然</div>
               </motion.div>
             </motion.div>
 
@@ -402,6 +402,9 @@ export default function LoginPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.4 }}
             >
+              <Title level={4} className="mobile-system-title">
+                不动产登记管理系统
+              </Title>
               <Title level={3} className="welcome-title">
                 {challengeActive ? '二次验证' : '欢迎登录'}
               </Title>
@@ -485,11 +488,12 @@ export default function LoginPage() {
                   <motion.div
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.6 }}
+                    transition={{ duration: 0.35, delay: 0.55 }}
                   >
                     <Form.Item
                       name="username"
                       label="用户名"
+                      className="login-field"
                       rules={[
                         { required: true, message: '请输入用户名' },
                         { min: 3, max: 20, message: '用户名长度需在 3-20 个字符之间' },
@@ -507,11 +511,12 @@ export default function LoginPage() {
                   <motion.div
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.4, delay: 0.7 }}
+                    transition={{ duration: 0.35, delay: 0.62 }}
                   >
                     <Form.Item
                       name="password"
                       label="密码"
+                      className="login-field"
                       rules={[
                         { required: true, message: '请输入密码' },
                         { min: 6, message: '密码至少 6 位' },
@@ -529,7 +534,7 @@ export default function LoginPage() {
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: 0.8 }}
+                    transition={{ duration: 0.35, delay: 0.7 }}
                   >
                     <Space direction="vertical" size={12} style={{ width: '100%' }}>
                       <Form.Item className="form-action" style={{ marginBottom: 0 }}>
@@ -862,8 +867,8 @@ export default function LoginPage() {
         .login-form-card {
           width: 100%;
           max-width: 480px;
-          min-height: 600px;
-          padding: 48px 40px;
+          min-height: 580px;
+          padding: 40px 40px;
           background: #ffffff;
           border-radius: 3px;
           box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
@@ -873,8 +878,17 @@ export default function LoginPage() {
 
         .form-header {
           text-align: center;
-          margin-bottom: 32px;
+          margin-bottom: 24px;
           flex-shrink: 0;
+        }
+
+        .mobile-system-title {
+          display: none !important;
+          color: #0052d9 !important;
+          font-size: 16px !important;
+          font-weight: 600 !important;
+          letter-spacing: 2px !important;
+          margin: 0 0 6px 0 !important;
         }
 
         .welcome-title {
@@ -890,7 +904,7 @@ export default function LoginPage() {
         }
 
         .login-form {
-          margin-bottom: 16px;
+          margin-bottom: 12px;
           flex-shrink: 0;
         }
 
@@ -898,7 +912,11 @@ export default function LoginPage() {
           font-weight: 500;
           color: #4c4c4c;
           font-size: 14px;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
+        }
+
+        .login-field {
+          margin-bottom: 12px !important;
         }
 
         .custom-input {
@@ -927,7 +945,7 @@ export default function LoginPage() {
         }
 
         .form-action {
-          margin-top: 24px;
+          margin-top: 16px;
           margin-bottom: 0 !important;
         }
 
@@ -1168,53 +1186,66 @@ export default function LoginPage() {
         @media (max-width: 992px) {
           .login-content {
             flex-direction: column;
-            padding: 24px 20px;
+            padding: 20px 16px;
+            gap: 0;
           }
 
           .brand-panel {
-            padding: 20px;
-          }
-
-          .brand-content {
-            max-width: 100%;
+            display: none;
           }
 
           .form-panel {
-            padding: 20px;
+            width: 100%;
+            padding: 0;
           }
         }
 
         @media (max-width: 576px) {
-          .brand-section {
-            padding-bottom: 24px;
-          }
-
-          .brand-title {
-            font-size: 20px !important;
-            letter-spacing: 2px !important;
-          }
-
-          .brand-logo {
-            width: 56px;
-            height: 56px;
-            font-size: 28px;
-            margin-bottom: 16px;
-          }
-
-          .slogan-card {
-            padding: 12px 14px;
-          }
-
-          .slogan-text {
-            font-size: 14px;
-          }
-
           .login-form-card {
-            padding: 32px 24px;
+            padding: 28px 20px 24px;
+            min-height: auto;
+            background: rgba(255, 255, 255, 0.82);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
           }
 
           .welcome-title {
             font-size: 20px !important;
+          }
+
+          .mobile-system-title {
+            display: block !important;
+          }
+
+          .form-header {
+            margin-bottom: 20px;
+          }
+
+          .login-form {
+            margin-bottom: 8px;
+          }
+
+          .features-section,
+          .form-footer,
+          .page-footer,
+          .theme-toggle-btn {
+            display: none;
+          }
+
+          .custom-input {
+            height: 38px !important;
+          }
+
+          .login-btn,
+          .social-login-btn {
+            height: 38px !important;
+          }
+
+          .dark-mode .login-form-card {
+            background: rgba(17, 17, 17, 0.78) !important;
+            border-color: rgba(255, 255, 255, 0.12) !important;
           }
 
           .copyright-text {

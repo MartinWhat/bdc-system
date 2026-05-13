@@ -7,6 +7,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { safeLogOperation } from '@/lib/log/safe'
+import { getUserFromRequest } from '@/lib/middleware/auth'
 import { z } from 'zod'
 
 const updateVillageSchema = z.object({
@@ -75,6 +77,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       include: {
         town: true,
       },
+    })
+
+    const { userId } = getUserFromRequest(request)
+    await safeLogOperation({
+      userId: userId || 'unknown',
+      action: 'UPDATE',
+      module: 'VILLAGE',
+      description: `更新村居 ${existingVillage.name} (${existingVillage.code})`,
+      status: 'SUCCESS',
     })
 
     return NextResponse.json({
@@ -150,6 +161,15 @@ export async function DELETE(
 
       throw error
     }
+
+    const { userId } = getUserFromRequest(request)
+    await safeLogOperation({
+      userId: userId || 'unknown',
+      action: 'DELETE',
+      module: 'VILLAGE',
+      description: `删除村居 ${existingVillage.name} (${existingVillage.code})`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,

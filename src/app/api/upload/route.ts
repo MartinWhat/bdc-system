@@ -100,4 +100,7 @@ async function uploadFileHandler(request: NextRequest) {
     return NextResponse.json({ error: '上传失败', code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
-export const POST = withPermission(['upload:file'])(uploadFileHandler)
+export const POST = withPermission(['upload:file'], [], {
+  module: 'UPLOAD',
+  actionMap: { POST: 'UPLOAD' },
+})(uploadFileHandler)

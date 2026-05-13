@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createEncryptionContext, encryptWithContext } from '@/lib/gm-crypto'
 import { parseExcelBuffer } from '@/lib/excel-parser'
+import { safeLogOperation } from '@/lib/log/safe'
 import { z } from 'zod'
 
 const batchImportSchema = z.object({
@@ -281,6 +282,14 @@ export async function POST(request: NextRequest) {
 
     const sCount = results.length
     const fCount = fItems.length
+
+    await safeLogOperation({
+      userId: operatorId,
+      action: 'BATCH_IMPORT',
+      module: 'COLLECTIVE_CERT',
+      description: `批量导入证书 ${sCount} 条，失败 ${fCount} 条`,
+      status: 'SUCCESS',
+    })
 
     return NextResponse.json({
       success: true,
