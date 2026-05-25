@@ -7,13 +7,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { decryptAndMaskRecords } from '@/lib/utils/batch-decrypt'
+import { bdcMatchesCertNo, getCertNoSearchKey } from '@/lib/utils/cert-no'
 import { withPermission } from '@/lib/api/withPermission'
+import { getUserFromRequest } from '@/lib/middleware/auth'
+import { getDataPermissionFilter, buildBdcWhereClause } from '@/lib/auth/data-permission'
 import { z } from 'zod'
 
-const createReceiveSchema = z.object({
-  bdcId: z.string().min(1, '宅基地 ID 不能为空'),
-  remark: z.string().optional(),
-})
+const createReceiveSchema = z
+  .object({
+    bdcId: z.string().optional(),
+    certNo: z.string().optional(),
+    idCard: z.string().optional(),
+    phone: z.string().optional(),
+    remark: z.string().optional(),
+  })
+  .refine((data) => data.bdcId || data.certNo || data.idCard || data.phone, {
+    message: '请提供宅基地 ID、证书编号、身份证号或手机号',
+  })
 
 // GET - 获取领证记录列表
 async function getReceiveRecordsListHandler(request: NextRequest) {
@@ -24,6 +34,8 @@ async function getReceiveRecordsListHandler(request: NextRequest) {
     const status = searchParams.get('status')
     const keyword = searchParams.get('keyword') || ''
     const bdcId = searchParams.get('bdcId')
+    const townId = searchParams.get('townId')
+    const villageId = searchParams.get('villageId')
 
     // 验证 status 白名单
     const validStatuses = ['PENDING', 'ISSUED', 'COMPLETED', 'OBJECTION', 'CANCELLED']
@@ -32,23 +44,46 @@ async function getReceiveRecordsListHandler(request: NextRequest) {
     }
 
     // 构建查询条件
-    const where: Record<string, unknown> = {}
+    const andFilters: Record<string, unknown>[] = []
 
     if (status) {
-      where.status = status
+      andFilters.push({ status })
     }
 
     if (bdcId) {
-      where.bdcId = bdcId
+      andFilters.push({ bdcId })
+    }
+
+    if (townId) {
+      andFilters.push({ bdc: { village: { townId } } })
+    }
+
+    if (villageId) {
+      andFilters.push({ bdc: { villageId } })
     }
 
     // 关键词搜索（领取人姓名、证书编号）
     if (keyword) {
-      where.OR = [
-        { receiverName: { contains: keyword } },
-        { bdc: { certNo: { contains: keyword } } },
-        { bdc: { ownerName: { contains: keyword } } },
-      ]
+      const certNoSearchKey = getCertNoSearchKey(keyword)
+      andFilters.push({
+        OR: [
+          { receiverName: { contains: keyword } },
+          { bdc: { certNo: { contains: keyword } } },
+          { bdc: { certNos: { contains: keyword } } },
+          ...(certNoSearchKey && certNoSearchKey !== keyword
+            ? [{ bdc: { certNo: { contains: certNoSearchKey } } }]
+            : []),
+          ...(certNoSearchKey && certNoSearchKey !== keyword
+            ? [{ bdc: { certNos: { contains: certNoSearchKey } } }]
+            : []),
+          { bdc: { ownerName: { contains: keyword } } },
+        ],
+      })
+    }
+
+    const where: Record<string, unknown> = {}
+    if (andFilters.length > 0) {
+      where.AND = andFilters
     }
 
     const [total, records] = await Promise.all([
@@ -144,7 +179,7 @@ async function createReceiveRecordHandler(request: NextRequest) {
       )
     }
 
-    const { bdcId, remark } = validationResult.data
+    const { bdcId, certNo, idCard, phone, remark } = validationResult.data
     const operatorId = request.headers.get('x-user-id')
 
     if (!operatorId) {
@@ -154,19 +189,68 @@ async function createReceiveRecordHandler(request: NextRequest) {
       )
     }
 
+    const where: Record<string, unknown> = {}
+    if (bdcId) {
+      where.id = bdcId
+    } else if (certNo) {
+      const trimmedCertNo = certNo.trim()
+      const searchKey = getCertNoSearchKey(trimmedCertNo)
+      where.OR = [
+        { certNo: trimmedCertNo },
+        { certNos: { contains: trimmedCertNo } },
+        ...(searchKey && searchKey !== trimmedCertNo ? [{ certNo: { contains: searchKey } }] : []),
+        ...(searchKey && searchKey !== trimmedCertNo ? [{ certNos: { contains: searchKey } }] : []),
+      ]
+    } else if (idCard) {
+      where.idCard = idCard
+    } else if (phone) {
+      where.phone = phone
+    }
+
+    where.deletedAt = null
+
+    const { userId } = getUserFromRequest(request)
+    if (userId) {
+      const filter = await getDataPermissionFilter(userId)
+      const dataWhere = buildBdcWhereClause(filter)
+      Object.assign(where, dataWhere)
+    }
+
     // 检查宅基地是否存在
-    const bdc = await prisma.zjdBdc.findUnique({
-      where: { id: bdcId },
+    const matchedBdcs = await prisma.zjdBdc.findMany({
+      where,
+      include: {
+        village: {
+          include: {
+            town: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      ...(certNo ? {} : { take: 2 }),
     })
 
-    if (!bdc) {
+    const exactMatchedBdcs = certNo
+      ? matchedBdcs.filter((bdc) => bdcMatchesCertNo(bdc, certNo))
+      : matchedBdcs
+
+    if (exactMatchedBdcs.length === 0) {
       return NextResponse.json({ error: '宅基地不存在', code: 'BDC_NOT_FOUND' }, { status: 404 })
     }
+
+    if (exactMatchedBdcs.length > 1) {
+      return NextResponse.json(
+        { error: '匹配到多条宅基地资料，请使用证书编号精确关联', code: 'BDC_AMBIGUOUS' },
+        { status: 409 },
+      )
+    }
+
+    const bdc = exactMatchedBdcs[0]
 
     // 检查是否已有待领证记录
     const existingRecord = await prisma.zjdReceiveRecord.findFirst({
       where: {
-        bdcId,
+        bdcId: bdc.id,
         status: 'ISSUED',
       },
     })
@@ -182,7 +266,7 @@ async function createReceiveRecordHandler(request: NextRequest) {
     const record = await prisma.$transaction(async (tx) => {
       const newRecord = await tx.zjdReceiveRecord.create({
         data: {
-          bdcId,
+          bdcId: bdc.id,
           status: 'ISSUED',
           issueDate: new Date(),
           remark,

@@ -3,3 +3,10 @@
  */
 
 export { maskIdCard, maskPhone, maskName, maskEmail, maskAddress, maskData } from './mask'
+export {
+  normalizeCertNo,
+  getCertNoSearchKey,
+  certNoMatches,
+  splitCertNos,
+  bdcMatchesCertNo,
+} from './cert-no'

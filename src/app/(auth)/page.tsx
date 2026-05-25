@@ -193,7 +193,12 @@ export default function DashboardPage() {
       <PageContainer title="工作台" subTitle={`欢迎回来，${displayName}`}>
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} lg={6}>
-            <MotionCard loading={loading && canViewStats}>
+            <MotionCard
+              loading={loading && canViewStats}
+              hoverable={false}
+              bodyStyle={{ padding: 16 }}
+              className={styles.statCard}
+            >
               <Statistic
                 title="用户总数"
                 value={statValue(stats?.overview.totalUsers)}
@@ -202,7 +207,12 @@ export default function DashboardPage() {
             </MotionCard>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <MotionCard loading={loading && canViewStats}>
+            <MotionCard
+              loading={loading && canViewStats}
+              hoverable={false}
+              bodyStyle={{ padding: 16 }}
+              className={styles.statCard}
+            >
               <Statistic
                 title="宅基地档案"
                 value={statValue(stats?.overview.totalBdc)}
@@ -211,7 +221,12 @@ export default function DashboardPage() {
             </MotionCard>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <MotionCard loading={loading && canViewStats}>
+            <MotionCard
+              loading={loading && canViewStats}
+              hoverable={false}
+              bodyStyle={{ padding: 16 }}
+              className={styles.statCard}
+            >
               <Statistic
                 title="领证记录"
                 value={statValue(stats?.overview.totalReceive)}
@@ -220,7 +235,12 @@ export default function DashboardPage() {
             </MotionCard>
           </Col>
           <Col xs={24} sm={12} lg={6}>
-            <MotionCard loading={loading && canViewStats}>
+            <MotionCard
+              loading={loading && canViewStats}
+              hoverable={false}
+              bodyStyle={{ padding: 16 }}
+              className={styles.statCard}
+            >
               <Statistic
                 title="待处理事项"
                 value={statValue(stats?.pendingTasks.total)}

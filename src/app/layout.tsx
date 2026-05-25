@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { App as AntdApp } from 'antd'
 import { AntdRegistry } from '@ant-design/nextjs-registry'
+import GlobalWatermark from '@/components/global-watermark'
 import ThemeProvider from './theme-provider'
 import './globals.css'
 
@@ -25,7 +26,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AntdRegistry>
           <AntdApp>
-            <ThemeProvider>{children}</ThemeProvider>
+            <ThemeProvider>
+              <GlobalWatermark>{children}</GlobalWatermark>
+            </ThemeProvider>
           </AntdApp>
         </AntdRegistry>
       </body>

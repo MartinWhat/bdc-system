@@ -21,6 +21,7 @@ const updateBdcSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   area: z.number().positive().optional(),
+  parcelArea: z.number().positive().optional(),
   landUseType: z.string().optional(),
   status: z.enum(['PENDING', 'APPROVED', 'CERTIFIED', 'CANCELLED']).optional(),
   approvedArea: z.number().optional(),
@@ -167,6 +168,7 @@ async function updateBdcHandler(
     if (body.ownerName !== undefined) updateData.ownerName = body.ownerName
     if (body.address !== undefined) updateData.address = body.address
     if (body.area !== undefined) updateData.area = body.area
+    if (body.parcelArea !== undefined) updateData.parcelArea = body.parcelArea
     if (body.landUseType !== undefined) updateData.landUseType = body.landUseType
     if (body.status !== undefined) updateData.status = body.status
     if (body.approvedArea !== undefined) updateData.approvedArea = body.approvedArea

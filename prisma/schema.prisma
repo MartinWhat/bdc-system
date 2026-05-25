@@ -293,7 +293,8 @@ model ZjdBdc {
   idCard         String             // 权利人证件号
   phone          String?            // Excel无对应
   address        String             // 不动产坐落
-  area           Float              // 面积（平方米）
+  area           Float              // 建筑面积（平方米）
+  parcelArea     Float?             // 宗地面积（平方米）
   landUseType    String             @default("宅基地") // Excel无对应，默认宅基地
   status         String             @default("PENDING") // 权属状态: 现势→ISSUED, 历史→CANCELLED, 其他→PENDING
   approvedArea   Float?             // Excel无对应

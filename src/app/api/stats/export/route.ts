@@ -297,7 +297,7 @@ async function exportExcelOrCsv(
   fileName: string,
   format: string,
 ): Promise<NextResponse> {
-  let workbook = XLSX.utils.book_new()
+  const workbook = XLSX.utils.book_new()
 
   if (type === 'bdc' || type === 'all') {
     const bdcData = await prisma.zjdBdc.findMany({
@@ -324,7 +324,8 @@ async function exportExcelOrCsv(
       身份证号: bdc.idCard,
       联系电话: bdc.phone || '',
       地址: bdc.address,
-      '面积(㎡)': bdc.area,
+      '建筑面积(㎡)': bdc.area,
+      '宗地面积(㎡)': bdc.parcelArea || '',
       '批准面积(㎡)': bdc.approvedArea || '',
       土地用途: bdc.landUseType,
       状态: statusMap[bdc.status] || bdc.status,

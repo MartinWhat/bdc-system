@@ -19,21 +19,31 @@ import {
   Alert,
   Typography,
   Pagination,
+  Tree,
+  Row,
+  Col,
 } from 'antd'
 import {
   EyeOutlined,
   CameraOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  PlusOutlined,
   UploadOutlined,
   DownloadOutlined,
+  UsergroupAddOutlined,
+  EnvironmentOutlined,
+  HomeOutlined,
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
+import type { DataNode } from 'antd/es/tree'
 import type { UploadFile } from 'antd/es/upload/interface'
 import dayjs from 'dayjs'
+import { useRouter, useSearchParams } from 'next/navigation'
 import PageContainer from '@/components/PageContainer'
 import { parseExcelFile, downloadExcelTemplate, validateExcelData } from '@/lib/excel-parser'
 import { authFetch } from '@/lib/api-fetch'
+import { normalizeCertNo } from '@/lib/utils/cert-no'
 
 const { Text } = Typography
 
@@ -43,11 +53,22 @@ interface Village {
   town: { name: string }
 }
 
+interface Town {
+  id: string
+  name: string
+  children?: Array<{
+    id: string
+    name: string
+  }>
+}
+
 interface Bdc {
   id: string
   certNo: string
   ownerName: string
   address: string
+  idCard?: string
+  phone?: string
   village: Village
 }
 
@@ -83,24 +104,45 @@ interface ReceiveRecord {
   activeObjectionId?: string | null
 }
 
+interface ImportRowLog {
+  rowNo: number
+  certNo: string
+  ownerName?: string
+  status: 'SUCCESS' | 'FAILED'
+  reason?: string
+  bdcId?: string
+}
+
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
   PENDING: { text: '待领证', color: 'orange' },
   ISSUED: { text: '已发放', color: 'blue' },
-  COMPLETED: { text: '已完成', color: 'green' },
+  COMPLETED: { text: '已领证', color: 'green' },
   OBJECTION: { text: '异议中', color: 'red' },
   CANCELLED: { text: '已取消', color: 'default' },
 }
 
+const ID_CARD_REGEX = /^[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx]$/
+const PHONE_REGEX = /^1[3-9]\d{9}$/
+
 export default function LingzhengPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const screens = Grid.useBreakpoint()
   const isMobile = !screens.md
   const [records, setRecords] = useState<ReceiveRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [detailVisible, setDetailVisible] = useState(false)
+  const [createModalVisible, setCreateModalVisible] = useState(false)
   const [receiveModalVisible, setReceiveModalVisible] = useState(false)
   const [importModalVisible, setImportModalVisible] = useState(false)
   const [selectedRecord, setSelectedRecord] = useState<ReceiveRecord | null>(null)
+  const [selectedBdc, setSelectedBdc] = useState<Bdc | null>(null)
+  const [towns, setTowns] = useState<Town[]>([])
+  const [treeLoading, setTreeLoading] = useState(false)
+  const [selectedTownId, setSelectedTownId] = useState('')
+  const [selectedVillageId, setSelectedVillageId] = useState('')
   const [receiveForm] = Form.useForm()
+  const [createForm] = Form.useForm()
   const [importForm] = Form.useForm()
   const [total, setTotal] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
@@ -114,11 +156,19 @@ export default function LingzhengPage() {
   const [excelFile, setExcelFile] = useState<UploadFile | null>(null)
   const [parsedData, setParsedData] = useState<Record<string, unknown>[]>([])
   const [previewVisible, setPreviewVisible] = useState(false)
+  const [importRows, setImportRows] = useState<ImportRowLog[]>([])
+  const [importSummary, setImportSummary] = useState<{
+    total: number
+    successCount: number
+    failedCount: number
+  } | null>(null)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
   const [uploadLoading, setUploadLoading] = useState(false)
 
   // 提取到组件外部避免每次渲染重新创建
   const loadRecords = useCallback(
-    async (page = currentPage, size = pageSize, status = '') => {
+    async (page = 1, size = 10, status = '', townId = '', villageId = '') => {
       setLoading(true)
       try {
         const params = new URLSearchParams({
@@ -126,6 +176,8 @@ export default function LingzhengPage() {
           pageSize: String(size),
         })
         if (status) params.append('status', status)
+        if (townId) params.append('townId', townId)
+        if (villageId) params.append('villageId', villageId)
 
         const res = await authFetch(`/api/receive?${params}`)
         if (!res.ok) {
@@ -149,12 +201,256 @@ export default function LingzhengPage() {
         setLoading(false)
       }
     },
-    [currentPage, pageSize],
+    [],
   )
 
   useEffect(() => {
-    loadRecords()
+    loadRecords(1, 10, '', '', '')
   }, [loadRecords])
+
+  const loadTowns = useCallback(async () => {
+    setTreeLoading(true)
+    try {
+      const res = await authFetch('/api/towns')
+      const data = await res.json()
+      if (data.success) {
+        setTowns(data.data)
+      }
+    } catch (error) {
+      console.error('Load towns error:', error)
+    } finally {
+      setTreeLoading(false)
+    }
+  }, [])
+
+  const loadVillages = useCallback(async (townId: string) => {
+    try {
+      const res = await authFetch(`/api/villages?townId=${townId}`)
+      const data = await res.json()
+      if (data.success) {
+        return data.data as Array<{ id: string; name: string; town: { id: string; name: string } }>
+      }
+    } catch (error) {
+      console.error('Load villages error:', error)
+    }
+    return []
+  }, [])
+
+  useEffect(() => {
+    loadTowns()
+  }, [loadTowns])
+
+  const buildTreeData = useCallback((): DataNode[] => {
+    const allNode: DataNode = {
+      title: (
+        <Space>
+          <UsergroupAddOutlined />
+          <span>全部领证</span>
+        </Space>
+      ),
+      key: 'all',
+      icon: <UsergroupAddOutlined />,
+    }
+
+    const townNodes: DataNode[] = towns.map((town) => ({
+      title: (
+        <Space>
+          <EnvironmentOutlined />
+          <span>{town.name}</span>
+        </Space>
+      ),
+      key: `town-${town.id}`,
+      icon: <EnvironmentOutlined />,
+      isLeaf: false,
+      children: town.children?.map((village) => ({
+        title: (
+          <Space>
+            <HomeOutlined />
+            <span>{village.name}</span>
+          </Space>
+        ),
+        key: `village-${village.id}`,
+        icon: <HomeOutlined />,
+        isLeaf: true,
+      })),
+    }))
+
+    return [allNode, ...townNodes]
+  }, [towns])
+
+  const onTreeSelect = (selectedKeys: React.Key[]) => {
+    if (selectedKeys.length === 0) return
+
+    const key = selectedKeys[0] as string
+
+    if (key === 'all') {
+      setSelectedTownId('')
+      setSelectedVillageId('')
+      setCurrentPage(1)
+      loadRecords(1, pageSize, '', '', '')
+      return
+    }
+
+    if (key.startsWith('town-')) {
+      const townId = key.replace('town-', '')
+      setSelectedTownId(townId)
+      setSelectedVillageId('')
+      setCurrentPage(1)
+      loadRecords(1, pageSize, '', townId, '')
+      return
+    }
+
+    if (key.startsWith('village-')) {
+      const villageId = key.replace('village-', '')
+      const matchedTown = towns.find((town) =>
+        town.children?.some((village) => village.id === villageId),
+      )
+      setSelectedTownId(matchedTown?.id || '')
+      setSelectedVillageId(villageId)
+      setCurrentPage(1)
+      loadRecords(1, pageSize, '', matchedTown?.id || '', villageId)
+    }
+  }
+
+  const onLoadData = async ({ key }: { key: React.Key }) => {
+    const keyStr = key as string
+    if (!keyStr.startsWith('town-')) return
+
+    const townId = keyStr.replace('town-', '')
+    const villages = await loadVillages(townId)
+
+    setTowns((prev) =>
+      prev.map((town) => (town.id === townId ? { ...town, children: villages } : town)),
+    )
+  }
+
+  const treeData = useMemo(() => buildTreeData(), [buildTreeData])
+  const selectedTreeKeys = useMemo(() => {
+    if (selectedVillageId) return [`village-${selectedVillageId}`]
+    if (selectedTownId) return [`town-${selectedTownId}`]
+    return ['all']
+  }, [selectedTownId, selectedVillageId])
+
+  const lookupBdcByKeyword = useCallback(async (keyword: string) => {
+    const normalized = keyword.trim()
+    if (!normalized) {
+      message.warning('请输入证书编号、身份证号或手机号')
+      return null
+    }
+
+    const query = new URLSearchParams()
+    if (PHONE_REGEX.test(normalized)) {
+      query.set('phone', normalized)
+    } else if (ID_CARD_REGEX.test(normalized)) {
+      query.set('idCard', normalized)
+    } else {
+      query.set('certNo', normalizeCertNo(normalized))
+    }
+
+    setLookupLoading(true)
+    try {
+      const res = await authFetch(`/api/bdc/query?${query.toString()}`)
+      if (!res.ok) {
+        if (res.status === 401) {
+          message.error('认证已过期，请重新登录')
+          return null
+        }
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+
+      const data = await res.json()
+      if (!data.success) {
+        message.error(data.error || '宅基地查询失败')
+        return null
+      }
+
+      const bdcs = (data.data as Bdc[]) || []
+      if (bdcs.length === 0) {
+        message.warning('未找到对应的宅基地资料')
+        setSelectedBdc(null)
+        return null
+      }
+
+      if (bdcs.length > 1) {
+        message.warning('匹配到多条宅基地资料，请使用证书编号精确查询')
+        setSelectedBdc(null)
+        return null
+      }
+
+      const [bdc] = bdcs
+
+      setSelectedBdc(bdc)
+      return bdc
+    } catch (error) {
+      console.error('Lookup BDC error:', error)
+      message.error('查询宅基地资料失败')
+      return null
+    } finally {
+      setLookupLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const certNo = searchParams.get('certNo') || ''
+    const idCard = searchParams.get('idCard') || ''
+    const phone = searchParams.get('phone') || ''
+    const initialKeyword = certNo || idCard || phone
+
+    if (!initialKeyword) {
+      return
+    }
+
+    setCreateModalVisible(true)
+    createForm.setFieldsValue({ certNo: initialKeyword })
+    setSelectedBdc(null)
+    void lookupBdcByKeyword(initialKeyword)
+  }, [createForm, lookupBdcByKeyword, searchParams])
+
+  const handleCreateReceive = async (values: { certNo: string; remark?: string }) => {
+    const keyword = normalizeCertNo(values.certNo)
+    if (!keyword) {
+      message.warning('请输入证书编号、身份证号或手机号')
+      return
+    }
+
+    setCreateLoading(true)
+    try {
+      const res = await authFetch('/api/receive', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          certNo: keyword,
+          remark: values.remark,
+        }),
+      })
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          message.error('认证已过期，请重新登录')
+          return
+        }
+        throw new Error(`HTTP error! status: ${res.status}`)
+      }
+
+      const data = await res.json()
+      if (data.success) {
+        message.success('已自动关联宅基地并创建领证记录')
+        setCreateModalVisible(false)
+        createForm.resetFields()
+        setSelectedBdc(null)
+        loadRecords(currentPage, pageSize, '', selectedTownId, selectedVillageId)
+      } else {
+        message.error(data.error || '创建失败')
+      }
+    } catch (error) {
+      console.error('Create receive error:', error)
+      message.error('创建领证记录失败')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
 
   const handleReceive = async (values: {
     receiverName?: string
@@ -193,7 +489,7 @@ export default function LingzhengPage() {
         setIdCardFront('')
         setIdCardBack('')
         setScenePhoto('')
-        loadRecords()
+        loadRecords(currentPage, pageSize, '', selectedTownId, selectedVillageId)
       } else {
         message.error(data.error)
       }
@@ -244,6 +540,8 @@ export default function LingzhengPage() {
       }
 
       setParsedData(data)
+      setImportRows([])
+      setImportSummary(null)
       setExcelFile({
         uid: '-1',
         name: file.name,
@@ -260,6 +558,61 @@ export default function LingzhengPage() {
     }
   }
 
+  const toOptionalText = (value: unknown) => {
+    if (value === null || value === undefined) return undefined
+    const text = String(value).trim()
+    return text || undefined
+  }
+
+  const toOptionalCell = (value: unknown) => {
+    if (value === null || value === undefined) return undefined
+    if (typeof value === 'string' && value.trim() === '') return undefined
+    return value
+  }
+
+  const BATCH_IMPORT_SIZE = 100
+
+  const chunkArray = <T,>(array: T[], size: number) => {
+    const chunks: T[][] = []
+    for (let index = 0; index < array.length; index += size) {
+      chunks.push(array.slice(index, index + size))
+    }
+    return chunks
+  }
+
+  const submitImportBatch = async (items: Record<string, unknown>[], rowOffset: number) => {
+    const res = await authFetch('/api/receive/batch-import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ items }),
+    })
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error('认证已过期，请重新登录')
+      }
+      throw new Error(`HTTP error! status: ${res.status}`)
+    }
+
+    const data = await res.json()
+    if (!data.success) {
+      throw new Error(data.error || '导入失败')
+    }
+
+    const rows = ((data.data?.rows || []) as ImportRowLog[]).map((row) => ({
+      ...row,
+      rowNo: row.rowNo + rowOffset,
+    }))
+
+    return {
+      successCount: Number(data.data?.successCount || 0),
+      failedCount: Number(data.data?.failedCount || 0),
+      rows,
+    }
+  }
+
   // 提交 Excel 数据到后端
   const handleSubmitExcel = async () => {
     if (parsedData.length === 0) {
@@ -267,55 +620,80 @@ export default function LingzhengPage() {
       return
     }
 
-    if (parsedData.length > 100) {
-      message.error('单次最多导入 100 条数据')
-      return
-    }
-
     setUploadLoading(true)
     try {
       // 转换数据格式
       const items = parsedData.map((row) => ({
-        certNo: String(row.certNo || ''),
-        remark: String(row.remark || ''),
+        certNo: normalizeCertNo(row.certNo),
+        ownerName: toOptionalText(row.ownerName),
+        address: toOptionalText(row.address),
+        area: toOptionalCell(row.area),
+        receiverName: toOptionalText(row.receiverName),
+        receiverIdCard: toOptionalText(row.receiverIdCard),
+        receiverPhone: toOptionalText(row.receiverPhone),
+        issueDate: toOptionalCell(row.issueDate),
+        receiveDate: toOptionalCell(row.receiveDate),
+        signedBy: toOptionalText(row.signedBy),
+        signedDate: toOptionalCell(row.signedDate),
+        status: toOptionalText(row.status),
+        remark: toOptionalText(row.remark),
       }))
 
-      const res = await authFetch('/api/receive/batch-import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ items }),
+      const batches = chunkArray(items, BATCH_IMPORT_SIZE)
+      const allRows: ImportRowLog[] = []
+      let successCount = 0
+      let failedCount = 0
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
+        const batchItems = batches[batchIndex]
+        const batchOffset = batchIndex * BATCH_IMPORT_SIZE
+        message.open({
+          type: 'loading',
+          content: `正在导入第 ${batchIndex + 1}/${batches.length} 批`,
+          key: 'batch-import',
+          duration: 0,
+        })
+
+        try {
+          const batchResult = await submitImportBatch(batchItems, batchOffset)
+          successCount += batchResult.successCount
+          failedCount += batchResult.failedCount
+          allRows.push(...batchResult.rows)
+        } catch (error) {
+          setImportRows(allRows)
+          setImportSummary({
+            total: parsedData.length,
+            successCount,
+            failedCount,
+          })
+          throw error
+        }
+      }
+
+      setImportRows(allRows)
+      setImportSummary({
+        total: parsedData.length,
+        successCount,
+        failedCount,
       })
 
-      if (!res.ok) {
-        if (res.status === 401) {
-          message.error('认证已过期，请重新登录')
-          return
-        }
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-
-      const data = await res.json()
-      if (data.success) {
-        const { successCount, failedCount, failedItems } = data.data
-        message.success(`导入完成：成功 ${successCount}，失败 ${failedCount}`)
-
-        if (failedItems && failedItems.length > 0) {
-          console.warn('失败的条目:', failedItems)
-          message.warning(`${failedCount} 条数据导入失败，请检查后重新导入`)
-        }
-
-        // 重置状态
-        setImportModalVisible(false)
-        setExcelFile(null)
-        setParsedData([])
-        setPreviewVisible(false)
-        importForm.resetFields()
-        loadRecords()
+      if (failedCount > 0) {
+        message.warning({
+          content: `导入完成：成功 ${successCount}，失败 ${failedCount}`,
+          key: 'batch-import',
+        })
       } else {
-        message.error(data.error || '导入失败')
+        message.success({
+          content: `导入完成：成功 ${successCount}，失败 ${failedCount}`,
+          key: 'batch-import',
+        })
       }
+
+      if (failedCount > 0) {
+        message.warning(`${failedCount} 条数据导入失败，请检查下方日志`)
+      }
+
+      loadRecords(currentPage, pageSize, '', selectedTownId, selectedVillageId)
     } catch (error) {
       console.error('Batch import error:', error)
       message.error('批量导入失败，请检查网络或数据格式')
@@ -328,12 +706,29 @@ export default function LingzhengPage() {
   const handleDownloadTemplate = () => {
     downloadExcelTemplate(
       [
-        { key: 'certNo', title: '证书编号', example: '3301010010010001' },
+        { key: 'certNo', title: '不动产证号', example: '粤(2022)惠州市不动产权第5015876号' },
+        { key: 'ownerName', title: '权利人姓名', example: '张三' },
+        { key: 'address', title: '房屋坐落', example: '选石龙乌石岗小组' },
+        { key: 'area', title: '宗地面积(㎡)', example: '89.96' },
+        { key: 'receiverName', title: '领证人签名', example: '张三' },
+        { key: 'receiveDate', title: '签收时间', example: '2024-01-02' },
         { key: 'remark', title: '备注', example: '示例备注' },
       ],
       '领证管理导入模板',
     )
     message.success('模板下载成功')
+  }
+
+  const formatExcelPreviewCell = (value: unknown) => {
+    if (value === null || value === undefined || value === '') return '-'
+    if (typeof value === 'number' || value instanceof Date) {
+      const date = dayjs(value)
+      return date.isValid() ? date.format('YYYY-MM-DD HH:mm:ss') : String(value)
+    }
+    const text = String(value).trim()
+    if (!text) return '-'
+    const date = dayjs(text)
+    return date.isValid() && /[-/:]/.test(text) ? date.format('YYYY-MM-DD HH:mm:ss') : text
   }
 
   const getBase64 = (file: File): Promise<string> => {
@@ -506,53 +901,156 @@ export default function LingzhengPage() {
     <PageContainer
       title="领证管理"
       extra={
-        <Button
-          icon={<UploadOutlined />}
-          onClick={() => setImportModalVisible(true)}
-          block={isMobile}
-        >
-          批量导入
-        </Button>
+        <Space direction={isMobile ? 'vertical' : 'horizontal'} style={{ width: '100%' }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalVisible(true)}
+            block={isMobile}
+          >
+            新建领证
+          </Button>
+          <Button
+            icon={<UploadOutlined />}
+            onClick={() => setImportModalVisible(true)}
+            block={isMobile}
+          >
+            批量导入
+          </Button>
+        </Space>
       }
-      dataSource={records}
       loading={loading}
       skeleton={{ active: true, paragraph: { rows: 10 } }}
-      emptyDescription="暂无领证记录"
     >
-      {isMobile ? (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          {records.map(renderMobileCard)}
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-            <Pagination
-              current={currentPage}
-              pageSize={pageSize}
-              total={total}
-              showSizeChanger={false}
-              onChange={(page) => {
-                setCurrentPage(page)
-                loadRecords(page, pageSize)
+      <Row gutter={[16, 16]} style={{ width: '100%' }}>
+        <Col xs={24} md={6}>
+          <Card
+            size="small"
+            title="村居选择"
+            bodyStyle={{ padding: 8 }}
+            loading={treeLoading}
+            style={isMobile ? undefined : { position: 'sticky', top: 16 }}
+          >
+            <Tree
+              blockNode
+              showLine
+              selectedKeys={selectedTreeKeys}
+              treeData={treeData}
+              onSelect={onTreeSelect}
+              loadData={onLoadData}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} md={18}>
+          <Card size="small" title="领证列表" bodyStyle={{ padding: 0 }}>
+            {isMobile ? (
+              <Space direction="vertical" size={12} style={{ width: '100%', padding: 12 }}>
+                {records.map(renderMobileCard)}
+                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
+                  <Pagination
+                    current={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    showSizeChanger={false}
+                    onChange={(page) => {
+                      setCurrentPage(page)
+                      loadRecords(page, pageSize, '', selectedTownId, selectedVillageId)
+                    }}
+                  />
+                </div>
+              </Space>
+            ) : (
+              <Table
+                columns={columns}
+                dataSource={records}
+                rowKey="id"
+                loading={loading}
+                pagination={{
+                  current: currentPage,
+                  pageSize,
+                  total,
+                  onChange: (page, size) => {
+                    setCurrentPage(page)
+                    setPageSize(size)
+                    loadRecords(page, size, '', selectedTownId, selectedVillageId)
+                  },
+                }}
+              />
+            )}
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 新建领证模态框 */}
+      <Modal
+        title="新建领证记录"
+        open={createModalVisible}
+        onCancel={() => {
+          setCreateModalVisible(false)
+          createForm.resetFields()
+          setSelectedBdc(null)
+          router.replace('/lingzheng')
+        }}
+        onOk={() => createForm.submit()}
+        okText="创建"
+        confirmLoading={createLoading}
+        width={isMobile ? 'calc(100vw - 24px)' : 760}
+        style={isMobile ? { top: 12 } : undefined}
+        centered={!isMobile}
+      >
+        <Alert
+          message="自动关联宅基地资料"
+          description="输入证书编号、身份证号或手机号后，系统会自动到宅基地档案里匹配资料并创建领证记录。"
+          type="info"
+          style={{ marginBottom: 16 }}
+        />
+
+        <Form form={createForm} layout="vertical" onFinish={handleCreateReceive}>
+          <Form.Item
+            name="certNo"
+            label="宅基地关联信息"
+            rules={[{ required: true, message: '请输入证书编号、身份证号或手机号' }]}
+          >
+            <Input.Search
+              placeholder="请输入证书编号、身份证号或手机号"
+              enterButton="查询并关联"
+              loading={lookupLoading}
+              onSearch={(value) => {
+                void lookupBdcByKeyword(value)
               }}
             />
-          </div>
-        </Space>
-      ) : (
-        <Table
-          columns={columns}
-          dataSource={records}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: currentPage,
-            pageSize,
-            total,
-            onChange: (page, size) => {
-              setCurrentPage(page)
-              setPageSize(size)
-              loadRecords(page, size)
-            },
-          }}
-        />
-      )}
+          </Form.Item>
+
+          <Form.Item name="remark" label="备注">
+            <Input.TextArea rows={3} placeholder="可填写领证备注" />
+          </Form.Item>
+
+          {selectedBdc && (
+            <Descriptions bordered size="small" column={isMobile ? 1 : 2}>
+              <Descriptions.Item label="证书编号">{selectedBdc.certNo}</Descriptions.Item>
+              <Descriptions.Item label="使用权人">{selectedBdc.ownerName}</Descriptions.Item>
+              <Descriptions.Item label="所属村居">
+                {selectedBdc.village.town.name} - {selectedBdc.village.name}
+              </Descriptions.Item>
+              <Descriptions.Item label="地址" span={isMobile ? 1 : 2}>
+                {selectedBdc.address}
+              </Descriptions.Item>
+              <Descriptions.Item label="身份证号">{selectedBdc.idCard || '-'}</Descriptions.Item>
+              <Descriptions.Item label="手机号">{selectedBdc.phone || '-'}</Descriptions.Item>
+            </Descriptions>
+          )}
+
+          <Space style={{ marginTop: 16 }} wrap>
+            <Button
+              onClick={() => {
+                router.push('/bdc')
+              }}
+            >
+              去宅基地档案里找
+            </Button>
+          </Space>
+        </Form>
+      </Modal>
 
       {/* 详情模态框 */}
       <Modal
@@ -727,6 +1225,8 @@ export default function LingzhengPage() {
           setExcelFile(null)
           setParsedData([])
           setPreviewVisible(false)
+          setImportRows([])
+          setImportSummary(null)
           importForm.resetFields()
         }}
         footer={
@@ -753,6 +1253,8 @@ export default function LingzhengPage() {
                 setExcelFile(null)
                 setParsedData([])
                 setPreviewVisible(false)
+                setImportRows([])
+                setImportSummary(null)
                 importForm.resetFields()
               }}
               block={isMobile}
@@ -776,7 +1278,7 @@ export default function LingzhengPage() {
       >
         <Alert
           message="导入说明"
-          description="请上传 Excel 文件（.xlsx 或 .xls），支持中文表头。系统将根据证书编号生成待领证记录。最多支持 100 条数据。"
+          description="请上传 Excel 文件（.xlsx 或 .xls），系统会自动识别你这类旧电子签收薄的常见表头，例如不动产证号、权利人姓名、房屋坐落、宗地面积(㎡)、领证人签名、签收时间、备注。签收时间若填“已领/已签收”，也会按已完成处理。超过 100 条会自动分批导入。"
           type="info"
           style={{ marginBottom: 16 }}
         />
@@ -823,6 +1325,37 @@ export default function LingzhengPage() {
                   width: 200,
                 },
                 {
+                  title: '权利人姓名',
+                  dataIndex: 'ownerName',
+                  key: 'ownerName',
+                  width: 120,
+                },
+                {
+                  title: '房屋坐落',
+                  dataIndex: 'address',
+                  key: 'address',
+                  width: 180,
+                },
+                {
+                  title: '宗地面积(㎡)',
+                  dataIndex: 'area',
+                  key: 'area',
+                  width: 110,
+                },
+                {
+                  title: '领证人签名',
+                  dataIndex: 'receiverName',
+                  key: 'receiverName',
+                  width: 120,
+                },
+                {
+                  title: '签收时间',
+                  dataIndex: 'receiveDate',
+                  key: 'receiveDate',
+                  width: 140,
+                  render: formatExcelPreviewCell,
+                },
+                {
                   title: '备注',
                   dataIndex: 'remark',
                   key: 'remark',
@@ -830,6 +1363,53 @@ export default function LingzhengPage() {
                 },
               ]}
             />
+          </div>
+        )}
+
+        {importSummary && importRows.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <Alert
+              type={importSummary.failedCount > 0 ? 'warning' : 'success'}
+              showIcon
+              message={
+                importSummary.failedCount > 0
+                  ? `导入完成：共 ${importSummary.total} 条，成功 ${importSummary.successCount} 条，失败 ${importSummary.failedCount} 条`
+                  : `导入完成：共 ${importSummary.total} 条，全部成功`
+              }
+              style={{ marginBottom: 12 }}
+            />
+            {importRows.some((row) => row.status === 'FAILED') ? (
+              <Table
+                size="small"
+                rowKey={(record) => `${record.rowNo}-${record.certNo}`}
+                pagination={false}
+                scroll={{ y: 320 }}
+                dataSource={importRows.filter((row) => row.status === 'FAILED')}
+                columns={[
+                  {
+                    title: '行号',
+                    dataIndex: 'rowNo',
+                    width: 70,
+                  },
+                  {
+                    title: '证书编号',
+                    dataIndex: 'certNo',
+                    width: 200,
+                  },
+                  {
+                    title: '权利人',
+                    dataIndex: 'ownerName',
+                    width: 120,
+                    render: (value: string | undefined) => value || '-',
+                  },
+                  {
+                    title: '失败原因',
+                    dataIndex: 'reason',
+                    render: (value: string | undefined) => value || '-',
+                  },
+                ]}
+              />
+            ) : null}
           </div>
         )}
       </Modal>
